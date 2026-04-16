@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://github.com/b1ank1108/awesome-stars",
+    "name": "GitHub Star 仓库分类",
+    "snippet": "总仓库数：1138个分类数：18个. 逆向破解: 77个仓库; 开发工具&框架: 213个仓库; 取证溯源: 12个仓库; 信息搜集: 86个仓库; LLM安全: 15个仓库; Web安全: 75个仓库 ...",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.g7games.com/%E7%82%89%E7%9F%B3%E4%BC%A0%E8%AF%B4%E6%95%B0%E6%8D%AE%E5%BA%93%E6%9F%A5%E8%AF%A2%E6%94%BB%E7%95%A5%EF%BC%9A%E5%8D%A1%E7%89%8C%E6%95%B0%E6%8D%AE%E4%B8%80%E7%BD%91%E6%89%93%E5%B0%BD",
+    "name": "炉石传说数据库查询攻略：卡牌数据一网打尽 - G7游戏网",
+    "snippet": "Apr 13, 2025 — 掌握高效的 数据库 查询技巧，能帮助玩家快速获取 卡牌 信息、构建卡组或分析环境。本文将详细介绍如何利用官方 API 和第三方工具查询 卡牌 ... – 扩展包 、稀有度、 ...",
+    "host_name": "www.g7games.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.oschina.net/news/293291/iogame-21-8-released",
+    "name": "netty 高性能游戏服务器框架；ioGame 21.8 真.轻量级网络",
+    "snippet": "May 20, 2024 — 比较适合桌游类、房间类的游戏基础搭建，基于该模型可以做一些如， 炉石传说 、三国杀、斗地主、麻将... ... 扩展 不同的通信协议：Protobuf、 JSON ; 近原生 ...",
+    "host_name": "www.oschina.net",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://onevcat.com/llms-full.txt",
+    "name": "https://onevcat.com/llms-full.txt",
+    "snippet": "... 最新 ： ```bash jj git fetch jj rebase -d master ``` 相当于Git 的`git pull --rebase`，但拆成了两个明确的步骤：先拿数据，再决定怎么整合。 推送时反过来，给你的 ...",
+    "host_name": "onevcat.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.news.uestc.edu.cn/upload/attach/37d27a49183d3a1544c414f1b1c94650.docx",
+    "name": "双选会用人需求 - 新闻",
+    "snippet": "... 包产品有飞机飞控、电源、机轮刹车、起落架收放等系统用零件、组件。非航空领域 ... 卡玛克斯公司、中铁检验认证中心合作在青岛成立四家合资企业。四方所现有员工 ...",
+    "host_name": "www.news.uestc.edu.cn",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "http://800abc.net/upload/file/20150427/20150427150822552255.xls",
+    "name": "Sheet1 - 中企讯",
+    "snippet": "Apr 27, 2015 — 超神联盟多人在线动作 卡牌 游戏软件. 4309, 4307, 北京天诚盛业科技有限公司, TesoFace第四代人脸识别算法及系统. 4310, 4308, TesoIris虹膜识别算法软件.",
+    "host_name": "800abc.net",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://blog.codingnow.com/oiie/oiie",
+    "name": "云风的BLOG: 游戏开发Archives",
+    "snippet": "Sep 9, 2025 — 除了一些必要的文件IO 接口 （主要是用来读取gameplay 相关的策划数据，写log ，做数据持久化等），也不应该涉及任何OS 的 API 。 这样，我们就可以方便的对它进行 ...",
+    "host_name": "blog.codingnow.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://blog.csdn.net/weixin_34725745/article/details/147615158",
+    "name": "interminatis:炉石的开源克隆探索与学习原创",
+    "snippet": "Apr 28, 2025 — 【标题】\"hspacksim:炉石包模拟器\"是一个专为《 炉石传说 》玩家设计的应用，它使用JavaScript编程语言实现，旨在为用户提供一个模拟开卡包的体验。这款模拟器 ...",
+    "host_name": "blog.csdn.net",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://huggingface.co/jinaai/jina-embeddings-v2-base-zh/commit/b82c1df274dd8497af9aa693da72e23be035f758.diff",
+    "name": "https://huggingface.co/jinaai/jina-embeddings-v2-b",
+    "snippet": "diff --git a/config. json b/config. json new file mode 100644 index ... 最新 +r ang +最终+happ ens +beha vior +vo te +cho col +sol ar +fac ility +ie st + ...",
+    "host_name": "huggingface.co",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "http://www.qfedu.com/vr/?pinzhuan360tg=youzilian02",
+    "name": "游戏开发培训_游戏开发培训班_Unity游戏开发培训_千锋教育",
+    "snippet": "卡牌 类游戏: 炉石传说 . 游戏屏幕特效在实战中的应用. 跨平台解决方案. 后期项目优化. Git 项目版本控制. 第三阶段Unity 项目架构. Unity 项目框架搭建. 游戏架构. 程序设计 ...",
+    "host_name": "www.qfedu.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]

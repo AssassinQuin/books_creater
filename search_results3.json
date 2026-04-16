@@ -1,0 +1,92 @@
+[
+  {
+    "url": "https://hearthstonejson.com",
+    "name": "HearthstoneJSON: An API for Hearthstone",
+    "snippet": "The API is available at api . hearthstonejson.com /v1/. The files are all in JSON format, encoded in UTF-8 and categorized by build , then by locale.\nThe API is available at api . hearthstonejson.com /v1/. The files are all in JSON format, encoded in UTF-8 and categorized by build , then by locale. Read more",
+    "host_name": "hearthstonejson.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://hearthstonejson.com/docs/cards.html",
+    "name": "Cards (cards.json, cards.collectible.json)",
+    "snippet": "The cards . json file contains a list of card objects and includes every single card in the game. Note that in Hearthstone , everything is a card, even Heroes, ...\nThe cards. json file contains a list of card objects and includes every single card in the game. Note that in Hearthstone, everything is a card, even Heroes ... Read more",
+    "host_name": "hearthstonejson.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://hearthstonejson.com/docs/images.html",
+    "name": "Hearthstone Card Art and Render API",
+    "snippet": "HearthstoneJSON includes a full image API for all the cards in the game. You are free to use this API without restrictions.\nHearthstoneJSON includes a full image API for all the cards in the game. You are free to use this API without restrictions. Read more",
+    "host_name": "hearthstonejson.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://hearthstone.blizzard.com/en-us/news/24242740/34-6-patch-notes",
+    "name": "34.6 Patch Notes - Hearthstone - Blizzard Entertainment",
+    "snippet": "9 Feb 2026 — CATACLYSM has 135 new collectible cards . You can learn more about the first-ever Deathwing Hero Card, the return of Colossals, the brand-new ...",
+    "host_name": "hearthstone.blizzard.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/hearthstone/comments/3z1qw4/the_new_version_of_hearthstone_json_is_live",
+    "name": "The new version of Hearthstone JSON is live!",
+    "snippet": "The HearthstoneJSON files contain all the cards and card backs in JSON format . It is updated within minutes after a patch hits. Very useful if ... Read more",
+    "host_name": "www.reddit.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/Zero-to-Heroes/HearthstoneJSON",
+    "name": "Zero-to-Heroes/HearthstoneJSON: Hearthstone",
+    "snippet": "This project extracts card data from Hearthstone into JSON files to be used to generate HearthstoneJSON.com Read more",
+    "host_name": "github.com",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/schmich/hearthstone-card-images/blob/master/README.md",
+    "name": "hearthstone-card-images/README.md at master",
+    "snippet": "Nov 1, 2019 — Hearthstone card images for all locales for use in conjunction with the official Hearthstone API or HearthstoneJSON data. Try the demo ... Read more",
+    "host_name": "github.com",
+    "rank": 6,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "http://www.hearthstone.gg/articles/data-resources",
+    "name": "Hearthstone Data Resources",
+    "snippet": "Nov 23, 2015 — hearthstonejson.com provides downloadable archives of the Hearthstone card data, card back data, and card data in multiple international languages. Read more",
+    "host_name": "www.hearthstone.gg",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://findapis.com/es/api/hearthstonejson",
+    "name": "HearthstoneJSON API - Free API Documentation - FindAPIs",
+    "snippet": "Its cards . json file hosts a card object lists of all the cards in the game. The API is programmed to recognize every single item in a playing stack as a card. Read more",
+    "host_name": "findapis.com",
+    "rank": 8,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com/cwestleyj/HearthstoneJSON",
+    "name": "cwestleyj/HearthstoneJSON: Hearthstone cards in JSON",
+    "snippet": "This project extracts card data from Hearthstone into JSON files to be used to generate HearthstoneJSON.com . Requirements. Python >= 3.4; python- hearthstone ... Read more",
+    "host_name": "github.com",
+    "rank": 9,
+    "date": "",
+    "favicon": ""
+  }
+]
