@@ -1,7 +1,7 @@
 ---
 name: novel-writer
 description: 百万字网文创作引擎 — 卷级循环工作流，结构化数据驱动，群像+明暗双线+去AI味。触发词：写小说/头脑风暴/建世界观/设计人物/规划卷/写第N章/继续写/审阅/上架/诊断/卡文/改设定/进度。
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__memory__memory_store, mcp__memory__memory_search, mcp__memory__memory_update, mcp__memory__memory_delete, mcp__memory__memory_list, mcp__memory__memory_graph, mcp__novel-db__novel_create, mcp__novel-db__novel_list, mcp__novel-db__novel_get, mcp__novel-db__novel_update, mcp__novel-db__world_upsert, mcp__novel-db__world_query, mcp__novel-db__world_delete, mcp__novel-db__character_create, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__relation_create, mcp__novel-db__relation_list, mcp__novel-db__volume_create, mcp__novel-db__volume_list, mcp__novel-db__volume_get, mcp__novel-db__volume_update, mcp__novel-db__chapter_plan, mcp__novel-db__chapter_list, mcp__novel-db__chapter_update, mcp__novel-db__chapter_save_summary, mcp__novel-db__chapter_get_context, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_list, mcp__novel-db__foreshadow_recall, mcp__novel-db__timeline_add, mcp__novel-db__timeline_query, mcp__novel-db__scene_create, mcp__novel-db__scene_list, mcp__novel-db__dimension_log, mcp__novel-db__dimension_query, mcp__novel-db__db_search
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__memory__memory_store, mcp__memory__memory_search, mcp__memory__memory_update, mcp__memory__memory_delete, mcp__memory__memory_list, mcp__memory__memory_graph, mcp__novel-db__novel_create, mcp__novel-db__novel_list, mcp__novel-db__novel_get, mcp__novel-db__novel_update, mcp__novel-db__world_upsert, mcp__novel-db__world_query, mcp__novel-db__world_delete, mcp__novel-db__character_create, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__relation_create, mcp__novel-db__relation_list, mcp__novel-db__volume_create, mcp__novel-db__volume_list, mcp__novel-db__volume_get, mcp__novel-db__volume_update, mcp__novel-db__chapter_plan, mcp__novel-db__chapter_list, mcp__novel-db__chapter_update, mcp__novel-db__chapter_save_summary, mcp__novel-db__chapter_get_context, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_list, mcp__novel-db__foreshadow_recall, mcp__novel-db__timeline_add, mcp__novel-db__timeline_query, mcp__novel-db__scene_create, mcp__novel-db__scene_list, mcp__novel-db__dimension_log, mcp__novel-db__dimension_query, mcp__novel-db__db_search, mcp__novel-db__writing_start, mcp__novel-db__writing_finish, mcp__novel-db__health_check
 ---
 
 # 百万字网文创作引擎
@@ -133,13 +133,13 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__memory__memory_s
 
 触发: "写第N章"/"继续写"
 
-#### 写前：上下文注入
+#### 写前：一键注入上下文
 
 ```
-chapter_get_context(novel_id, chapter_number)
-→ 章节信息 + 前3章摘要 + 活跃人物 + 未回收伏笔 + 世界观
+writing_start(novel_id, chapter_number)
+→ 章节信息 + 前3章摘要 + 活跃人物 + 未回收伏笔 + 世界观 + 当前卷规划
 ```
-补充：`foreshadow_list(status="planted")` + `volume_get(当前卷id)`
+一步到位，不需要手动调多个工具。
 
 #### 写时：规则+策略
 
@@ -162,20 +162,18 @@ chapter_get_context(novel_id, chapter_number)
 **章节节奏**：开头10%承接铺垫 → 发展40%核心推进 → 高潮30%最紧张 → 收尾20%钩子悬念
 **爽点密度**：每3-5章一个（打脸/逆袭/获得/展示/复仇）
 
-#### 写后：状态更新（每章必做）
+#### 写后：一键更新所有状态（每章必做）
 
 ```
-chapter_save_summary(chapter_id, summary="章节概要",
+writing_finish(chapter_id, summary="章节概要",
   key_events=["事件1","事件2"],
   characters_involved=[人物id列表],
   new_foreshadows=[{description:"伏笔描述",importance:"medium"}],
   resolved_foreshadows=[伏笔id列表],
-  dimension_snapshot={ability:"金丹中期",location:"潜龙城"})
+  ability_level="金丹中期", location="潜龙城",
+  timeline_events=[{event_time:"午后", event_order:1, event_description:"XXX"}])
 ```
-有人物变更→`character_update(character_id, status/ability_level/...)` |
-时间线→`timeline_add(novel_id, chapter_id, event_time, event_order, event_description, characters_involved)` |
-能力/空间→`dimension_log(novel_id, chapter_id, dimension="ability"/"space"/"economy", change_type, entity_name, before_value, after_value)` |
-`chapter_update(chapter_id, status="written")`
+一步完成：摘要保存 + 章节状态更新 + 伏笔回收 + 维度变更(ability/space) + 时间线记录。不需要分别调5个工具。
 
 #### 每10章：自动健康快检
 
@@ -214,14 +212,10 @@ dimension_query(dimension="ability") → 升级节奏是否合理
 
 触发: "诊断"/"卡文"/"疲劳"
 
-**自动化查询**（5分钟出报告）：
+**一键诊断**：
 ```
-novel_get → 当前进度
-chapter_list → 章节统计
-foreshadow_list(status="planted") → 伏笔积压（按章距排序）
-character_list → 配角活跃度
-dimension_query(dimension="ability") → 升级曲线
-volume_list → 各卷完成度
+health_check(novel_id)
+→ 进度 + 伏笔积压(回收率/最老章距) + 配角活跃(出场间隔>10章标黄) + 升级曲线 + 卷完成度 + 警告列表
 ```
 
 **健康指标**：
