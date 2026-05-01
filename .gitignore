@@ -1,0 +1,16 @@
+# 章节正文（敏感内容不入库）
+novels/*/正文/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 环境文件
+.env
+.env.local
