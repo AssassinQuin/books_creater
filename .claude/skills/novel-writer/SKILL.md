@@ -1,7 +1,7 @@
 ---
 name: novel-writer
 description: 网文创作总入口 — 路由到子skill，处理上架和状态查询。触发词：写小说/我要写/帮我写/上架/发布/番茄/起点/进度/状态/status/加素材/拆书。
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__novel_get, mcp__novel-db__novel_list, mcp__novel-db__novel_update, mcp__novel-db__world_query, mcp__memory__memory_store, mcp__memory__memory_search
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__novel_get, mcp__novel-db__novel_list, mcp__novel-db__novel_update, mcp__novel-db__novel_delete, mcp__novel-db__world_query, mcp__novel-db__chapter_list, mcp__novel-db__volume_list, mcp__novel-db__foreshadow_list, mcp__novel-db__character_list, mcp__novel-db__db_search, mcp__memory__memory_store, mcp__memory__memory_search
 ---
 
 # 网文创作总入口
@@ -23,7 +23,12 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__novel_get, mc
 无匹配 → novel_get + chapter_list 查进度，建议下一步
 ```
 
-**冲突消歧**：写作中说"改设定"→ 暂停写作，建议用户调用 `/novel-doctor` 处理，完成后再回到写作。
+### 冲突消歧优先级（从高到低）
+
+1. **C3级联更新**（"改设定"/"改人物"）→ novel-doctor — 立即处理，防止脏数据扩散
+2. **B2写作中断**（写作中说"改设定"）→ 暂停写作，建议 `/novel-doctor` 处理后回来
+3. **A层重建** → 按用户意图路由，不强制顺序
+4. **模糊匹配** → "帮我写"无上下文时，查 `novel_list` 问用户要操作哪个项目
 
 ---
 
@@ -75,3 +80,13 @@ novel_get + volume_list + chapter_list + foreshadow_list + character_list
    - 独特用词/口头禅
 5. **可用技巧**：可直接借鉴的手法 → `memory_store(tags="shared,technique")`
 6. 写入报告 → `novels/拆书笔记/{书名}.md`
+
+---
+
+## 全局数据搜索
+
+触发: "搜一下"/"查一下{关键词}"
+
+```
+db_search(novel_id, keyword) → 跨世界观/人物/章节/伏笔/时间线搜索
+```

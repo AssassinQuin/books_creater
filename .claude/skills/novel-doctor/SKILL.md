@@ -1,7 +1,7 @@
 ---
 name: novel-doctor
 description: 小说质量保障 — 审阅三线并行检查、健康诊断、破局方案、级联更新。触发词：审阅/检查/诊断/卡文/疲劳/写不动/改设定/改人物/调整/review。
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__memory__memory_store, mcp__memory__memory_search, mcp__novel-db__novel_get, mcp__novel-db__world_query, mcp__novel-db__world_upsert, mcp__novel-db__world_delete, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__relation_list, mcp__novel-db__chapter_list, mcp__novel-db__chapter_get_context, mcp__novel-db__foreshadow_list, mcp__novel-db__timeline_query, mcp__novel-db__dimension_query, mcp__novel-db__db_search, mcp__novel-db__health_check
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__memory__memory_store, mcp__memory__memory_search, mcp__novel-db__novel_get, mcp__novel-db__world_query, mcp__novel-db__world_upsert, mcp__novel-db__world_delete, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__relation_list, mcp__novel-db__chapter_list, mcp__novel-db__chapter_get_context, mcp__novel-db__foreshadow_list, mcp__novel-db__foreshadow_recall, mcp__novel-db__timeline_query, mcp__novel-db__dimension_query, mcp__novel-db__db_search, mcp__novel-db__health_check
 ---
 
 # 小说质量保障
@@ -83,3 +83,10 @@ health_check(novel_id)
 1. 改对应数据（`world_upsert`/`character_update`）
 2. `db_search(novel_id, keyword)` 找受影响内容
 3. 列出受影响章节 → 询问用户哪些需要改
+
+---
+
+## 断点续传
+
+触发时先检查 `memory_search(query="flow-state", tags=["project:{名},flow-state"])`
+有记录 → "上次我们在{步骤}暂停了，从那里继续？"

@@ -1,3 +1,10 @@
 timestamp	commit	skill	old_score	new_score	status	dimension	note	eval_mode
 2026-05-01T23:52:02+08:00	6a6adf4	novel-writer	67.0	88.3	keep	资源整合度+整体架构+实测表现	整合novel-db MCP+健康度诊断+多线交织	dry_run
 2026-05-01T23:59:13+08:00	0c31a86	novel-writer	87.8	89.0	keep	架构重写+细节修补	ABCD四层+卷循环+冲突消歧	dry_run
+2026-05-02T07:07:45+0000	849984f	novel-setup	69.0	78.3	keep	工作流清晰度+检查点+交叉验证	加强制流程+🔒+量化验证+断点续传	dry_run
+2026-05-02T07:09:09+0000	8779ade	novel-setup	78.3	83.0	keep	边界条件+实测表现	3种模式+前置校验+快速模式+修改模式	dry_run
+2026-05-02T07:11:13+0000	fb023f3	novel-planner	70.0	82.0	keep	工作流清晰度+检查点+伏笔时序	强制流程+🔒+大纲更新+断点续传	dry_run
+2026-05-02T07:12:56+0000	f916e44	novel-writer	75.0	82.0	keep	指令具体性+资源整合度	冲突优先级+D查询工具+全局搜索	dry_run
+2026-05-02T07:14:36+0000	b2c3f90	novel-doctor	87.0	89.0	keep	资源整合度+边界条件	补foreshadow_recall+断点续传	dry_run
+2026-05-02T07:14:36+0000	-	novel-character	88.0	88.0	keep	-	已足够完善无需修改	dry_run
+2026-05-02T07:14:36+0000	-	novel-chapter-writer	88.0	88.0	keep	-	已足够完善无需修改	dry_run
