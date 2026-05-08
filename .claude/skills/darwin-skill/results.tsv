@@ -8,3 +8,6 @@ timestamp	commit	skill	old_score	new_score	status	dimension	note	eval_mode
 2026-05-02T07:14:36+0000	b2c3f90	novel-doctor	87.0	89.0	keep	资源整合度+边界条件	补foreshadow_recall+断点续传	dry_run
 2026-05-02T07:14:36+0000	-	novel-character	88.0	88.0	keep	-	已足够完善无需修改	dry_run
 2026-05-02T07:14:36+0000	-	novel-chapter-writer	88.0	88.0	keep	-	已足够完善无需修改	dry_run
+timestamp	commit	skill	old_score	new_score	status	dimension	note	eval_mode
+2026-05-08T14:42:28+0000	592cd57	three-perspective-analysis	48.6	83.5	keep	探索性重写(全部维度)	补frontmatter+7步流程+3🔒+Weiland框架+量化标准+fallback	dry_run
+2026-05-08T14:44:04+0000	79d6f6a	three-perspective-analysis	83.5	83.5	keep	体积压缩	模板→字段列表,222→167行,150%合规	dry_run
