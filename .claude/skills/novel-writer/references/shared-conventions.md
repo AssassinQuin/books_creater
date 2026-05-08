@@ -35,6 +35,24 @@
 
 ---
 
+## 参考文档注入优先级（从高到低）
+
+写作时可能同时注入多个reference。冲突时按以下优先级处理：
+
+| 优先级 | 文档 | 冲突时的规则 |
+|--------|------|-------------|
+| 1 | `shared-conventions.md` | 铁律最高。所有输出必须遵守5条铁律 |
+| 2 | `anti-ai-patterns.md` | 写作红线。违反任何一条比"写得不够好"严重 |
+| 3 | `writing-style.md` | 具体行文规则。对话/描写/节奏的标准 |
+| 4 | `character-design.md` | 角色设计方法论。角色卡以它为准 |
+| 5 | `scene-type-guide.md` | 场景类型指南。战斗/日常/揭秘等场景的节奏 |
+| 6 | `corpus-style-guide.md` | 语料风格参考。和writing-style冲突时以writing-style为准 |
+| 7 | 其他（brainstorm/genre/worldbuilding等） | 按需使用，不主动注入写作流程 |
+
+**冲突处理**：高优先级覆盖低优先级。不确定时遵循铁律>去AI味>行文规则。
+
+---
+
 ## 流程纪律（防止跑偏）
 
 ### 规则1：步骤不可跳过
