@@ -24,28 +24,42 @@ C3更新: 改数据 → db_search找影响 → 🔒确认改哪些
 
 触发: "审阅"/"检查"/"review"
 
-1. 读 `.claude/skills/novel-writer/references/review-checklist.md`
-2. 用 `db_search`/`foreshadow_list`/`dimension_query` 获取数据
-3. 3个Agent并行：
-   - **A-逻辑**: `timeline_query`+`dimension_query` 检查时间/空间/能力一致性，`foreshadow_list(status="planted")` 查超30章未回收伏笔标黄
-   - **B-人设**: `character_list` 对照人设检查OOC，AI味检测（对照 `.claude/skills/novel-writer/references/anti-ai-patterns.md` + Memory黑名单）
-   - **C-合规+竞争力**: 平台合规（参考 `.claude/skills/novel-writer/references/platform-rules.md`），爽点密度，钩子有效性，侧面描写
-4. **章节评分卡**（每章量化打分）：
+### 大纲级审阅（卷规划后/全书大纲完成后）
 
-   | 维度 | 1-3分 | 4-6分 | 7-10分 |
-   |------|-------|-------|--------|
-   | 文笔 | 大量AI味词/空洞描写 | 基本流畅/偶有AI味 | 生动有画面/句式多变 |
-   | 节奏 | 拖沓或赶进度 | 有节奏但平淡 | 张弛有度/有钩子 |
-   | 人设一致 | 明显OOC | 轻微偏离 | 行为符合人设 |
-   | 伏笔推进 | 无进展无提及 | 有提及但机械 | 自然融入/暗线推进 |
-   | 去AI味 | ≥5个黑名单词 | 1-2个黑名单词 | 0个/对话有废话 |
+读 `.claude/skills/novel-writer/references/outline-review-checklist.md`，执行三阶段流程：
 
-5. 汇总 → `novels/{小说名}/审阅报告/` → 问题分级 + 评分卡
-   ```
-   章节{N}总分: {Σ各维度}/50
-   趋势: {与最近5章均分对比 ↑↓→}
-   短板: {最低分维度}
-   ```
+1. **Phase 1 达尔文评估**: 10维度并行Agent审计（按卷类型选取5-10维度），每维度量化评分(0-100)
+2. **Phase 2 女娲修复**: P0/P1问题自动进入修复流程，每问题3方案+代价评估+修复蓝图
+3. **Phase 3 验证迭代**: 修复后重评，对比前后分，达标则通过（综合≥85），不达标则迭代（最多3轮）
+
+输出 → `novels/{小说名}/审阅报告/大纲审查-{日期}/`
+
+### 章节级审阅（正文写作后）
+
+读 `.claude/skills/novel-writer/references/review-checklist.md`
+用 `db_search`/`foreshadow_list`/`dimension_query` 获取数据
+
+3个Agent并行：
+- **A-逻辑**: `timeline_query`+`dimension_query` 检查时间/空间/能力一致性，`foreshadow_list(status="planted")` 查超30章未回收伏笔标黄
+- **B-人设**: `character_list` 对照人设检查OOC，AI味检测（对照 `.claude/skills/novel-writer/references/anti-ai-patterns.md` + Memory黑名单）
+- **C-合规+竞争力**: 平台合规（参考 `.claude/skills/novel-writer/references/platform-rules.md`），爽点密度，钩子有效性，侧面描写
+
+**章节评分卡**（每章量化打分）：
+
+| 维度 | 1-3分 | 4-6分 | 7-10分 |
+|------|-------|-------|--------|
+| 文笔 | 大量AI味词/空洞描写 | 基本流畅/偶有AI味 | 生动有画面/句式多变 |
+| 节奏 | 拖沓或赶进度 | 有节奏但平淡 | 张弛有度/有钩子 |
+| 人设一致 | 明显OOC | 轻微偏离 | 行为符合人设 |
+| 伏笔推进 | 无进展无提及 | 有提及但机械 | 自然融入/暗线推进 |
+| 去AI味 | ≥5个黑名单词 | 1-2个黑名单词 | 0个/对话有废话 |
+
+汇总 → `novels/{小说名}/审阅报告/` → 问题分级 + 评分卡
+```
+章节{N}总分: {Σ各维度}/50
+趋势: {与最近5章均分对比 ↑↓→}
+短板: {最低分维度}
+```
 
 ---
 
