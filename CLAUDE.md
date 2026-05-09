@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 百万字网文创作引擎 — AI-powered Chinese web novel writing system. Uses Claude Code skills + MCP (Model Context Protocol) for structured, long-form novel creation with anti-AI-writing patterns, ensemble casts, and dual-track plotting.
 
+Current project: **《这次不一样了》** — 14卷+尾声, 百万字级玄幻网文. Novel DB id: 1.
+
 ## Architecture
 
 Three-layer data architecture:
@@ -39,6 +41,24 @@ Priority on conflict: C3 > B2 > others.
 - `writing_start(novel_id, chapter_number)` — one-shot context injection before writing (chapter info + last 3 summaries + active characters + unrecycled foreshadowing + world settings + current volume plan)
 - `writing_finish(chapter_id, ...)` — one-shot state update after writing (summary + events + foreshadowing + timeline + dimensions)
 - `health_check(novel_id)` — one-shot diagnosis (foreshadowing backlog + side character activity + upgrade pacing + daily scene density + hidden plot progress + volume completion)
+
+## File Organization Rules
+
+- **大纲 (`设定/大纲/`)**: 卷级写作指导, 1-2行场景梗概. 不写详情(心理描写/对话/关系磨合细节)
+- **设定文件**: 详情内容写在 `角色深化.md` / `世界观.md` / `地图.md` / `线索追踪.md` 等
+- **大纲中使用指针**: 引用详情时写 `→见角色深化·关系成长路径` 而不是复制内容
+- **灵感库 (`设定/灵感库/`)**: 只放调研、头脑风暴、可复用方法论. 不放审计报告
+- **审阅报告 (`审阅报告/`)**: 审计发现、问题清单、修复方案
+- **单源维护**: 同一内容(伏笔/线索/关系/设定)只在主文件描述完整, 其他文件用指针引用
+
+## Current Project Status (2026-05-09)
+
+- 14卷+尾声大纲完成, V1-V2已重写, V3-V14修复完成
+- 7-Agent审查完成, 6个P0+10个P1全部修复
+- 地图扩展完成(10→20+地点, 方岩路线7→16站, 季节14-16个月)
+- 14对角色关系成长路径设计完成
+- novel-db数据库已同步
+- 下一步: 正文生成(B2)
 
 ## Git Commit Convention
 
