@@ -1,6 +1,6 @@
 ---
 name: novel-chapter-writer
-description: 逐章写作引擎 — 基于诡秘之主/权力游戏/经典网文调研优化的全量加载+角色蒸馏+内容丰富度强制+字数分段检查+大纲标记+每章质量检查+世界观一致约束。触发词：写第N章/继续写/写一章。
+description: 逐章写作引擎 — 全量加载+角色蒸馏+场景搭建+人物鲜活+世界观植入+NPC互动+分支事件+字数检查+质量同步。触发词：写第N章/继续写/写一章 | Trigger: write chapter N / continue writing / write a chapter
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__memory__memory_store, mcp__memory__memory_search, mcp__novel-db__novel_get, mcp__novel-db__chapter_list, mcp__novel-db__chapter_update, mcp__novel-db__writing_start, mcp__novel-db__writing_finish, mcp__novel-db__foreshadow_list, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__relation_list, mcp__novel-db__world_query, mcp__novel-db__world_upsert, mcp__novel-db__timeline_query, mcp__novel-db__volume_get
 ---
 
