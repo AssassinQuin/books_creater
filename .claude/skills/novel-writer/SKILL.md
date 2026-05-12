@@ -18,6 +18,7 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__novel_get, mc
 "规划卷"/"大纲"/"卷大纲"                         → novel-planner
 "写第N章"/"继续写"/"写一章"                      → novel-chapter-writer
 "审阅"/"检查"/"诊断"/"卡文"/"改设定"/"OOC"       → novel-qa
+"审设定"/"优化设定"/"审查世界观"/"设定矛盾"        → novel-qa(C4设定审查)
 "写战斗"/"战斗场景"/"战斗设计"/"检查战斗"         → novel-battle
 "修复"/"去重"/"批量改"/"修文"/"润色"             → novel-reviser
 "上架"/"发布"/"番茄"/"起点"                      → C1 本skill处理

@@ -1,6 +1,6 @@
 ---
 name: novel-qa
-description: 小说质量保障 — 大纲审阅(达尔文评估+女娲修复)、正文扫描(15维度)、健康诊断、级联更新、战斗审计。触发词：审阅/检查/诊断/卡文/改设定/改人物/OOC/查逻辑/校对/proofread/review。
+description: 小说质量保障 — 设定审查+优化、大纲审阅(达尔文评估+女娲修复)、正文扫描(15维度)、健康诊断、级联更新、战斗审计。触发词：审阅/检查/诊断/卡文/改设定/改人物/OOC/查逻辑/审设定/优化设定/校对/proofread/review。
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__memory__memory_store, mcp__memory__memory_search, mcp__novel-db__novel_get, mcp__novel-db__world_query, mcp__novel-db__world_upsert, mcp__novel-db__world_delete, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__relation_list, mcp__novel-db__chapter_list, mcp__novel-db__chapter_get_context, mcp__novel-db__foreshadow_list, mcp__novel-db__foreshadow_recall, mcp__novel-db__timeline_query, mcp__novel-db__dimension_query, mcp__novel-db__db_search, mcp__novel-db__health_check
 ---
 
@@ -13,6 +13,7 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__memory__memory_s
 ## 强制流程
 
 ```
+C4设定审查: 全量加载设定 → 6维度审查 → 🔒问题清单 → 优化方案 → 执行修复 → 级联同步
 B3审阅: 数据获取 → 3Agent并行分析 → 🔒评分卡 → 汇总报告
 C2诊断: health_check → 健康指标对比 → 🔒破局方案
 C3更新: 改数据 → db_search找影响 → 🔒确认改哪些
@@ -123,6 +124,82 @@ C3更新: 改数据 → db_search找影响 → 🔒确认改哪些
 **批量执行**：超过3章时用并行Agent执行，每章独立报告，最后总览。
 
 **修复模式**：P0/P1问题生成修复方案 → 用户确认 → Edit修改 → 重新验证
+
+---
+
+## C4: 设定审查+优化
+
+触发: "审设定"/"优化设定"/"检查设定"/"审查世界观"/"设定矛盾"
+
+### Step 1: 全量加载设定
+
+```
+1. world_query() → 全部世界观（种族/势力/地理/能力/经济/日常/历史/地点/物品）
+2. character_list() + character_get() → 全部人物（档案+状态）
+3. relation_list() → 全部人物关系
+4. foreshadow_list(status="planted") → 未回收伏笔
+5. 设定/目录下所有文件 → 锁定设定/角色深化/世界观/灵能体系/灵衰症/地图等
+```
+
+### Step 2: 六维度审查
+
+| # | 维度 | 检查内容 | 常见问题 |
+|---|------|---------|---------|
+| 1 | **内部自洽** | 各设定维度之间是否矛盾 | 种族能力与描述不符/经济与生活水平矛盾 |
+| 2 | **人物一致性** | 人物档案与设定是否匹配 | 能力超出种族上限/身份与经济状况矛盾 |
+| 3 | **物品合理性** | 物品功能/价格/稀缺度是否自洽 | 随处可见的物品天价/功能与代价不对称 |
+| 4 | **历史经得起推敲** | 历史层是否支撑现有格局 | 遗留物无法解释为什么还在/失传技术突然有人用 |
+| 5 | **关系网完整性** | 人物关系是否覆盖所有核心互动 | 核心角色之间无关系/关系强度与剧情不匹配 |
+| 6 | **伏笔可行性** | 已埋伏笔是否有回收路径 | 计划回收章节超出大纲范围/伏笔依赖的设定缺失 |
+
+### Step 3: 🔒问题清单
+
+输出审查报告：
+
+```
+设定审查报告 — {小说名} — {日期}
+═══════════════════════════════
+
+问题清单：
+| # | 维度 | 问题 | 严重度 | 涉及设定 | 建议修复方案 |
+|---|------|------|--------|---------|------------|
+
+优化建议：
+| # | 建议 | 目的 | 涉及设定 | 预期效果 |
+|---|------|------|---------|---------|
+```
+
+严重度：P0(设定矛盾导致剧情崩塌) / P1(不合理但可圆) / P2(缺失需补充) / P3(可优化)
+
+### Step 4: 优化方案
+
+针对每个P0/P1问题，生成2-3个修复方案：
+- 方案描述
+- 影响范围（哪些设定/人物/章节需要联动修改）
+- 代价评估（改动量/风险）
+
+用户选择方案后执行修复。
+
+### Step 5: 执行修复
+
+```
+1. world_upsert/world_delete → 修改世界观设定
+2. character_update → 修改人物档案
+3. relation_create/update → 修改人物关系
+4. 设定文件 → Edit修改对应文件
+5. db_search(novel_id, keyword) → 查找受影响的已写章节
+6. 列出受影响章节 → 用户决定是否级联修改已写内容
+```
+
+### Step 6: 级联同步
+
+修复完成后：
+- `db_search` 找所有引用旧设定的内容
+- 标注受影响章节
+- 用户确认后调用 C3级联更新 或 novel-reviser 批量修复
+- `git commit -m "C4: 设定审查优化 - {摘要}"`
+
+输出报告到 `novels/{小说名}/审阅报告/设定审查-{日期}.md`
 
 ---
 
