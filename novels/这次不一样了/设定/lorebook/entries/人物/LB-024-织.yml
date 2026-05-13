@@ -1,0 +1,28 @@
+id: LB-024
+name: 织
+keys: [织, 共存派, 裔族, 谈判, 和平]
+secondary_keys: [裔族共存, 先打赢再谈, 和平共处]
+selective: false
+selective_logic: 0
+content: |
+  裔族共存派代表。认为继续战斗两边都只有死路一条，主张与人类谈判、寻求共存之道。
+
+  织不是天生的善。它的立场源于冷酷的生存计算——裔族无法承受持续战争的消耗，继续打下去没有赢家。共存派内部也存在根本分歧：一派主张"和平共处"即真正的停火共存，另一派认为"先打赢再谈"才有谈判筹码，和平只是手段而非目的。
+
+  织与焱的主战立场形成裔族内部的意识形态对立。这场内部争论不是善恶之分，而是两种生存策略的博弈。
+
+  写作要点：织的台词应该理性、克制，带有疲惫感。它见过太多死亡，不追求正义或复仇，只追求族群延续。不要把共存派写成圣母——它的"和平"背后是对力量对比的清醒认知。
+constant: false
+priority: 30
+position: after_char
+probability: 100
+sticky: 0
+cooldown: 0
+delay: 0
+group: ""
+group_weight: 100
+ignore_budget: false
+comment: 裔族共存派代表
+related: [LB-023, LB-025]
+tags: [人物, 裔族, 共存派]
+volume_range: ""

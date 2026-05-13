@@ -1,0 +1,28 @@
+id: LB-023
+name: 焱
+keys: [焱, 主战派, 灵焰, 龙蜥, 裔族]
+secondary_keys: [灵焰龙蜥, 深红鳞片, 灵焰核心]
+selective: false
+selective_logic: 0
+content: |
+  裔族主战派领袖，灵焰龙蜥族群代表。T4级异灵，深红鳞片覆盖全身，灵焰在鳞缝间持续流动，体型三层楼高。
+
+  焱不是天生的恶。它的族群曾被人类军团差点灭族，它记得每一个被杀的同伴。正是这份灭族记忆塑造了它极端的主战立场："人类不灭，异灵不存。"它主张先发制人，认为谈判只是人类拖延时间的手段。
+
+  战斗能力：灵焰操控——从口部和鳞缝喷射高密度灵焰；战术智慧——具备指挥低级异灵协同作战的能力，不是蛮力型而是统帅型。弱点在于灵焰核心位于胸口，是唯一无鳞片覆盖的区域。
+
+  写作要点：焱的仇恨有合理根源，不要写成单纯的反派。它的台词应该带着被逼到绝境的愤怒和理性计算并存的味道。与织的共存立场形成裔族内部的意识形态对立。
+constant: false
+priority: 30
+position: after_char
+probability: 100
+sticky: 0
+cooldown: 0
+delay: 0
+group: ""
+group_weight: 100
+ignore_budget: false
+comment: 裔族主战派领袖，灵焰龙蜥
+related: [LB-024, LB-025]
+tags: [人物, 裔族, 主战派, T4]
+volume_range: ""

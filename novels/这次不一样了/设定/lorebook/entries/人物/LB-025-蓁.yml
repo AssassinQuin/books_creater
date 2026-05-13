@@ -1,0 +1,28 @@
+id: LB-025
+name: 蓁
+keys: [蓁, 巢穴, 母体, 裔族, 孵化]
+secondary_keys: [巢穴型, 修复, 补给线, 孵化型]
+selective: false
+selective_logic: 0
+content: |
+  裔族巢穴型角色，族群母体。巢穴型异灵是族群核心，负责孵化新个体和修复受伤族员，相当于裔族的"生产线"和"后方医院"。
+
+  摧毁母体等于切断裔族的补给线——没有母体，族群无法补充新个体，也无法修复战损。这使得巢穴型成为军事行动的高价值目标，但同时也是最难攻克的类型，因为母体周围总有大量族员护卫。
+
+  蔓的起源与巢穴型异灵有关。蔓可能源自巢穴型异灵的某种变异或特殊产物，这一联系是蔓身世谜团的关键线索。
+
+  写作要点：蓁不应有强烈的攻击性描写，巢穴型的危险在于它的战略价值而非战斗力。战斗场景中，攻破母体应该付出重大代价。蔓与蓁之间的联系可作为后期揭示的核心伏笔。
+constant: false
+priority: 30
+position: after_char
+probability: 100
+sticky: 0
+cooldown: 0
+delay: 0
+group: ""
+group_weight: 100
+ignore_budget: false
+comment: 裔族巢穴型母体，族群核心
+related: [LB-023, LB-024, LB-018]
+tags: [人物, 裔族, 巢穴型, 母体]
+volume_range: ""

@@ -1,0 +1,26 @@
+id: LB-028
+name: 江屿
+keys: [江屿, 灵枢, 叛逃, 参数, 灵站]
+secondary_keys: [灵枢员工, V4, 参数调高, 灵晶产量, 动机链]
+selective: false
+selective_logic: 0
+content: |
+  灵枢前员工，叛逃者。V4版本中的关键发现者——他揭露了灵站参数被人为调高的真相："不是故意害人，是为了多产灵晶。"
+
+  江屿的发现推动了沈野动机链的关键转折。灵站参数调高意味着供体承受更大的灵能抽取负荷，而目的只是为了提高灵晶产量。这一真相将矛盾从"裔族vs人类"推向"灵枢vs所有人"，揭示了利益链条上的人类加害者角色。
+
+  写作要点：江屿的叛逃动机不应被简化为"良心发现"。他可能看到了不可接受的数据、失去了某种东西、或者只是灵枢内部清洗的幸存者。他的证词是推动主角认知升级的关键道具，但信息可靠性需要留有余地（叛逃者总有其立场）。V4中他的出场应该简洁有力，一句台词就能改变整个冲突的解读框架。
+constant: false
+priority: 30
+position: after_char
+probability: 100
+sticky: 0
+cooldown: 0
+delay: 0
+group: ""
+group_weight: 100
+ignore_budget: false
+comment: 灵枢叛逃员工，V4关键信息源
+related: [LB-001, LB-031, LB-029]
+tags: [人物, 灵枢, 叛逃者, V4]
+volume_range: ""
