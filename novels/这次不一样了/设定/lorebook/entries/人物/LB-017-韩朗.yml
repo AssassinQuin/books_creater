@@ -1,9 +1,9 @@
 id: LB-017
 name: 韩朗
 keys: [韩朗, 灵枢, 高产出源, 灵站管理, 灰色制服]
-secondary_keys: [运营部, 区域经理, KPI, 产出效率, 供体, 供应方]
-selective: false
-selective_logic: 0
+secondary_keys: [灵站, 产出, KPI, 制服]
+selective: true
+selective_logic: 2
 content: |
   灵枢运营部外环区区域经理，"平庸之恶"载体。负责12个灵站运营指标。深灰制服，头发整齐，职业化温和笑——视察灵站时穿干净的灰色制服，和排队的人保持三步距离。
 
@@ -25,4 +25,4 @@ ignore_budget: false
 comment: 平庸之恶·灵枢管理层·灰色制服·数据管生命
 related: [LB-001, LB-031, LB-050, LB-056]
 tags: [人物, 灵枢, 反派, 灵站, 管理层]
-volume_range: ""
+volume_range: "V1-V4"

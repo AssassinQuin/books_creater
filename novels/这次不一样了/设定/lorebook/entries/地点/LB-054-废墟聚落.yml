@@ -1,9 +1,9 @@
 id: LB-054
 name: 废墟聚落
 keys: [废墟聚落, 管道, 沈野, 拾荒, 老陈, 外环]
-secondary_keys: [聚落, 灵能公告栏, 面摊, 铁锈灰, 碎石地, 外环西部]
+secondary_keys: [管道, 聚落生活]
 selective: true
-selective_logic: 0
+selective_logic: 2
 content: |
   沈野的起点，位于外环西部，人口约200人的微型聚落。整体由几十截废弃灵能管道拼成，从外面看就像一堆灰色铁管堆在碎石地上，不走近根本看不出里面住着人。
 
@@ -27,4 +27,4 @@ ignore_budget: false
 comment: 沈野起点，V1核心场景之一
 related: [LB-057, LB-055]
 tags: [地点, 外环, 聚落, 沈野起点]
-volume_range: ""
+volume_range: "V1-V2"

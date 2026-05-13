@@ -27,4 +27,4 @@ ignore_budget: false
 comment: V2主要场景，研究院总部
 related: [LB-057, LB-055, LB-058]
 tags: [地点, 中环, 城市, 研究院, V2场景]
-volume_range: ""
+volume_range: "V2-V14,尾声"

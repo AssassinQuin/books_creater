@@ -1,9 +1,9 @@
 id: LB-020
 name: 林原
 keys: [林原, 研究院, 活体实验, 电车难题, 清除技术]
-secondary_keys: [激进派, 首席, 五和一, 灵能结构, 透视, 数据]
-selective: false
-selective_logic: 0
+secondary_keys: [实验, 活体, 电车难题]
+selective: true
+selective_logic: 2
 content: |
   研究院病理研究部领导（激进派首席），通感级灵能结构透视（解剖之眼）。他看到的不只是物体表面而是灵能结构——活人在他眼里是一套灵能循环系统（经脉走向/灵能沉积/灵衰症侵蚀位置）。能力让他极度擅长设计实验也让他把人当数据——他直接"看到"灵衰症在血管壁上的沉积模式，自动计算最优实验方案。
 
@@ -25,4 +25,4 @@ ignore_budget: false
 comment: 电车难题·数据管生命·活体实验·清除技术
 related: [LB-050, LB-059, LB-021]
 tags: [人物, 研究院, 道德, 实验, 治疗]
-volume_range: ""
+volume_range: "V2-V14,尾声"

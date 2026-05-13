@@ -23,4 +23,4 @@ ignore_budget: false
 comment: 核心机制·双棋盘逻辑·系统悖论
 related: [LB-038, LB-031, LB-050, LB-001]
 tags: [核心设定, 恒温器, 灵能浓度, 机制]
-volume_range: ""
+volume_range: "V4-V14,尾声"

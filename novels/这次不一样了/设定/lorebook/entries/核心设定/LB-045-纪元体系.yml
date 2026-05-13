@@ -20,7 +20,7 @@ position: after_char
 probability: 100
 sticky: 0
 cooldown: 0
-delay: 0
+delay: 90
 group: ""
 group_weight: 100
 ignore_budget: false

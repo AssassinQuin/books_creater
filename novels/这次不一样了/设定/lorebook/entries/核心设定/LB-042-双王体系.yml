@@ -20,11 +20,11 @@ position: after_char
 probability: 100
 sticky: 0
 cooldown: 0
-delay: 0
+delay: 300
 group: ""
 group_weight: 100
 ignore_budget: false
 comment: 终局核心设定，涉及虞渊/渊描写、双王关系、终局暗示时激活
 related: [LB-038, LB-039, LB-045]
 tags: [核心设定, 双王, 虞渊, 渊, 终局, 镜像]
-volume_range: ""
+volume_range: "V10-尾声"

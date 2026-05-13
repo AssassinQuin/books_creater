@@ -15,7 +15,7 @@ priority: 30
 position: after_char
 probability: 100
 sticky: 0
-cooldown: 0
+cooldown: 90
 delay: 0
 group: ""
 group_weight: 100

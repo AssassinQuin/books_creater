@@ -1,9 +1,9 @@
 id: LB-013
 name: 汐
 keys: [汐, 月裔, 波动感知, 碑文翻译, 共鸣]
-secondary_keys: [碑文, 实验, 灵能频率, 远古, 月裔, 翻译]
-selective: false
-selective_logic: 0
+secondary_keys: [翻译, 碑文, 波动]
+selective: true
+selective_logic: 2
 content: |
   月裔女孩，波动感知能力（非战斗型情报型），已知唯一能解读远古碑文的人。月裔天然灵能亲和，不需觉醒即可感知灵能频率——这是虞渊四百年来杀了所有人类碑文觉醒者却没杀她的原因：她不在清理名单上。
 
@@ -25,4 +25,4 @@ ignore_budget: false
 comment: 碑文解读者·月裔唯一·认知层危险
 related: [LB-007, LB-012, LB-019]
 tags: [人物, 主角团, 月裔, 碑文, 能力]
-volume_range: ""
+volume_range: "V2-尾声"

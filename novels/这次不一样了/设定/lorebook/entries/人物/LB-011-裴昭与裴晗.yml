@@ -18,11 +18,11 @@ position: after_char
 probability: 100
 sticky: 0
 cooldown: 0
-delay: 0
+delay: 270
 group: ""
 group_weight: 100
 ignore_budget: false
 comment: 人物·双子容器
 related: [LB-001, LB-008, LB-031]
 tags: [人物, 纪元2, 双子, 灵能容器, 灵枢核心]
-volume_range: ""
+volume_range: "V11-V13"

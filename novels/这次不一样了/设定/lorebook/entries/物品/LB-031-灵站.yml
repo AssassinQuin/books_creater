@@ -1,9 +1,9 @@
 id: LB-031
 name: 灵站
 keys: [灵站, 吸收椅, 共振卡, 供体, 提取]
-secondary_keys: [灵能浓度监测, 兽潮预警, 共振增幅器, 公告栏]
-selective: false
-selective_logic: 0
+secondary_keys: [供体, 吸收椅, 排队]
+selective: true
+selective_logic: 2
 content: |
   灵站是整个世界的核心基础设施。对外功能：灵能管理、灵晶收购、供体注册、灵能浓度监测。标配设施有吸收椅、读取器、公告栏、检测器。灵能吸收椅15分钟每次，供体插管后感应板读数产出灵晶——这是普通人最直接的赚钱方式。
 

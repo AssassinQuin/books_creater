@@ -20,11 +20,11 @@ position: after_char
 probability: 100
 sticky: 0
 cooldown: 0
-delay: 0
+delay: 300
 group: ""
 group_weight: 100
 ignore_budget: false
 comment: 人物·灵能最终形态
 related: [LB-006, LB-008, LB-010]
 tags: [人物, 龙形, 禁地, 灵能, 裔族]
-volume_range: ""
+volume_range: "V10-尾声"

@@ -20,11 +20,11 @@ position: after_char
 probability: 100
 sticky: 0
 cooldown: 0
-delay: 0
+delay: 360
 group: ""
 group_weight: 100
 ignore_budget: false
 comment: 人物·体系缔造者
 related: [LB-001, LB-009, LB-010, LB-011, LB-031]
 tags: [人物, 灵源级, 震域, 灵站, 400年]
-volume_range: ""
+volume_range: "V12-V13,尾声"

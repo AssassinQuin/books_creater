@@ -25,4 +25,4 @@ ignore_budget: false
 comment: V1→V2过渡路线，旅途叙事骨架
 related: [LB-054, LB-057, LB-061, LB-060]
 tags: [地点, 路线, 旅途, 方岩, V1V2过渡]
-volume_range: ""
+volume_range: "V1-V2"

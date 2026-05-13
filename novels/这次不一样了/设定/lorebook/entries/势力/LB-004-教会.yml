@@ -16,7 +16,7 @@ constant: true
 priority: 10
 position: before_char
 probability: 100
-sticky: 0
+sticky: 60
 cooldown: 0
 delay: 0
 group: ""
