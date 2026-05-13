@@ -1,14 +1,17 @@
 ---
 name: novel-setup
-description: 小说项目基建 — 头脑风暴启动项目、世界观建模、物品档案、历史层。触发词：头脑风暴/灵感/建世界观/世界观/设定/加物品/建历史/我有个想法。
+description: 小说项目基建，含头脑风暴、世界观建模和物品档案管理。触发词：头脑风暴/建世界观/设定/加物品
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__memory__memory_store, mcp__memory__memory_search, mcp__novel-db__novel_create, mcp__novel-db__novel_list, mcp__novel-db__novel_get, mcp__novel-db__novel_update, mcp__novel-db__world_upsert, mcp__novel-db__world_query, mcp__novel-db__world_delete
+lifecycle: core
 ---
 
 # 小说项目基建
 
 > 共享约定：读 `.claude/skills/novel-writer/references/shared-conventions.md`
 > 物品引擎：读 `.claude/skills/novel-writer/references/engine-item.md`
+> **术语定义**: 读项目根目录 `NOVEL-CONTEXT.md`
 
+<what-to-do>
 ## 强制流程
 
 ```
@@ -17,19 +20,39 @@ A2世界观: 读模板 → 逐维度建立(含历史层+物品) → 交叉验证
 ```
 
 每个阶段有 🔒 检查点。用户说"改一下"→ 回退修改；说无关问题 → 简短回答后回到当前步骤。
+</what-to-do>
 
----
+<supporting-info>
 
-## A1: 项目启动
+## A1: 项目启动 + Grilling 增强头脑风暴
 
 触发: "头脑风暴"/"灵感"/"我有个想法"
 
+### Grilling 机制（核心增强）
+
+读 `references/brainstorm-guide.md`，采用逐问深挖模式：
+
+**原则**: 一次只问一个问题，等待用户回答后再问下一个。
+
+**增强1 — 术语实时捕获**:
+当用户在回答中澄清或定义一个概念时（例如："我的修炼体系分为三阶，不是五阶"）：
+1. 立即更新项目根目录 `NOVEL-CONTEXT.md` 中对应术语
+2. 简短确认："已记录：{术语} = {定义}"
+
+**增强2 — 创作决策捕获**:
+当用户做出不可逆的创作决策时（满足三条件：不可逆 + 不显而易见 + 存在真实取舍）：
+1. 提议创建创作决策记录："`这是一个重要的创作决策，要记录到 docs/decisions/ 吗？`"
+2. 用户确认后，按 `docs/decisions/ADR-TEMPLATE.md` 格式创建 ADR 文件
+3. 后续技能可查询该决策，避免重复讨论
+
+### 头脑风暴流程
+
 1. 确认小说名，`novel_create` 创建项目
-2. 读 `references/brainstorm-guide.md`，**一次只问一个问题**：
+2. **逐问深挖**：
    - 画面感 → 主角特质 → 读者情绪(爽/虐/燃/感动/紧张) → 对立面 → 独特规则
    - 用户提到"群像"→ 追问每个核心角色的独立线和交汇点
 3. 每个回答 → `memory_store(tags="project:{名},idea")`
-4. 🔒**输出决策卡**（结构化模板）：
+4. 🔒**输出决策卡**：
 
    ```
    项目: {小说名}
@@ -83,8 +106,6 @@ A2世界观: 读模板 → 逐维度建立(含历史层+物品) → 交叉验证
 
 ### 历史层（world_query category="history"）
 
-世界观的纵深支撑——正文不写，但必须经得起推敲。
-
 ```
 历史维度模板:
   时间线: {N年前发生了什么→导致了现在的格局}
@@ -95,9 +116,9 @@ A2世界观: 读模板 → 逐维度建立(含历史层+物品) → 交叉验证
 ```
 
 设计规则：
-- 遗留物必须解释"为什么还在"（灵能设备自我维护？材料特殊？有人秘密维护？）
-- 失传物必须解释"为什么丢了"（战乱？灵能污染？禁忌？）
-- 现在的角色只能知道他们**能知道**的历史（拾荒者不知道400年前的技术原理）
+- 遗留物必须解释"为什么还在"
+- 失传物必须解释"为什么丢了"
+- 现在的角色只能知道他们**能知道**的历史
 
 ### 物品体系（world_query category="ability"/"economy"）
 
@@ -105,16 +126,13 @@ A2世界观: 读模板 → 逐维度建立(含历史层+物品) → 交叉验证
 
 ```
 首次出现物品必须建立:
-  来源/产地/稀缺度 → 外观(形/色/质感/光泽/大小) → 感官(触/嗅/味/声)
-  → 功能(用途/方式/条件/持续时间) → 等级差异 → 变化与衰减
-  → 使用禁忌与代价 → 经济(价格/获取成本/存储条件)
+  来源/产地/稀缺度 → 外观 → 感官 → 功能 → 等级差异
+  → 变化与衰减 → 使用禁忌与代价 → 经济(价格/获取成本/存储条件)
 ```
 
 存入 `world_upsert(category="ability"/"economy", name="{物品名}", data={完整档案})`
 
 ### 交叉验证（两种模式都必须执行）
-
-逐项检查，不合理解释原因并建议修改：
 
 | 检查项 | 验证方法 | 异常标准 |
 |--------|---------|---------|
@@ -150,3 +168,5 @@ A2世界观: 读模板 → 逐维度建立(含历史层+物品) → 交叉验证
 memory_search(query="flow-state", tags=["project:{名},flow-state"])
 ```
 有记录 → "上次我们在{步骤}暂停了，从那里继续？"
+
+</supporting-info>

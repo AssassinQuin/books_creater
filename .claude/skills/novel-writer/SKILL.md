@@ -1,14 +1,19 @@
 ---
 name: novel-writer
-description: 网文创作总入口 — 路由到子skill，处理上架和状态查询。触发词：写小说/我要写/帮我写/上架/发布/番茄/起点/进度/状态/status/加素材/拆书。
+description: 网文创作总路由器，分发到子技能并处理上架和状态查询。触发词：写小说/帮我写/上架/进度
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__novel_get, mcp__novel-db__novel_list, mcp__novel-db__novel_update, mcp__novel-db__novel_delete, mcp__novel-db__world_query, mcp__novel-db__chapter_list, mcp__novel-db__volume_list, mcp__novel-db__foreshadow_list, mcp__novel-db__character_list, mcp__novel-db__db_search, mcp__memory__memory_store, mcp__memory__memory_search
+lifecycle: core
 ---
 
 # 网文创作总入口
 
 > 共享约定（铁律/数据分层/Memory模型/Git规范）：读 `references/shared-conventions.md`
+> **术语定义**: 读项目根目录 `NOVEL-CONTEXT.md`
 
+<what-to-do>
 ## 意图路由
+
+根据用户输入的关键词，分发到对应的子技能：
 
 ```
 关键词                                          → 调用 Skill
@@ -28,12 +33,12 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__novel_get, mc
 
 ### 冲突消歧优先级（从高到低）
 
-1. **C3级联更新**（"改设定"/"改人物"）→ novel-qa — 立即处理，防止脏数据扩散
-2. **B2写作中断**（写作中说"改设定"）→ 暂停写作，建议 `/novel-qa` 处理后回来
-3. **A层重建** → 按用户意图路由，不强制顺序
-4. **模糊匹配** → "帮我写"无上下文时，查 `novel_list` 问用户要操作哪个项目
+1. **C3级联更新**（"改设定"/"改人物"）→ novel-qa
+2. **B2写作中断**（写作中说"改设定"）→ 暂停写作，建议 `/novel-qa`
+3. **模糊匹配** → "帮我写"无上下文时，查 `novel_list` 问用户要操作哪个项目
+</what-to-do>
 
----
+<supporting-info>
 
 ## C1: 平台上架
 
@@ -71,17 +76,9 @@ novel_get + volume_list + chapter_list + foreshadow_list + character_list
 
 1. 用户导入小说文本（粘贴或文件路径）
 2. **段落拆解**：按场景/对话/描写/动作/心理分类
-3. **技巧提取**：
-   - 节奏：句长分布、段落长度变化
-   - 对话：占比、潜台词密度、废话比例
-   - 描写：五感使用频率、侧面描写占比
-   - 伏笔：前置线索与后置揭示的章距
-4. **风格建档**：提取的文风特征 → `memory_store(tags="shared,style-profile", type="reference")`
-   - 句式偏好（短/中/长占比）
-   - 对话占比均值
-   - 描写密度（每千字描写段数）
-   - 独特用词/口头禅
-5. **可用技巧**：可直接借鉴的手法 → `memory_store(tags="shared,technique")`
+3. **技巧提取**：节奏/对话/描写/伏笔
+4. **风格建档** → `memory_store(tags="shared,style-profile", type="reference")`
+5. **可用技巧** → `memory_store(tags="shared,technique")`
 6. 写入报告 → `novels/拆书笔记/{书名}.md`
 
 ---
@@ -93,3 +90,5 @@ novel_get + volume_list + chapter_list + foreshadow_list + character_list
 ```
 db_search(novel_id, keyword) → 跨世界观/人物/章节/伏笔/时间线搜索
 ```
+
+</supporting-info>

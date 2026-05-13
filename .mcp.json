@@ -7,6 +7,15 @@
       "env": {
         "DATABASE_URL": "postgresql://postgres:123456zx@localhost:5432/fcli"
       }
+    },
+    "memory": {
+      "type": "stdio",
+      "command": "/home/z/.local/bin/memory",
+      "args": ["server"],
+      "env": {
+        "MCP_MEMORY_STORAGE_BACKEND": "sqlite_vec",
+        "HF_ENDPOINT": "https://hf-mirror.com"
+      }
     }
   }
 }
