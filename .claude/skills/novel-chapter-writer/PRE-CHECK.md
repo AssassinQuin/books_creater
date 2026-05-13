@@ -10,6 +10,7 @@
 读 references/scene-type-guide.md — 场景类型策略
 读 references/scene-composition-guide.md — 复杂场面生成
 读 references/scene-deepening-guide.md — 场景深化指南
+读 LOREBOOK-LOADING.md — 世界知识按需注入（替代全量世界观加载）
 ```
 
 ---
