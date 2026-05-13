@@ -31,9 +31,9 @@ Skills follow **progressive disclosure** design — each SKILL.md contains core 
 
 | Skill | 路径 | 用途 | 何时使用 |
 |-------|------|------|----------|
-| **web-novel-writer** | `skills/web-novel-writer/SKILL.md` | 高质量网文正文写作引擎（多视角叙事+电影级画面感+严密逻辑体系） | B2章节写作时参考 |
-| **novel-framework** | `skills/novel-framework/SKILL.md` | 百万字级框架设计系统（9大Agent：世界观/时空/人物/关系/能力/物品/故事/线索/逻辑校验） | A2建世界观、A3人物设计、B1大纲规划 |
-| **storytelling** | `skills/storytelling/SKILL.md` | 故事创作方法论（三幕剧/英雄旅程/角色冰山模型/对话技巧/世界观建构） | 创作方法论参考 |
+| **web-novel-writer** | `skills/web-novel-writer/SKILL.md` | 网文正文写作引擎（多视角叙事+电影级画面感+**环境先行设计**+**事件场面搭建**+**正文加载协议**+**快照增量更新**+升级战斗系统） | B2章节写作时参考 |
+| **novel-framework** | `skills/novel-framework/SKILL.md` | 百万字框架设计（9大Agent+**人物外观描写库**+**声音指纹**+**能力全链路**+**物品全链路**+**历史纵深设计**+**存储架构指南**+**战斗定位**） | A2建世界观、A3人物设计、B1大纲规划 |
+| **storytelling** | `skills/storytelling/SKILL.md` | 故事创作方法论（三幕剧/英雄旅程+**人物对话引擎**+**弦外之音**+**环境暗示**+**通感**+**微表情**+**网文描写原则**） | 创作方法论参考、对话设计、人物描写 |
 | **prose-craft** | `skills/prose-craft/SKILL.md` | 散文质量引擎（Voice发现/Styleguide选择/句子节奏/段落构建/强开篇强收尾） | 写作质量提升、文风调整 |
 | **memory** | `skills/memory/SKILL.md` | 持久化记忆管理（16个MCP工具、标签体系、跨Skill API） | 任何需要存储/检索记忆时 |
 | **mcp-builder** | `skills/mcp-builder/SKILL.md` | MCP服务开发指南（Python FastMCP / TypeScript SDK） | 构建新的MCP服务时 |
