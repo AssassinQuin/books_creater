@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "prompt": "调研 React Server Components 的最佳实践和常见陷阱",
+    "expected": "应触发 skill → memory 检索 → 头脑风暴(3-6搜索主题) → 工具分配(searxng+github+crawl4ai) → 🔒确认 → ≤3子agent(general-purpose)并行搜索 → 原始结果归档 → 总结 → memory+文件持久化",
+    "scenario": "典型英文技术调研，验证完整6阶段流程，应使用 searxng/github/crawl4ai 而非 web-search-prime"
+  },
+  {
+    "id": 2,
+    "prompt": "调研 Python asyncio 高并发方案，对比 asyncio vs trio vs curio",
+    "expected": "应触发头脑风暴生成对比维度 → searxng(通用搜索)+github_search_code(代码实现)+crawl4ai(深度提取技术对比文章) → 总结含方案对比表",
+    "scenario": "方案对比型调研，验证搜索工具分工和对比分析能力"
+  },
+  {
+    "id": 3,
+    "prompt": "调研炉石传说酒馆战棋的 AI 算法实现方案",
+    "expected": "searxng(language=zh)中文搜索+英文交叉验证 → github搜索相关开源项目 → crawl4ai_scrape提取2-3个高价值URL全文 → memory存储+本地保存",
+    "scenario": "中英混合+游戏AI领域，验证 searxng 中文搜索和 crawl4ai 深度提取"
+  },
+  {
+    "id": 4,
+    "prompt": "调研 2025 年最新的 MCP 服务器生态，主流有哪些工具和使用场景",
+    "expected": "searxng(time_range=year)+github_search_repositories(topic:mcp)+crawl4ai_scrape提取高价值URL → 综合报告含生态图谱",
+    "scenario": "时效性+中英混合调研，验证 searxng time_range 和 github 配合"
+  },
+  {
+    "id": 5,
+    "prompt": "研究 DuckDB vs ClickHouse 在 OLAP 场景的性能对比",
+    "expected": "searxng(通用搜索benchmark)+github(查找benchmark代码)+crawl4ai_crawl(爬取技术对比文档站) → 总结含性能对比表",
+    "scenario": "方案对比+性能benchmark，验证 crawl4ai 爬取能力"
+  },
+  {
+    "id": 6,
+    "prompt": "Exa search 的定价是多少",
+    "expected": "Phase 0 判定为快速查询 → 直接 searxng 搜1-2次 → 返回答案+来源URL → 不进完整5阶段流程",
+    "scenario": "单一事实快速查询，验证Phase 0快速判定路径"
+  },
+  {
+    "id": 7,
+    "prompt": "帮我爬取 LangChain 的官方文档站，整理所有核心模块的功能概要",
+    "expected": "Phase 0判定为深度爬取任务 → crawl4ai_crawl_site(全站爬取) → 整理输出结构化文档概要 → 保存到data目录",
+    "scenario": "爬取型任务，验证 crawl4ai 全站爬取能力，这是新增能力(opencode版无此功能)"
+  },
+  {
+    "id": 8,
+    "prompt": "调研 opencode 最好用的插件，mcp 本地服务，分别给出优缺点",
+    "expected": "触发词'调研'应命中 → Phase 0判定深度调研 → Phase 1本地扫描 → Phase 2头脑风暴 → Phase 3子agent(general-purpose)按模板执行 → Phase 4综合报告",
+    "scenario": "真实用户场景复现：验证触发词识别+Claude Code Agent类型正确使用"
+  }
+]
