@@ -1,6 +1,6 @@
 id: LB-040
 name: 灵能物品分级
-keys: [灵能装备, S级, A级, B级, 灵源器, 共鸣器, 铸造]
+keys: [灵能装备, 老古董, 认主的, 量产货, 破烂, 铸造]
 secondary_keys: [灵能武器, 灵能防具, 灵能耗材, 灵能工具, 灵能共鸣物, 装备分级, 灵能物品]
 selective: false
 selective_logic: 0
