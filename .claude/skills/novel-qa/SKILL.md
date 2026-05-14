@@ -11,6 +11,7 @@ lifecycle: quality
 > 快照引擎：读 `references/engine-snapshot.md`（一致性校验规则）
 > 物品引擎：读 `references/engine-item.md`（物品一致性校验）
 > AI指纹检测：读 `references/ai-fingerprint-detection.md`
+> **因果逻辑大纲法**: 读 `references/causal-outline-method.md`
 > **术语定义**: 读项目根目录 `NOVEL-CONTEXT.md`
 
 <what-to-do>
@@ -37,9 +38,18 @@ C3更新: 改数据 → db_search找影响 → 🔒确认改哪些
 **Phase 1 达尔文评估**：
 - 10维度并行Agent审计（根据卷类型选5-10维度），每维度0-100分
 - 参照 `references/outline-review-checklist.md`
+- **因果逻辑审计（新增）**：参照 `references/causal-outline-method.md` 第四部分「因果逻辑审计清单」
+  - 单卷审计：因果密度 / 可替换性测试 / 可删减性测试 / 雪球累积 / 世界观压迫 / 选择重量
+  - 全书审计：主线因果完整性 / 暗线-主线交织 / 世界观刑具一致性 / 不可逆节点分布 / 终局因果收束
+  - 因果链断裂 = 自动P0（致命）
 
 **Phase 2 女娲修复**：
 - P0/P1问题进入自动修复流程，每个问题生成3个修复方案 + 代价评估
+- **因果逻辑修复专项**：
+  - 发现「时间驱动」写法 → 按 `causal-outline-method.md` 转换为「因果驱动」
+  - 修复公式：找到无因果的事件 → 补上前因/后果/逼出的选择
+  - 验证：修复后事件不可调换、不可删减
+  - 世界观刑具化不足 → 补充规则压迫场景
 
 **Phase 3 验证迭代**：
 - 修复后重新评估，综合≥85通过，最多3轮迭代

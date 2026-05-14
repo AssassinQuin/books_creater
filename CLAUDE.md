@@ -25,6 +25,19 @@ Three-layer data architecture:
 
 Skills follow **progressive disclosure** design — each SKILL.md contains core flow in `<what-to-do>` and detailed instructions in `<supporting-info>`. Sub-documents are loaded on demand.
 
+#### Project Skills (`.claude/skills/`)
+
+| Skill | 触发词 | 核心功能 | 强制检查点 |
+|-------|--------|----------|-----------|
+| **novel-writer** | 写小说/帮我写/上架/进度 | 总路由器，分发到子技能，处理上架和状态查询 | 冲突消歧按 C3>B2 优先级 |
+| **novel-setup** | 头脑风暴/灵感/建世界观/设定 | 项目初始化、世界观构建、物品设计 | 🔒 世界观确认后才能进入人物 |
+| **novel-character** | 设计人物/加人物/人物卡 | 角色蒸馏7步、强制外观模板、关系差异化对话 | 🔒 蒸馏7步+外观+对话完整才能存入 |
+| **novel-planner** | 规划卷/大纲/卷大纲 | 全书总纲、逐卷环境先行设计、章节场景清单 | 🔒 每卷规划完必须确认才能进入场景 |
+| **novel-chapter-writer** | 写第N章/继续写/写一章 | 逐章写作引擎，Step0-4强制流程 | 🔒 Step3状态同步不可跳过，<2500字拒绝存盘 |
+| **novel-qa** | 审阅/检查/诊断/改设定/OOC | 全链路质量保障，15维度扫描+AI指纹检测 | 🔒 P0/P1问题必须修复 |
+| **novel-battle** | 写战斗/战斗场景/战斗设计 | 战斗场景设计 | - |
+| **novel-reviser** | 修复/去重/批量改/修文/润色 | 文本修订、润色 | - |
+
 #### External Skills Repository
 
 `/home/z/my-project/skills/` 目录包含通用 skill 仓库（`https://github.com/AssassinQuin/skills.git`）。以下写作相关 skill 已同步加载：
@@ -38,7 +51,7 @@ Skills follow **progressive disclosure** design — each SKILL.md contains core 
 | **memory** | `skills/memory/SKILL.md` | 持久化记忆管理（16个MCP工具、标签体系、跨Skill API） | 任何需要存储/检索记忆时 |
 | **mcp-builder** | `skills/mcp-builder/SKILL.md` | MCP服务开发指南（Python FastMCP / TypeScript SDK） | 构建新的MCP服务时 |
 
-**注意**：这些外部 skill 不替代本项目已有的 skill 系统，而是作为**补充参考**。项目内 skill（novel-writer/novel-setup/novel-character/novel-planner/novel-chapter-writer/novel-qa/novel-battle/novel-reviser）仍然是核心工作流。
+**注意**：外部 skill 作为**补充参考**。项目内 skill 是核心工作流。
 
 #### Skill Lifecycle (Bucket System)
 
@@ -75,9 +88,42 @@ Priority on conflict: C3 > B2 > others.
 
 ## Key Orchestration Tools
 
-- `writing_start(novel_id, chapter_number)` — one-shot context injection before writing (chapter info + last 3 summaries + active characters + unrecycled foreshadowing + world settings + current volume plan)
-- `writing_finish(chapter_id, ...)` — one-shot state update after writing (summary + events + foreshadowing + timeline + dimensions)
-- `health_check(novel_id)` — one-shot diagnosis (foreshadowing backlog + side character activity + upgrade pacing + daily scene density + hidden plot progress + volume completion)
+| 工具 | 用途 | 调用时机 |
+|------|------|----------|
+| `writing_start(novel_id, chapter_number)` | 写作前上下文注入（章节信息+前3章摘要+活跃人物+未回收伏笔+世界观+当前卷规划） | Step 1 必调 |
+| `writing_finish(chapter_id, ...)` | 写作后状态更新（摘要+事件+伏笔+时间线+维度） | Step 3 强制，不可跳过 |
+| `health_check(novel_id)` | 健康诊断（伏笔积压/配角活跃/升级节奏/日常密度/暗线推进/卷完成度） | C2 诊断时 |
+
+### 写作引擎参考文档
+
+| 文档 | 用途 | 何时加载 |
+|------|------|---------|
+| `references/engine-loading.md` | 三级上下文加载协议 | Step 1 |
+| `references/engine-snapshot.md` | 场景/事件/人物快照 | Step 1 + Step 3 |
+| `references/engine-environment.md` | 环境5要素+感官描写 | Step 2.2 |
+| `references/engine-dialogue.md` | 差异化对话+弦外之音 | Step 2.3 |
+| `references/engine-action.md` | 动作链5拍+空间感知 | Step 2.2 |
+| `references/engine-item.md` | 物品全生命周期 | Step 2.2 |
+
+## Shared Conventions (铁律)
+
+> 所有小说创作 skill 共用，见 `.claude/skills/novel-writer/references/shared-conventions.md`
+
+1. **人物群像** — NPC有自己的生活，反派有自己的逻辑，配角有自己的故事线，不全围着主角转
+2. **去AI味** — 禁止：不禁/缓缓/淡淡/微微/代价/反噬/寿命折损/精神崩溃。对话像真人，描写有画面
+3. **日常即世界观** — 用摊贩大爷的闲聊、告示栏的排名、酒馆的物价展示世界，不空洞堆设定
+4. **百万字是马拉松** — 卷级规划、配角轮换、伏笔回收节奏、升级衰减后的替代爽点，从第一天就设计
+5. **明暗双线** — 每卷有明线（主角推进）和暗线（隐藏真相），暗线不一次揭完，分卷递进
+6. **因果链不可断** — 每个关键事件必须有充分前因。"因为剧情需要"不是答案
+7. **开篇必须有钩子** — 前三章必须有冲突/悬念/异常信号。纯日常白开水开头=弃文
+8. **角色不能为剧情变笨** — 不能靠角色"没注意到""没发现""没问"来推动情节
+
+### 流程纪律
+
+- **步骤不可跳过** — 每个 skill 有编号步骤，必须按序执行
+- **🔒 关键检查点必须确认** — 执行后必须向用户确认，用户说"OK"/"继续"才能下一步
+- **断点续传** — 每次触发先检查 Memory 中的 `flow-state`，有记录则恢复而非从头开始
+- **写后必存** — `writing_finish` 是不可跳过的步骤
 
 ## File Organization Rules
 

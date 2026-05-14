@@ -10,6 +10,7 @@ lifecycle: core
 > 共享约定：读 `.claude/skills/novel-writer/references/shared-conventions.md`
 > 环境引擎：读 `.claude/skills/novel-writer/references/engine-environment.md`
 > 快照引擎：读 `.claude/skills/novel-writer/references/engine-snapshot.md`
+> **因果逻辑大纲法**: 读 `.claude/skills/novel-writer/references/causal-outline-method.md`
 > **术语定义**: 读项目根目录 `NOVEL-CONTEXT.md`
 
 <what-to-do>
@@ -35,9 +36,10 @@ B1: 召回数据 → 全书总纲(首卷) → 🔒确认 → 逐卷规划(环境
    - 预计卷数（百万字≈500章/8-15卷）
    - 主角成长弧线关键节点
    - 明暗双线全局规划（暗线分几层揭示）
+   - **全书因果逻辑网**：主线因果链 + 暗线因果链 + 世界观刑具压迫曲线 + 不可逆节点分布
    - 🔒**用户确认总纲**后才继续
 
-3. **逐卷规划**（环境先行）：
+3. **逐卷规划**（环境先行 + 因果逻辑网）：
    ```
    volume_create(novel_id, number=N, title="卷名",
      main_plotlines=[{name, description, purpose}, ...],
@@ -45,6 +47,15 @@ B1: 召回数据 → 全书总纲(首卷) → 🔒确认 → 逐卷规划(环境
    ```
 
    每卷必定义：主线推进 + 暗线揭示 + 重点配角弧光 + 升级/爽点 + 伏笔计划 + 卷尾状态
+
+   **因果逻辑网构建（每卷必做）**：
+   1. **卷级因果链**：触发事件 → 核心冲突 → 不可逆节点 → 遗留后果
+   2. **逐日因果网**：每个事件必须回答「因为什么→所以什么→逼出什么→雪球什么」
+   3. **世界观刑具化**：本卷中世界观规则如何对角色产生持续压迫？
+   4. **不可逆节点确认**：本卷是否有角色做出无法回头的选择？
+   5. **遗留后果设置**：本卷结束时留给下卷的「定时炸弹」是什么？
+
+   **禁止时间驱动写法**：不写「D1主角去了X→D2主角遇到Y」，写「因为D1的Z后果，主角被迫在D2做出A选择，而世界观规则B使得这个选择必然引发C」
 
 ### 环境先行设计（每卷必做）
 
