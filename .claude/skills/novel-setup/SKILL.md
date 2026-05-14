@@ -1,208 +1,59 @@
 ---
 name: novel-setup
 description: 小说项目基建，含头脑风暴、世界观建模和物品档案管理。触发词：头脑风暴/建世界观/设定/加物品
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__memory__memory_store, mcp__memory__memory_search, mcp__novel-db__novel_create, mcp__novel-db__novel_list, mcp__novel-db__novel_get, mcp__novel-db__novel_update, mcp__novel-db__world_upsert, mcp__novel-db__world_query, mcp__novel-db__world_delete
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__novel_create, mcp__novel-db__novel_list, mcp__novel-db__novel_get, mcp__novel-db__novel_update, mcp__novel-db__world_upsert, mcp__novel-db__world_query, mcp__novel-db__world_delete, mcp__novel-db__engine_detail, mcp__novel-db__rule_detail
 lifecycle: core
 ---
 
 # 小说项目基建
 
-> 共享约定：读 `.claude/skills/novel-writer/references/shared-conventions.md`
-> 物品引擎：读 `.claude/skills/novel-writer/references/engine-item.md`
-> **因果逻辑大纲法**: 读 `.claude/skills/novel-writer/references/causal-outline-method.md`
-> **术语定义**: 读项目根目录 `NOVEL-CONTEXT.md`
-
 <what-to-do>
+
 ## 强制流程
 
 ```
-A1启动: 创建项目 → 头脑风暴(逐问) → 🔒输出决策卡 → 用户选定 → commit
-A2世界观: 读模板 → 逐维度建立(含历史层+物品) → 交叉验证 → commit → 建议下一步
+A1: novel_create + 头脑风暴 → 🔒输出决策卡 → git commit
+A2: world_query(已有) → world_upsert(逐维度) → 🔒交叉验证 → git commit
+物品: world_query(查重) → engine_detail('item') → world_upsert(category='ability'/'economy')
 ```
 
-每个阶段有 🔒 检查点。用户说"改一下"→ 回退修改；说无关问题 → 简短回答后回到当前步骤。
+所有 `world_upsert` 后必须 🔒 用户确认。
+
 </what-to-do>
 
 <supporting-info>
 
-## A1: 项目启动 + Grilling 增强头脑风暴
+## A1: 项目启动
+触发："头脑风暴"/"灵感"
 
-触发: "头脑风暴"/"灵感"/"我有个想法"
+1. 确认小说名，`novel_create` 创建
+2. 逐问深挖：画面→主角→情绪→对立面→独特规则，每次只问一个
+3. 每次回答存 `memory_store(tags="project:{名},idea")`
+4. 🔒 输出决策卡（核心冲突/主线方向/读者情绪/亮点场景/品类节奏）
+5. 用户选定 → `novel_update(genre, status)` + `memory_store` + git commit
 
-### Grilling 机制（核心增强）
-
-读 `references/brainstorm-guide.md`，采用逐问深挖模式：
-
-**原则**: 一次只问一个问题，等待用户回答后再问下一个。
-
-**增强1 — 术语实时捕获**:
-当用户在回答中澄清或定义一个概念时（例如："我的修炼体系分为三阶，不是五阶"）：
-1. 立即更新项目根目录 `NOVEL-CONTEXT.md` 中对应术语
-2. 简短确认："已记录：{术语} = {定义}"
-
-**增强2 — 创作决策捕获**:
-当用户做出不可逆的创作决策时（满足三条件：不可逆 + 不显而易见 + 存在真实取舍）：
-1. 提议创建创作决策记录："`这是一个重要的创作决策，要记录到 docs/decisions/ 吗？`"
-2. 用户确认后，按 `docs/decisions/ADR-TEMPLATE.md` 格式创建 ADR 文件
-3. 后续技能可查询该决策，避免重复讨论
-
-### 头脑风暴流程
-
-1. 确认小说名，`novel_create` 创建项目
-2. **逐问深挖**：
-   - 画面感 → 主角特质 → 读者情绪(爽/虐/燃/感动/紧张) → 对立面 → 独特规则
-   - 用户提到"群像"→ 追问每个核心角色的独立线和交汇点
-3. 每个回答 → `memory_store(tags="project:{名},idea")`
-4. 🔒**输出决策卡**：
-
-   ```
-   项目: {小说名}
-   核心冲突: {1-3个候选}
-   主线方向: {2-3个候选}
-   读者情绪: {主情绪}
-   亮点场景: {列表}
-   建议品类: {参考 genre-profiles.md}
-   建议节奏: {快/中/慢}
-   ```
-
-5. 用户选定 → `novel_update(genre, status)` + `memory_store(tags="project:{名},decision")`
-6. `git commit -m "A1: 项目启动 - {小说名}"`
-
-完成后建议：`/novel-setup` 建世界观，或 `/novel-character` 设计人物。
-
----
+创作决策做 ADR：`docs/decisions/ADR-TEMPLATE.md`
 
 ## A2: 世界观建模
+触发："建世界观" | 前置：项目已创建
 
-触发: "建世界观"/"世界观"/"设定" | 前置: A1完成
+1. `world_query(novel_id)` 查已有维度
+2. 引导模式（默认）：先确立双锚点（危机锚+变量锚）→ 核心稀缺资源 → 世界观刑具化 → 涟漪效应 → 逐维度展开
+3. 快速模式：基于品类模板一次生成8维度
+4. 每维度完成 → `world_upsert(novel_id, category, name, data={...})` → 🔒确认
+5. 🔒交叉验证：锚点稳固/稀缺真实/涟漪完整/价值一致性和跨维度检查
 
-**前置校验**: `novel_get(novel_id)` 确认项目存在且 status 允许建世界观。
+**参考**: `engine_detail('causality')` 查看因果逻辑法；`references/worldbuilding-template.md`
 
-**已有世界观检测**: `world_query(novel_id)` 查已有维度。
-- 已有维度 → "你已建了{N}个维度（{列表}），要修改哪个？还是继续新建？"
-- 修改模式：`world_delete` 删除旧版 → `world_upsert` 写新版 → 🔒确认
-- 空白 → 进入逐维度建立
+## 物品档案
+触发："加物品" | 新物品首次出现时
 
-### 模式选择
-
-| 用户意图 | 模式 | 流程 |
-|---------|------|------|
-| "帮我设计一个完整世界" | **引导模式** | 逐维度问答（默认） |
-| "给我一个标准{品类}世界" | **快速模式** | 基于模板+genre-profiles自动生成6维初稿 → 用户审阅修改 |
-| "改一下{某维度}" | **修改模式** | world_query查当前 → world_delete旧 → world_upsert新 |
-
-### 引导模式（默认）
-
-1. 读 `references/worldbuilding-template.md`
-2. **先确立双锚点**（最高优先级，展开细节前必须完成）：
-
-**双锚点确立**：
-- **危机锚**：这个世界的终极危机是什么？（一句话说清）
-- **变量锚**：主角凭什么打破现状？（一句话说清）
-- **锚间张力**：两者之间的矛盾如何驱动整个故事？
-
-锚点检验：能用6个字概括"这本书讲的是XX与XX的冲突"吗？不能 → 散焦，砍到两根支柱。
-
-3. **再锁定核心稀缺资源**：这个世界最珍贵、最稀缺的资源是什么？它如何塑造阶层/冲突/行为/日常？
-
-4. **世界观刑具化（关键步骤）**：将世界观从「舞台背景」转化为「精密运转、自带压迫感的规则系统」
-   - 每个核心规则必须对角色产生**持续压力**
-   - 规则之间必须有**连锁反应**（规则A触发规则B）
-   - 角色必须有**绕过规则**的动机（绕过=剧情推进点）
-   - 规则必须有**代价**（无代价=无张力）
-   - 参照 `causal-outline-method.md` 2.1「世界观刑具化」
-
-5. **然后推演涟漪效应**：核心设定（锚点+稀缺+刑具化规则）如何渗透到衣食住行→日常用语→经济规则→文化习俗→律法制度？
-
-6. **接着建立价值共识体系**：这个世界默认的对错/善恶/取舍/成功/失败标准是什么？角色行为必须符合这套共识。
-
-6. 最后**逐维度展开**，一次一个维度：种族→势力→地理→能力→经济→日常→**历史层**→**物品体系**
-   - 用户说"跳过这个" → 记录，后续标注缺失，不强制补全
-   - **每个维度必须标注"涟漪来源"**：注明该维度从核心设定推导的路径
-   - **每个维度必须通过"价值共识一致性"检查**：该维度是否符合已确立的价值共识？
-   - 用户说"跳过这个" → 记录，后续标注缺失，不强制补全
-7. 每维度完成 → `world_upsert(novel_id, category, name, data)` + 🔒**向用户确认该维度**再进入下一个
-
-**防堆设定铁律**：
-- 主角不是导游——前3章不在"参观"不同地点（宗门/古城/拍卖会）而无核心推进
-- 第一卷用不到的设定不在前3章展开
-- 设定铺得越大，后期填坑压力越大。锚点不稳→支线失控→吃书/战力崩坏
-
-### 快速模式
-
-1. 根据 genre 读 genre-profiles.md 中对应品类模板
-2. 一次生成8维度初稿（含历史+物品），写入 `world_upsert`（每个维度一条）
-3. 🔒**整体展示** → 用户逐维度确认/修改
-4. 修改 → `world_upsert` 覆盖
-
-### 历史层（world_query category="history"）
-
-```
-历史维度模板:
-  时间线: {N年前发生了什么→导致了现在的格局}
-  遗留物: {哪些旧时代的物品/建筑/制度保留至今}
-  失传物: {哪些技术/知识消失了，为什么}
-  自洽性: {遗留物为什么还能用/建筑为什么不塌/制度为什么不改}
-  信息断层: {现在的人知道多少历史/哪些是传说/哪些是误读}
-```
-
-设计规则：
-- 遗留物必须解释"为什么还在"
-- 失传物必须解释"为什么丢了"
-- 现在的角色只能知道他们**能知道**的历史
-
-### 物品体系（world_query category="ability"/"economy"）
-
-关键物品必须建立完整档案，参照 `engine-item.md` 的生命周期模板：
-
-```
-首次出现物品必须建立:
-  来源/产地/稀缺度 → 外观 → 感官 → 功能 → 等级差异
-  → 变化与衰减 → 使用禁忌与代价 → 经济(价格/获取成本/存储条件)
-```
-
-存入 `world_upsert(category="ability"/"economy", name="{物品名}", data={完整档案})`
-
-### 交叉验证（两种模式都必须执行）
-
-| 检查项 | 验证方法 | 异常标准 |
-|--------|---------|---------|
-| **锚点稳固性** | 双锚点是否简洁有力？ | 需要3句以上解释=不锋利 |
-| **稀缺性真实** | 稀缺资源是否塑造了阶层/冲突/行为？ | 设定"稀缺"但角色从不缺 |
-| **涟漪完整** | 核心设定是否渗透到衣食住行/经济/文化/律法？ | 删掉某设定后世界毫无变化 |
-| **价值一致性** | 各维度是否符合价值共识？ | 存在"出戏"设定 |
-| 种族×地理 | 各种族分布与地理是否匹配 | 有种族无分布区域 |
-| 势力×地理 | 势力地盘与区域对应 | 势力无明确地盘 |
-| 势力×经济 | 势力财力支撑其行为 | 穷势力养大军/富势力不做贸易 |
-| 能力×种族 | 先天能力差异自洽 | 弱种族突然有超强能力无解释 |
-| 经济×日常 | 物价与生活水平匹配 | 一顿饭=普通人一年收入 |
-| 时间×距离 | 出行时间与距离合理 | 步行1小时跨大陆 |
-| **历史×遗留** | 遗留物与历史事件对应 | 400年建筑完好无解释 |
-| **物品×经济** | 物品价格与稀缺度匹配 | 随处可见的物品天价 |
-| **导游检测** | 前3章主角是否在"参观"世界 | 连续3+场景无核心推进 |
-
-验证通过 → `git commit -m "A2: 世界观完成 - {小说名}"` → 建议下一步：`/novel-character`
-
----
-
-## A2补充: 物品档案管理
-
-触发: "加物品"/"建物品"/涉及新物品首次出现时
-
-1. 确认物品是否已存在：`world_query(name="{物品名}")`
-2. 不存在 → 按 `engine-item.md` 模板建立完整档案
-3. `world_upsert(category="ability"/"economy", name="{物品名}", data={档案})`
+1. `world_query(name='{物品名}')` 确认不重复
+2. `engine_detail('item')` 查看文章生命周期模板
+3. `world_upsert(category='ability'/'economy', name='{物品名}', data={完整档案})`
 4. 🔒确认档案完整性
-5. 如果是已有物品有新发现 → 更新档案对应字段，不重写
-
----
 
 ## 断点续传
-
-触发时先检查：
-```
-memory_search(query="flow-state", tags=["project:{名},flow-state"])
-```
-有记录 → "上次我们在{步骤}暂停了，从那里继续？"
+`memory_search(query="flow-state", tags=["project:{名},flow-state"])`
 
 </supporting-info>

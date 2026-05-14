@@ -7,7 +7,7 @@
         "/Users/ganjie/skills/novel-db-mcp/server.py"
       ],
       "env": {
-        "DATABASE_URL": "postgresql://postgres:123456zx@localhost:5432/fcli"
+        "DATABASE_URL": "postgresql:///fcli"
       }
     }
   }

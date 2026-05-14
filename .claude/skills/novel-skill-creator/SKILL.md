@@ -7,115 +7,81 @@ lifecycle: meta
 
 # 小说技能创建指南
 
-> **用途**: 当需要为 books_creater 系统添加新技能时，按本指南执行。
-> **原则**: 小而美、可组合、渐进式披露。
+> **原则**: 小而美、可组合、渐进式披露。所有规则和数据在 MCP 中，不在 SKILL.md 中。
 
 <what-to-do>
+
 ## 创建流程（3步）
 
-1. **需求收集**: 确定技能名称、触发词、核心功能、与现有技能的关系
-2. **草稿编写**: 按 SKILL.md 模板 + frontmatter 规范编写
+1. **需求收集**: 确定技能名/触发词/核心功能/所用 MCP 工具
+2. **草稿编写**: 按新模板（MCP 驱动架构）
 3. **审查发布**: 通过审查清单后放入对应桶目录
 
-每个步骤必须完成才能进入下一步。
 </what-to-do>
 
 <supporting-info>
 
-## SKILL.md 模板
+## SKILL.md 模板（MCP 驱动版）
 
 ```markdown
 ---
 name: {技能名}
-description: {一句话能力描述}。触发词：{词1}/{词2}/{词3}。
-allowed-tools: {工具列表}
+description: {一句话能力描述}。触发词：{词1}/{词2}/{词3}
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__writing_start, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, ...
 lifecycle: core | quality | experimental | deprecated
 ---
 
 # {技能标题}
 
-> 共享约定：读 `references/shared-conventions.md`
-
 <what-to-do>
 ## 强制流程
 
 ```
-{步骤1} → {步骤2} → 🔒{检查点} → {步骤3}
+{步骤1} → {步骤2} → 🔒{MCP工具名} → {步骤3}
 ```
+
+规则由 MCP 管理，通过工具调用注入。SKILL.md 只描述流程和工具调用方式。
+
+- 规则参考: `writing_start` 返回 `rules` 字段（硬约束/推荐/创作原则）
+- 引擎参考: `engine_detail('type')`
+- 详情钻取: `rule_detail('{key}')`
+- 强制校验: `validate_chapter(text)` / `writing_finish(chapter_id, chapter_text, ...)`
 </what-to-do>
 
 <supporting-info>
-## 详细步骤说明
+## 具体步骤说明
 
-{每个步骤的详细指令...}
+{简要描述流程，引用 MCP 工具名代替"读 xxx.md"}
 </supporting-info>
 ```
 
-## Frontmatter 规范
+## 审查清单
 
-| 字段 | 必填 | 格式 | 限制 |
-|------|------|------|------|
-| name | 是 | kebab-case | ≤30字符 |
-| description | 是 | 一句话能力 + "触发词：" + 3-5个关键词 | ≤512字符 |
-| allowed-tools | 是 | 逗号分隔 | 仅列出实际使用的工具 |
-| lifecycle | 是 | core/quality/experimental/deprecated | 见桶分级定义 |
+创建新技能后逐项检查：
 
-### description 写法
+- [ ] **触发精确**: description 含 3-5 个触发词，格式"触发词：词1/词2/词3"
+- [ ] **SKILL.md ≤ 80 行**: 不拆分支撑信息
+- [ ] **what-to-do/supporting-info 分层**: 核心指令在 what-to-do
+- [ ] **强制流程有检查点**: 关键步骤有 🔒 标记
+- [ ] **引用 MCP 工具**: 不写"读 xxx.md"，写"调 `tool()`"
+- [ ] **allowed-tools** 包含所有实际调用的 MCP 工具
+- [ ] **无重复功能**: 与现有技能无重叠
+- [ ] **lifecycle 标记正确**
 
-```
-{能力一句话描述}。触发词：{词1}/{词2}/{词3}。
-```
-
-**好例子**:
-- "逐章写作引擎，驱动从大纲到成文的完整流程。触发词：写第N章/继续写/写一章"
-- "小说全链路质量保障，含审阅、诊断和级联更新。触发词：审阅/检查/诊断/改设定/OOC"
-
-**坏例子**:
-- "这个skill用来写章节，包含引擎驱动、事件体系、场景搭建、人物鲜活、世界观植入、NPC互动、分支事件、增量同步"（太长，包含实现细节）
-- "写作"（太短，无触发词）
-
-## 拆分阈值
-
-| 条件 | 操作 |
-|------|------|
-| SKILL.md ≤ 100行 | 无需拆分 |
-| SKILL.md 100-200行 | 考虑拆分支撑信息到独立 .md 文件 |
-| SKILL.md > 200行 | 必须拆分。核心流程留在 SKILL.md，详细指令移到子文档 |
-
-### 拆分原则
-
-- **SKILL.md** 只保留: frontmatter + 核心流程（Step 概览）+ 强制检查点 + 子文档引用
-- **子文档** 命名: 大写 + 短横线（如 `WRITING-CORE.md`, `EVENT-SYSTEM.md`）
-- **子文档位置**: 与 SKILL.md 同目录
-- **引用方式**: 在 SKILL.md 中用 `> 读 {子文档名} — {一句话说明}` 引用
-
-## 桶分级（lifecycle）
+## 桶分级
 
 | 桶 | 用途 | 自动路由 | 示例 |
 |----|------|---------|------|
 | core | 核心创作流程 | 是 | novel-writer, novel-chapter-writer |
 | quality | 质量保障 | 是 | novel-qa, novel-battle, novel-reviser |
-| experimental | 实验性功能 | 否 | darwin-skill, 新原型 |
-| deprecated | 已废弃 | 否 | 被替代的旧版技能 |
+| experimental | 实验性功能 | 否 | darwin-skill |
+| deprecated | 已废弃 | 否 | — |
 
-## 审查清单
+## 文件组织
 
-创建新技能后，逐项检查：
-
-- [ ] **触发精确**: description 包含 3-5 个触发词，格式为"触发词：词1/词2/词3"
-- [ ] **SKILL.md ≤ 100行**: 或已拆分支撑信息到子文档
-- [ ] **what-to-do/supporting-info 分层**: 核心指令在 what-to-do 标签中
-- [ ] **强制流程有检查点**: 关键步骤有 🔒 标记
-- [ ] **术语一致**: 使用 NOVEL-CONTEXT.md 中的标准术语
-- [ ] **引擎引用正确**: 引用 `references/engine-*.md` 时路径正确
-- [ ] **lifecycle 标记**: frontmatter 中包含正确的生命周期标记
-- [ ] **无重复功能**: 与现有技能无功能重叠（如有，考虑合并或拆分边界）
-- [ ] **allowed-tools 最小化**: 只列出实际使用的工具
-
-## 参考文档组织规范
-
-- 通用参考文档放 `novel-writer/references/`
-- 技能专属参考文档放 `{技能目录}/` 下
-- 引用路径使用相对路径: `references/{文件名}.md`
+- SKILL.md 只保留流程和 MCP 工具引用
+- 参考文档保留在 `references/` 目录（按需读）
+- 所有规则在 `server.py` 的 `ALL_RULES` 中
+- 引擎内容在 `server.py` 的 `ENGINE_CONTENT` 或 `world_settings(category='engine_reference')`
 
 </supporting-info>
