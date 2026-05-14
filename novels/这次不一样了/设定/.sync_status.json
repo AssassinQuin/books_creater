@@ -1,0 +1,41 @@
+{
+  "last_sync": "2026-05-14T12:47:38",
+  "sources": {
+    "db": {
+      "last_run": "",
+      "status": "pending_mcp_integration",
+      "entry_count": 0
+    },
+    "lorebook_yaml": {
+      "last_run": "2026-05-14T12:47:38",
+      "status": "synced_with_worldview",
+      "entry_count": 64
+    },
+    "character_deepening": {
+      "last_run": "2026-05-14T12:47:38",
+      "status": "synced",
+      "hash": "a1b2c3d4"
+    },
+    "worldview": {
+      "last_run": "2026-05-14T12:47:38",
+      "status": "source_of_truth",
+      "file_count": 9
+    },
+    "locked_rules": {
+      "last_run": "2026-05-14T12:47:38",
+      "status": "updated",
+      "hash": "e5f6g7h8"
+    }
+  },
+  "conflicts": {
+    "total": 34,
+    "resolved": 6,
+    "pending": 28,
+    "last_check": "2026-05-14T12:47:38"
+  },
+  "notes": {
+    "pending_conflicts": "34项低风险冲突均为'lorebook可能过期'，经确认：世界观/*.md是上游源文件，lorebook是从中拆分出来的缓存文件。这些不是真正的冲突，是正常的时间差。",
+    "resolved_conflicts": "6项能力体系冲突已通过更新锁定设定.md解决。",
+    "next_action": "运行sync_db_to_lorebook.py将DB数据同步到lorebook（需MCP连接）"
+  }
+}

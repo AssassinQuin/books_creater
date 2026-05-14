@@ -8,6 +8,7 @@ lifecycle: core
 # 逐章写作引擎
 
 > 共享约定：读 `references/shared-conventions.md`
+> **动态加载协议**: 读 `references/dynamic-loading-protocol.md`
 > **术语定义**: 读项目根目录 `NOVEL-CONTEXT.md`
 
 <what-to-do>
@@ -32,6 +33,7 @@ Step 0 断点检测 → Step 1 引擎加载上下文 → Step 2 写正文 → St
 | `references/engine-dialogue.md` | 差异化对话+弦外之音 | Step 2.3 |
 | `references/engine-action.md` | 动作链5拍+空间感知 | Step 2.2 |
 | `references/engine-item.md` | 物品全生命周期 | Step 2.2 |
+| `references/engine-status.md` | 受伤/物品/能力变化追踪 | Step 2.2 + Step 3 |
 
 ## Step 2 子文档索引
 
@@ -136,17 +138,22 @@ Step 2（写正文）拆分为以下子文档，按需加载：
 
 ### 3.2 数据库同步（增量更新）
 
-读 `references/engine-snapshot.md`，执行：
+读 `references/engine-snapshot.md` + `references/engine-status.md`，执行：
 
 ```
 1. writing_finish(chapter_id, summary, key_events, characters_involved, ...)
 2. timeline_add() → 本章时间线
 3. character_update() → 只更新变化的状态字段
+   - status.injuries → 新增伤/恢复状态变更
+   - status.inventory → 物品消耗/损毁/获取
+   - status.ability_changes → 能力变化（如有）
 4. relation_create/update() → 关系变化
+   - intensity 变更
+   - relation_type 变更（如 enemy → ally）
 5. foreshadow_plant/recall() → 伏笔回收
 6. dimension_log() → 维度变化
 7. 角色蒸馏文件 → novels/{小说名}/设定/角色蒸馏/{角色}-V{卷}CH{章}.md
-8. 受伤+物品同步 → character.status.injuries + inventory
+8. 角色深化.md → 更新态度矩阵（本章涉及的关系变化）
 9. 新设定同步 → world_upsert 写入新物品/异兽/能力/地点/势力
 ```
 

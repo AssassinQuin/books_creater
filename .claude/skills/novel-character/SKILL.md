@@ -9,6 +9,8 @@ lifecycle: core
 
 > 共享约定：读 `.claude/skills/novel-writer/references/shared-conventions.md`
 > 对话引擎：读 `.claude/skills/novel-writer/references/engine-dialogue.md`
+> **能力体系**: 读 `references/ability-system.md`
+> **关系追踪**: 读 `references/relationship-tracking.md`
 > **术语定义**: 读项目根目录 `NOVEL-CONTEXT.md`
 
 <what-to-do>
@@ -28,10 +30,12 @@ Step 1 召回世界观 → Step 2 📝角色蒸馏(7步) → Step 3 外观+对�
 触发: "设计人物"/"加人物"/"人物卡"/"改人物" | 前置: 世界观已建（可跳过）
 
 1. 读 `references/character-design.md`，召回 `world_query` 的设定
-2. 🔒**对每个角色必须完成蒸馏7步**（萃取→深度→弧线→原型→洋葱→定标→锻造）
-3. 🔒**外观设计**（见强制模板）
-4. 🔒**对话设计**（见关系差异化协议）
-5. 引导设计：
+2. 读 `references/ability-system.md`，了解能力体系规范
+3. 🔒**对每个角色必须完成蒸馏7步**（萃取→深度→弧线→原型→洋葱→定标→锻造）
+4. 🔒**外观设计**（见强制模板）
+5. 🔒**对话设计**（见关系差异化协议）
+6. 🔒**能力设计**（觉醒者角色必须完成能力七问，见ability-system.md）
+7. 引导设计：
 
    **主角**: Ghost→Lie/Want/Need/弧线/原型/洋葱三层/矛盾特质/共情细节/语音画像 + 初始动态状态
    **核心配角**(至少3人): 各自Want/Need、独立弧线、与主角利益冲突 + 出场节拍器
