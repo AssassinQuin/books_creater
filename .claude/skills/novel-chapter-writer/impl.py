@@ -17,6 +17,7 @@ NOVEL_DIR = PROJECT_ROOT / "novels/这次不一样了"
 LOREBOOK_DIR = NOVEL_DIR / "设定/lorebook/entries"
 LOCKED_RULES_FILE = NOVEL_DIR / "设定/锁定设定.md"
 CHARACTER_DEEPENING_FILE = NOVEL_DIR / "设定/角色深化.md"
+CHARACTER_DIR = NOVEL_DIR / "设定/人物"
 WORLDVIEW_DIR = NOVEL_DIR / "设定/世界观"
 
 
@@ -73,8 +74,8 @@ def load_writing_context(novel_id: int, chapter_number: int) -> Dict[str, Any]:
         context["warnings"].append(f"Lorebook加载失败: {e}")
         print(f"  ⚠ Lorebook加载失败: {e}")
     
-    # ===== Tier 3: 角色深化.md深度补充 =====
-    print("\n[Tier 3/4] 加载角色深化...")
+    # ===== Tier 3: 人物档案深度补充 =====
+    print("\n[Tier 3/4] 加载人物档案...")
     try:
         deepening = load_character_deepening(context["tier1_db"].get("characters", []))
         context["tier3_deepening"] = deepening
@@ -192,23 +193,25 @@ def load_lorebook_entries(keywords: List[str]) -> Dict[str, Dict]:
 
 
 def load_character_deepening(characters: List[Dict]) -> Dict[str, str]:
-    """加载角色深化.md中的深度描写"""
+    """从人物档案文件加载角色深度描写"""
     deepening = {}
-    
-    if not CHARACTER_DEEPENING_FILE.exists():
-        return deepening
-    
-    content = CHARACTER_DEEPENING_FILE.read_text(encoding='utf-8')
     
     for char in characters:
         char_name = char.get("name", "")
         if not char_name:
             continue
         
-        # 在角色深化.md中查找该角色的章节
-        section = extract_markdown_section(content, char_name)
-        if section:
-            deepening[char_name] = section
+        # 在人物档案目录中查找该角色的文件
+        char_file = CHARACTER_DIR / f"{char_name}.md"
+        if char_file.exists():
+            deepening[char_name] = char_file.read_text(encoding='utf-8')
+        else:
+            # 回退：在角色深化.md中查找（兼容旧结构）
+            if CHARACTER_DEEPENING_FILE.exists():
+                content = CHARACTER_DEEPENING_FILE.read_text(encoding='utf-8')
+                section = extract_markdown_section(content, char_name)
+                if section:
+                    deepening[char_name] = section
     
     return deepening
 
