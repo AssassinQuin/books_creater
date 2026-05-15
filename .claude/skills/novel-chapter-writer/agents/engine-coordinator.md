@@ -34,7 +34,7 @@
 - `SENTENCE-PATTERNS.md`（项目根目录）—— 反 AI 句式系统（6 大引擎）
 - `writing-constraints.md`（.claude/skills/）—— 硬约束配置
 - `references/writing-style.md`（novel-writer/references/）—— 写作通用标准 16 节
-- **`author-voice.md`（engines/）—— 叙事声音指纹（视角/句式/比喻/信息投放/留白/词汇）**
+- **`author-voice.md`（engines/）—— 叙事声音指纹。项目专属定义见 `novels/这次不一样了/设定/作者声音.md`（核心偏执/审美/情感方式/世界呼吸/角色反差/对话风格/标点审美/幽默/愤怒/疯劲/比喻库）**
 
 **按场面类型加载**：
 
