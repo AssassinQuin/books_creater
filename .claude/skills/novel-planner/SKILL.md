@@ -1,258 +1,218 @@
 ---
 name: novel-planner
-description: 小说卷规划 Multi-Agent Pipeline。编排器驱动4个子Agent协作：环境先行→事件架构→章节设计→大纲验证。触发词：规划卷/大纲/卷大纲
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__novel_get, mcp__novel-db__world_query, mcp__novel-db__world_upsert, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__relation_list, mcp__novel-db__volume_create, mcp__novel-db__volume_list, mcp__novel-db__volume_get, mcp__novel-db__volume_update, mcp__novel-db__chapter_plan, mcp__novel-db__scene_create, mcp__novel-db__scene_list, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_list, mcp__novel-db__engine_detail, mcp__novel-db__rule_detail
+description: 全书大纲设计。确定小说框架、脉络、卷级规划。触发词：规划全书/设计大纲/全书框架/卷级规划
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*
 lifecycle: core
 ---
 
-# 小说卷规划 (Multi-Agent Pipeline)
+# 全书大纲设计
+
+> 确定小说整体框架、脉络走向、卷级划分。不设计具体事件，只确定"每卷做什么"。
 
 <what-to-do>
 
 ## 强制流程
 
 ```
-Step 0: 断点检测 → MCP 数据采集
+Step 0: 断点检测 → MCP数据采集（世界观/人物/已有卷）
   ↓
-Step 1: 启动 Agent 1: World-Context Builder → 场景清单 + 环境约束包
+Step 1: Agent 1 — 框架建筑师 → 全书骨架（起承转合+卷级定位）
   ↓
-Step 2: 启动 Agent 2: Event Architect → 因果链 + 超级事件 + 支线
-  ↓  🔒 检查点 A: 确认事件架构
-Step 3: 启动 Agent 3: Chapter Designer → 逐章大纲 + 微事件 + 伏笔分配
+Step 2: Agent 2 — 脉络设计师 → 主线脉络+暗线递进+情绪曲线
+  ↓  🔒检查点A: 确认全书框架
+Step 3: Agent 3 — 卷级规划师 → 每卷目标+核心事件类型+钩子设计
   ↓
-Step 4: 启动 Agent 4: Outline Validator → 10项卷级检查
-  ↓  🔒 检查点 B: 确认验证通过（P0必须修复）
-Step 5: 双通道保存（DB + 文件）+ 跨卷伏笔对齐
-Step 6: 🔒 用户确认全部 → git commit
+Step 4: Agent 4 — 框架验证器 → 10项全书级检查
+  ↓  🔒检查点B: 确认验证通过
+Step 5: 保存（DB+文件）+ 跨卷伏笔总图
+Step 6: 🔒用户确认 → git commit
 ```
 
 ## 编排器职责
 
-编排器只负责：**MCP 调用 + Agent 启动 + 检查点确认 + 保存**。不直接设计事件、不写章节大纲。
+只负责：**MCP调用 + Agent启动 + 检查点确认 + 保存**。不直接设计框架。
 
-| 步骤 | 职责 | 工具权限 |
-|------|------|---------|
-| Step 0 | 断点检测 + 数据采集 | MCP 全部 |
-| Step 1-4 | 启动 Agent，传递上下文 | Task (subagent) |
-| 🔒A/B | 检查 Agent 输出完整性，用户确认 | — |
-| Step 5 | DB 写入 + 文件落盘 | MCP 全部 + Write |
-| Step 6 | git commit | Bash |
-
-## Step 0: 断点检测 + MCP 数据采集
-
-### 0.1 断点检测
+## Step 0: 数据采集
 
 ```python
-volume_list(novel_id)  # 检查已有卷
-chapter_list(novel_id, status='planned')  # 检查已规划章节
+novel_get(novel_id)          # 小说基本信息
+world_query(novel_id)        # 世界观全部数据
+character_list(novel_id)     # 角色列表（含主角/反派/关键配角）
+volume_list(novel_id)        # 已有卷信息（如有）
+foreshadow_list(novel_id)    # 全局伏笔（如有）
 ```
 
-若已有数据 → 加载继续，避免重复设计。
+## Step 1: Agent 1 — 框架建筑师
 
-### 0.2 数据采集
+### 输入
+- 世界观核心设定（能力体系/势力分布/历史背景）
+- 主角初始状态+目标
+- 预估总卷数（用户提供或根据字数推算）
 
-为 Agent 1 准备：
+### 指令文件
+`agents/framework-architect.md`
+
+### 输出
+- **全书起承转合**：
+  - 起（V1-V3）：主角入场→世界展开→第一次重大挫折
+  - 承（V4-V7）：成长线→暗线推进→势力博弈
+  - 转（V8-V11）：真相揭露→世界观颠覆→代价付出
+  - 合（V12-V14+尾声）：最终对决→回收所有伏笔→结局
+- **每卷定位**：该卷在全书中的功能（如"建立信任""揭露背叛""能力质变"）
+- **卷间关系**：每卷如何承接上一卷、如何引出下一卷
+
+### 输出验证
+- [ ] 起承转合四段比例合理（起25%/承35%/转25%/合15%）
+- [ ] 每卷有明确功能定位，不重复
+- [ ] 卷间过渡有明确钩子
+
+## Step 2: Agent 2 — 脉络设计师
+
+### 输入
+- Agent 1 的框架输出
+- 角色档案（主角/反派/关键配角的初始状态+目标+恐惧）
+- 暗线设定（用户提供或Agent推断）
+
+### 指令文件
+`agents/vein-designer.md`
+
+### 输出
+- **主线脉络**：主角从A到Z的完整路径（每卷的关键节点）
+- **暗线递进**：隐藏真相的分卷揭露计划（每卷揭示多少）
+- **情绪曲线**：全书情绪振幅图（高潮/低谷/转折点位置）
+- **人物弧光总图**：每个主要角色的变化轨迹（与卷级节点对齐）
+- **悬念总图**：五种"未知"的分布（谁/为什么/怎么/什么时候/会怎样）
+
+### 输出验证
+- [ ] 主线有清晰因果链（每步都有"因为...所以..."）
+- [ ] 暗线每卷至少推进一次，不一次揭完
+- [ ] 情绪曲线有起伏，不是单调上升
+- [ ] 人物弧光与剧情节点对齐
+
+## 🔒检查点A: 确认全书框架
+
+编排器展示：
+
+```
+【全书框架】
+起(V1-V3): {功能概述}
+承(V4-V7): {功能概述}
+转(V8-V11): {功能概述}
+合(V12-V14): {功能概述}
+
+【主线脉络】
+{V1节点} → {V3节点} → {V7节点} → {V11节点} → {结局}
+
+【暗线递进】
+V1-V3: {揭示程度} | V4-V7: {揭示程度} | V8-V11: {揭示程度} | V12-V14: {完全揭露}
+
+【情绪曲线】
+{V1起点} → {V3第一次低谷} → {V7中点高潮} → {V11最大危机} → {结局}
+
+确认后进入卷级规划。输入"OK"或修改意见。
+```
+
+## Step 3: Agent 3 — 卷级规划师
+
+### 输入
+- 确认后的框架+脉络
+- 每卷预估字数（总字数÷卷数）
+- 角色状态表（每卷开始时的角色状态）
+
+### 指令文件
+`agents/volume-planner.md`
+
+### 输出（每卷）
+- **卷目标**：该卷要达成的具体目标（如"沈野获得第一次能力升级""揭露灵站真相"）
+- **核心事件类型**：该卷以什么类型的事件为主（战斗/探索/对话/揭秘/成长）
+- **钩子设计**：
+  - 卷首钩子：承接上卷+引入新冲突
+  - 卷末钩子：引出下卷+埋伏笔
+- **关键角色**：该卷活跃的角色名单
+- **情绪锚点**：该卷的情绪起点→终点
+- **能力/势力变化**：该卷中能力体系或势力格局的变化
+
+### 输出验证
+- [ ] 每卷目标可衡量（能判断是否达成）
+- [ ] 卷首/卷末钩子明确
+- [ ] 情绪锚点与全书情绪曲线一致
+
+## Step 4: Agent 4 — 框架验证器
+
+### 输入
+- Agent 3 的卷级规划
+- Agent 1-2 的框架+脉络
+
+### 指令文件
+`agents/framework-validator.md`
+
+### 10项全书级检查
+
+| # | 检查项 | 标准 |
+|---|--------|------|
+| 1 | 起承转合比例 | 起25%±5%/承35%±5%/转25%±5%/合15%±5% |
+| 2 | 卷功能不重复 | 每卷功能定位唯一 |
+| 3 | 主线因果链完整 | 从起点到终点每步有前因 |
+| 4 | 暗线递进节奏 | 每卷至少推进一次，不一次揭完 |
+| 5 | 情绪曲线起伏 | 至少3个高潮+2个低谷 |
+| 6 | 人物弧光覆盖 | 主要角色都有变化轨迹 |
+| 7 | 悬念分布均衡 | 五种"未知"不集中在同一卷 |
+| 8 | 卷间过渡自然 | 每卷末钩子与下卷首承接 |
+| 9 | 能力/势力升级节奏 | 不单调递增，有平台期 |
+| 10 | 日常密度合理 | 承转段日常≥30%，起合段≤20% |
+
+### 输出
+- 逐项结果（通过/警告/失败）
+- 问题分级（P0=必须修复/P1=建议修复）
+- 总体评估
+
+## 🔒检查点B: 确认验证通过
+
+P0问题→必须修复。无P0→进入保存。
+
+## Step 5: 保存
+
+### DB保存
 ```python
-novel_get(novel_id)  # 小说基本信息
-world_query(novel_id)  # 世界观全部数据
-character_list(novel_id)  # 角色列表
-volume_list(novel_id)  # 已有卷信息
-foreshadow_list(novel_id, status='planted')  # 未回收伏笔
+volume_create(novel_id, number, title, main_plotlines, notes)
+# 每卷一条记录
 ```
 
-为 Agent 2 准备（在 Agent 1 完成后）：
-```python
-character_get(id)  # 本卷活跃角色档案（批量）
-relation_list(novel_id)  # 角色关系网
+### 文件落盘
+```
+novels/{小说名}/设定/章节大纲/全书框架.md
+novels/{小说名}/设定/章节大纲/主线脉络.md
+novels/{小说名}/设定/章节大纲/暗线递进.md
+novels/{小说名}/设定/章节大纲/情绪曲线.md
+novels/{小说名}/设定/章节大纲/卷级规划.md
 ```
 
-## Step 1: 启动 Agent 1 — World-Context Builder
-
-### 输入
-- 采集的全部世界观数据
-- 卷主题（用户提供或从 novel_get 获取）
-
-### Agent 指令文件
-`agents/world-context-builder.md`
-
-### 输出验证
-编排器检查 Agent 1 输出是否包含：
-- [ ] 场景清单（2-5个，每个含环境5要素）
-- [ ] 世界观约束包（能力/势力/经济/日常/历史规则）
-- [ ] 需创建的新场景列表（如有）
-
-任一缺失 → 指出缺失项，要求 Agent 1 补充（最多重试 2 次）。
-
-### 新场景创建
-若 Agent 1 标记新场景 → 编排器调 `world_upsert(category='location')` 创建。
-
-## Step 2: 启动 Agent 2 — Event Architect
-
-### 输入
-- Agent 1 的完整输出
-- 本卷活跃角色档案（character_get 批量）
-- 角色关系网
-- 卷定位（起/承/转/合，由编排器根据卷号判断）
-
-### Agent 指令文件
-`agents/event-architect.md`
-
-### 输出验证
-编排器检查 Agent 2 输出是否包含：
-- [ ] 卷级起承转合四段（含事件列表）
-- [ ] 因果链（每事件含因为/所以/逼出/雪球/没变）
-- [ ] 超级事件设计（如适用，含触发→升级→高潮→后果）
-- [ ] 支线设计（含三检验结果）
-- [ ] 人物弧光对齐表
-- [ ] 悬念锚点（旧未知回答 + 新未知提出）
-
-## 🔒 检查点: 确认事件架构 (A) / 验证通过 (B)
-
-### 检查点 A
-
-编排器展示 Agent 2 的核心产出，等待用户确认：
-
+### 跨卷伏笔总图
 ```
-请确认以下事件架构：
-
-【起承转合】
-起(10-15%): {事件1} → {事件2}
-承(40-50%): {事件3} → ... → {事件N}
-转(20-25%): {超级事件(如适用)} → {事件N+1}
-合(10-15%): {事件N+2} → 下卷钩子: {悬念类型}
-
-【支线】（三检验结果）
-{支线1}: 删除✅ 独立✅ 主题✅
-{支线2}: 删除✅ 独立✅ 主题❌ → 建议删除或合并
-
-【人物弧光】
-{角色A}: 变化弧·挣扎期(V3) → 蜕变点(V5)
-...
-
-确认后进入章节设计。输入 "OK" 或指出修改意见。
+novels/{小说名}/设定/章节大纲/伏笔总图.md
 ```
 
-用户说 "OK" → 进入 Step 3。
-用户提出修改 → 回到 Agent 2 修复（或手动修改后重新确认）。
-
-### 检查点 B
-
-编排器展示 Agent 4 的验证报告：
+## Step 6: git commit
 
 ```
-验证结果: {通过/有条件通过/不通过}
-
-通过项: {N}/10
-不通过项: [列表]
-
-P0（必须修复）:
-- [问题1] → [修复建议]
-...
-
-P1（推荐修复）:
-- [问题1] → [修复建议]
-...
-```
-
-P0 问题 → 必须修复后才能继续。修复方式：
-- 若问题在事件架构层 → 回到 Agent 2 修复 → 重新走 Step 3-4
-- 若问题在章节设计层 → 回到 Agent 3 修复 → 重新走 Step 4
-
-无 P0 问题 → 进入 Step 5。
-
-## Step 3: 启动 Agent 3 — Chapter Designer
-
-### 输入
-- Agent 2 的完整输出（确认后的版本）
-- 预估章数（编排器根据字数规划计算：总字数 ÷ 3500-5000字/章）
-- 上一卷末角色状态（如有，从 DB 或文件读取）
-
-### Agent 指令文件
-`agents/chapter-designer.md`
-
-### 输出验证
-编排器检查 Agent 3 输出是否包含：
-- [ ] 章节映射表（起/承/转/合 → 章节范围）
-- [ ] 逐章大纲（每章含时间/场景/事件/角色/微事件/伏笔/状态/字数）
-- [ ] 微事件多样性检查表
-- [ ] 伏笔分配表
-- [ ] 角色状态追踪表
-
-## Step 4: 启动 Agent 4 — Outline Validator
-
-### 输入
-- Agent 3 的完整输出
-- Agent 2 的事件架构（用于对比检查）
-- 10项卷级检查清单
-
-### Agent 指令文件
-`agents/outline-validator.md`
-
-### 输出验证
-编排器检查 Agent 4 输出是否包含：
-- [ ] 逐项结果（10项，每项含状态/证据/备注）
-- [ ] 对比检查（设计意图 vs 实际产出）
-- [ ] 问题分级（P0/P1）
-- [ ] 总体评估（通过/有条件通过/不通过）
-
-## Step 5: 双通道保存
-
-### 5.1 DB 保存
-
-```python
-# 卷信息
-volume_create(novel_id, number=N, title="卷名",
-  main_plotlines=[{name, description, purpose}, ...],
-  notes="伏笔计划/配角安排/升级节点")
-
-# 章节信息（逐章）
-chapter_plan(novel_id, number, title, outline, chapter_type, volume_id)
-
-# 场景信息（逐场景）
-scene_create(chapter_id, scene_number, location, characters_involved, conflict, emotion_type, key_beats, notes)
-
-# 伏笔
-foreshadow_plant(novel_id, description, planned_recall_chapter, importance, tags)
-```
-
-### 5.2 文件落盘
-
-组装为 Markdown 文件：
-
-```
-novels/{小说名}/设定/章节大纲/V{卷号}-{卷名}-事件大纲.md
-```
-
-文件格式参考 `references/outline-template.md`。
-
-### 5.3 跨卷伏笔对齐
-
-检查：
-- 新埋伏笔 ≤2 个/章，回收 ≥1 个/章
-- 未回收伏笔积压率 ≤30%
-- 埋设→提起 ≤3 卷，提起→回收 ≤3 卷
-
-更新 `设定/大纲/线索追踪.md`。
-
-## Step 6: 验证 + git commit
-
-```
-B1: {卷名} 事件大纲完成 (Multi-Agent Pipeline)
+B1: 全书框架+卷级规划完成
 ```
 
 </what-to-do>
 
 <supporting-info>
 
+## 与下层的关系
+
+- **novel-planner**（本skill）：确定"每卷做什么"
+- **novel-planner-volume**：根据"每卷做什么"设计"每章发生什么"
+- **novel-chapter-writer**：根据"每章发生什么"生成"正文怎么写"
+
 ## 项目专属数据
 
-《这次不一样了》的专属数据（14卷情绪锚点、切视角场景、角色名单）存于：
+《这次不一样了》的专属数据（14卷情绪锚点、角色名单）存于：
 `references/novel-planner/project-context.md`
 
-Agent 2 设计事件时，编排器将此文件作为附加输入提供。
-
-## 章节大纲文件模板
-
-参考 `references/outline-template.md`。
+Agent 1-3 设计时，编排器将此文件作为附加输入提供。
 
 </supporting-info>

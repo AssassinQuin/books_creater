@@ -106,7 +106,15 @@ N. 按 {agent-file}.md 中定义的输出格式产出结果
 
 ## Step 1: 编排器采集原始数据
 
-调用 MCP 工具，收集以下原始数据：
+### 1.1 加载卷级事件大纲（新增）
+
+```python
+# 读取 novel-planner-volume 输出
+Read("novels/{小说名}/设定/章节大纲/V{卷号}-{卷名}-事件大纲.md")
+# 提取本章信息：核心事件/参与角色/微事件/伏笔操作/声音适配标记
+```
+
+### 1.2 调用 MCP 工具
 
 ```
 writing_start(novel_id, chapter_number) → writing_prompt
@@ -119,7 +127,20 @@ world_query(novel_id, category="faction") → 势力信息
 timeline_query(novel_id, from_chapter=N-3) → 时间线
 ```
 
-将所有原始数据整理为一段完整文本（raw_data），传递给 Agent 1。
+### 1.3 加载已注册世界元素（新增）
+
+```python
+Read("novels/{小说名}/设定/世界元素/索引.md")
+# 提取本章涉及的世界元素定义
+```
+
+将所有数据整理为一段完整文本（raw_data），传递给 Agent 1。
+
+**raw_data 必须包含**：
+- 本章核心事件（来自卷级事件大纲）
+- 声音适配标记（来自卷级事件大纲）
+- 涉及的世界元素定义（来自世界元素索引）
+- 人物档案/伏笔/时间线（来自 MCP）
 
 ## Step 2: 启动 Agent 1 — Context Curator
 
@@ -244,18 +265,11 @@ query: 你是 Text Generator Agent。请读取 .claude/skills/novel-chapter-writ
 
 Agent 4 返回 → **章节正文**（chapter_text）+ **自检报告**
 
-## Step 6: 🔒 校验 + 存盘
+## Step 6: 🔒 存盘 + 移交审计
 
-### 6.1 调用 MCP validate_chapter
+> **生成与审计分离原则**：本章只负责生成正文，不执行审计。审计由 novel-qa 独立进行。
 
-```
-validate_chapter(chapter_text)
-```
-
-若返回 violations → 将 violations 反馈给 Agent 4 修复，或编排器自行修复。
-若返回 enrichment → 按 L1/L2/L3 阶梯充实后重新调用。
-
-### 6.2 调用 writing_finish
+### 6.1 调用 writing_finish
 
 ```
 writing_finish(
@@ -269,13 +283,24 @@ writing_finish(
 )
 ```
 
-若返回 enrichment → 必须充实后重新调用。每次 reject 后必须比上次更努力。
+> 注意：此处 `self_check` 是 Agent 4 的自检报告，不是 novel-qa 的独立审计。
 
-### 6.3 存盘
+### 6.2 存盘
 
 正文写入 `novels/{小说名}/正文/第{NNN}章-{标题}.md`。
 
 **正文纯净化**：正文文件禁止包含注释、统计、审计备注等非正文内容。只写入 Agent 4 输出的正文部分（分隔线 `---` 之前的内容）。
+
+### 6.3 移交审计（新增）
+
+生成完成后，提示用户：
+```
+第{NNN}章生成完成。是否进行独立审计？
+- 输入"审计" → 触发 novel-qa 进行15维度扫描
+- 输入"继续" → 进入下一章写作
+```
+
+审计由 novel-qa 独立执行，不阻塞写作流程。
 
 ## 子 Agent 指令文件
 
