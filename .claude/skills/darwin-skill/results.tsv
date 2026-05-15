@@ -18,3 +18,12 @@ timestamp	commit	skill	old_score	new_score	status	dimension	note	eval_mode
 2026-05-15T08:25:00+08:00	baseline	novel-planner	-	66.7	baseline	-	基线评估(2026调研后重评)	dry_run
 2026-05-15T08:30:00+08:00	8ae5f55	novel-planner	66.7	72.7	keep	工作流清晰度+指令具体性+整体架构	整体架构重构(what-to-do 65→155行,去重去冗余)	dry_run
 2026-05-15T08:35:00+08:00	64d1c04	novel-planner	72.7	76.7	keep	实测表现+边界条件+资源整合度	注入调研方法论(起承转合嵌套+伏笔五级+支线三检验+人物弧光+悬念轮换)	dry_run
+2026-05-15T14:00:00+08:00	ad09215	novel-writer	63.5	72.0	keep	边界条件+指令具体性+资源整合度	精简路由表+合并supporting-info+补全边界条件+统一skill_loader	dry_run
+2026-05-15T14:05:00+08:00	b087263	novel-qa	60.0	75.0	keep	指令具体性+工作流清晰度+边界条件	补全3Agent职责+P0-P3标准+validate边界+评级标准	dry_run
+2026-05-15T14:10:00+08:00	ce8dd46	novel-battle	70.0	75.0	keep	冗余控制+边界条件	删除协作段落+统一skill_loader+补充评级标准	dry_run
+2026-05-15T14:10:00+08:00	ce8dd46	novel-reviser	73.0	78.0	keep	指令具体性+冗余控制	明确修改语义+合并验证步骤+统一skill_loader	dry_run
+2026-05-15T14:10:00+08:00	ce8dd46	novel-setup	73.5	78.0	keep	冗余控制+资源整合度	删除重复确认声明+精简A2描述+统一skill_loader	dry_run
+2026-05-15T14:20:00+08:00	9b0794a	novel-character	61.0	72.0	keep	指令具体性+信息密度+冗余控制	补全修改人物流程+删除重复禁忌+精简追踪表格	dry_run
+2026-05-15T14:20:00+08:00	9b0794a	novel-skill-creator	61.0	72.0	keep	信息密度+冗余控制+自检机制	模板精简87→80行(符合≤80规则)+删除重复注释	dry_run
+2026-05-15T14:20:00+08:00	9b0794a	novel-planner	76.7	82.0	keep	冗余控制+工作流清晰度	删除调研注入+合并检查点模板+删除失败处理表(289→258行)	dry_run
+2026-05-15T14:20:00+08:00	9b0794a	novel-chapter-writer	79.3	85.0	keep	冗余控制+一致性+指令具体性	删除重复角色分工表+统一字数≥3000+提取Task模板(278→240行)	dry_run
