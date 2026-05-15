@@ -1,0 +1,37 @@
+{
+  "novel-writer": [
+    {"id": 1, "prompt": "帮我写小说", "expected": "正确路由到对应子skill（setup/planner/chapter-writer等），不直接开始写"},
+    {"id": 2, "prompt": "查询进度", "expected": "返回当前小说项目状态、已写章节数、下一章计划"}
+  ],
+  "novel-setup": [
+    {"id": 1, "prompt": "头脑风暴一个玄幻世界观", "expected": "按A1流程执行：灵感收集→核心设定→世界规则→验证，有检查点"},
+    {"id": 2, "prompt": "设计一个灵能物品", "expected": "调用物品全链路模板，产出外观+功能+限制+升级路径"}
+  ],
+  "novel-character": [
+    {"id": 1, "prompt": "设计一个反派角色", "expected": "7步蒸馏+外观模板+说话风格+能力链路，完整角色卡"},
+    {"id": 2, "prompt": "给主角加一个同伴", "expected": "差异化设计（与主角互补），关系网更新"}
+  ],
+  "novel-planner": [
+    {"id": 1, "prompt": "规划第一卷大纲", "expected": "Multi-Agent Pipeline：环境先行→事件架构→章节设计→验证，产出卷级大纲"},
+    {"id": 2, "prompt": "检查大纲伏笔分配", "expected": "10项检查：起承转合/伏笔密度/人物弧光/支线检验等"}
+  ],
+  "novel-chapter-writer": [
+    {"id": 1, "prompt": "写第1章", "expected": "4子Agent流水线：上下文整理→场面设计→引擎加载→正文生成，有自检"},
+    {"id": 2, "prompt": "继续写下一章", "expected": "断点续传：检查flow-state→恢复上下文→继续写作"}
+  ],
+  "novel-qa": [
+    {"id": 1, "prompt": "审阅最近写的3章", "expected": "15维度扫描+AI指纹检测，产出问题清单和修复建议"},
+    {"id": 2, "prompt": "诊断为什么卡文", "expected": "健康诊断：伏笔积压/配角活跃/升级节奏/日常密度/暗线推进"}
+  ],
+  "novel-battle": [
+    {"id": 1, "prompt": "设计一场主角vs反派的战斗", "expected": "分镜设计+战斗弧线+燃点设计+八维度审计"},
+    {"id": 2, "prompt": "写一场群战", "expected": "多角色战斗定位+场面调度+节奏控制"}
+  ],
+  "novel-reviser": [
+    {"id": 1, "prompt": "去重前10章的AI指纹", "expected": "模式扫描→去重方案→批量修复"},
+    {"id": 2, "prompt": "润色第5章的对话", "expected": "对话风格统一+弦外之音检查+差异化验证"}
+  ],
+  "novel-skill-creator": [
+    {"id": 1, "prompt": "创建一个新skill用于写感情戏", "expected": "标准化流程：需求分析→设计→实现→审查→集成"}
+  ]
+}

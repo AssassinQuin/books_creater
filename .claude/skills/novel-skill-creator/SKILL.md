@@ -27,7 +27,7 @@ lifecycle: meta
 ---
 name: {技能名}
 description: {一句话能力描述}。触发词：{词1}/{词2}/{词3}
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__writing_start, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, ...
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__writing_start, ...
 lifecycle: core | quality | experimental | deprecated
 ---
 
@@ -43,21 +43,13 @@ lifecycle: core | quality | experimental | deprecated
 规则由 MCP 管理，通过工具调用注入。SKILL.md 只描述流程和工具调用方式。
 
 - 规则参考: `writing_start` 返回 `rules` 字段（硬约束/推荐/创作原则）
-- 引擎参考: `engine_detail('type')`
+- 引擎参考: `skill_loader('type')`
 - 详情钻取: `rule_detail('{key}')`
 - 强制校验: `validate_chapter(text)` / `writing_finish(chapter_id, chapter_text, ...)`
 </what-to-do>
-
-<supporting-info>
-## 具体步骤说明
-
-{简要描述流程，引用 MCP 工具名代替"读 xxx.md"}
-</supporting-info>
 ```
 
 ## 审查清单
-
-创建新技能后逐项检查：
 
 - [ ] **触发精确**: description 含 3-5 个触发词，格式"触发词：词1/词2/词3"
 - [ ] **SKILL.md ≤ 80 行**: 不拆分支撑信息

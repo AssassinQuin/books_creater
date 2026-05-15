@@ -29,20 +29,20 @@ Step 5 启动 Agent 4: Text Generator → 产出章节正文
 Step 6 🔒 writing_finish + 存盘
 ```
 
-### Agent 失败处理
+### 角色分工与失败处理
 
-每个 Agent 步骤最多重试 **2 次**。编排器在每次 Agent 返回后检查输出完整性：
+| 角色 | 执行者 | 职责 | 上下文 | 完整性检查 | 不通过时 |
+|------|--------|------|--------|-----------|----------|
+| 数据采集 | **编排器（你）** | 调 MCP 工具收集原始数据 | 主对话 | — | — |
+| 信息整理 | **Agent 1** (search) | 清洗、压缩、结构化上下文 | 独立干净 | 上下文包含人物档案+伏笔清单+缺口标注 | 补充查询 MCP 后重新启动 Agent 1 |
+| 创意决策 | **Agent 2** (general_purpose_task) | 场面设计、因果链、角色弧线、创建新实体（调 MCP） | 独立干净 | 创意蓝图含场面设计+因果链+角色行为弧线 | 指出缺失项，要求 Agent 2 补充 |
+| 引擎统筹 | **Agent 3** (general_purpose_task) | 加载引擎文件、定制指令 | 独立干净 | 引擎指令包含反AI指令+硬约束+场面引擎 | 指出缺失项，要求 Agent 3 补充 |
+| 正文生成 | **Agent 4** (general_purpose_task) | 逐场面写正文、自检 | 独立干净 | 正文字数≥3000 + 含自检报告 | 反馈缺失项，要求 Agent 4 修复 |
+| 校验存盘 | **编排器（你）** | validate + writing_finish + 写文件 | 主对话 | — | — |
 
-| Agent | 完整性检查 | 不通过时 |
-|-------|-----------|----------|
-| Agent 1 | 上下文包含人物档案+伏笔清单+缺口标注 | 补充查询 MCP 后重新启动 Agent 1 |
-| Agent 2 | 创意蓝图含场面设计+因果链+角色行为弧线 | 指出缺失项，要求 Agent 2 补充 |
-| Agent 3 | 引擎指令包含反AI指令+硬约束+场面引擎 | 指出缺失项，要求 Agent 3 补充 |
-| Agent 4 | 正文字数≥2500 + 含自检报告 | 反馈缺失项，要求 Agent 4 修复 |
+每个 Agent 步骤最多重试 **2 次**。若同一 Agent 连续 2 次不通过 → 编排器降级处理：手动补全缺失部分后继续下一 Agent，并在 Memory 中记录 `bug: Agent{N}连续失败`。
 
-若同一 Agent 连续 2 次不通过 → 编排器降级处理：手动补全缺失部分后继续下一 Agent，并在 Memory 中记录 `bug: Agent{N}连续失败`。
-
-## Agent 输出格式（编排器验证用）
+### Agent 输出格式（编排器验证用）
 
 每个 Agent 返回时，编排器必须验证以下必填字段存在且非空：
 
@@ -51,19 +51,15 @@ Step 6 🔒 writing_finish + 存盘
 | Agent 1 | `人物档案` `伏笔清单` `缺口标注` | 人物档案 ≤200字/人，伏笔含本章操作，缺口含缺失信息类型 |
 | Agent 2 | `场面设计` `因果链` `角色行为弧线` `叙事节奏` `已创建实体` | 场面 2-4 个，因果链含前因→后果→角色选择，弧线含失控时刻，新实体已通过 MCP 创建并记录 ID |
 | Agent 3 | `场面引擎指令` `反AI指令(F1-F6)` `硬约束清单` | 每场面有定制引擎指令，反AI指令具体到本章可执行项 |
-| Agent 4 | `章节正文` `自检报告` | 正文 ≥2500 字，纯净化无注释；自检报告含反AI逐项结果+硬约束逐条结果 |
+| Agent 4 | `章节正文` `自检报告` | 正文 ≥3000 字，纯净化无注释；自检报告含反AI逐项结果+硬约束逐条结果 |
 
-编排器接收每个 Agent 输出后，对照上表逐字段检查。任一必填字段缺失 → 按 Agent 失败处理表重试。
+编排器接收每个 Agent 输出后，对照上表逐字段检查。任一必填字段缺失 → 按失败处理表重试。
 
-## 阶段指令加载
+## 阶段指令与引擎加载
 
-本章写作阶段指令：`skill_loader("novel-chapter-writer", "phase", "b2-chapter")`
+**阶段指令**：`skill_loader("novel-chapter-writer", "phase", "b2-chapter")` — 编排器在 Step 2 启动前加载，注入当前上下文。
 
-编排器在 Step 2 启动前加载阶段指令，注入当前上下文。
-
-## 引擎按需加载
-
-Agent 3 根据场面类型，按需调用 `skill_loader` 加载引擎：
+**引擎按需加载**：Agent 3 根据场面类型调用 `skill_loader` 加载对应引擎；Agent 4 写作前加载 `skill_loader("novel-chapter-writer", "engine", "anti-ai")`。
 
 | 场面类型 | 加载引擎 |
 |---------|---------|
@@ -74,18 +70,25 @@ Agent 3 根据场面类型，按需调用 `skill_loader` 加载引擎：
 | 多人物互动 | `skill_loader("novel-chapter-writer", "engine", "scene-composition")` |
 | 需要深化 | `skill_loader("novel-chapter-writer", "engine", "scene-deepening")` |
 
-Agent 4 写作前加载：`skill_loader("novel-chapter-writer", "engine", "anti-ai")`
+## 子 Agent 启动模板
 
-## 角色分工
+Step 2-5 均使用 Task 工具启动子 Agent，统一结构如下：
 
-| 角色 | 谁做 | 职责 | 上下文 |
-|------|------|------|--------|
-| 数据采集 | **编排器（你）** | 调 MCP 工具收集原始数据 | 主对话 |
-| 信息整理 | **Agent 1** (search) | 清洗、压缩、结构化上下文 | 独立干净 |
-| 创意决策 | **Agent 2** (general_purpose_task) | 场面设计、因果链、角色弧线、创建新实体（调 MCP） | 独立干净 |
-| 引擎统筹 | **Agent 3** (general_purpose_task) | 加载引擎文件、定制指令 | 独立干净 |
-| 正文生成 | **Agent 4** (general_purpose_task) | 逐场面写正文、自检 | 独立干净 |
-| 校验存盘 | **编排器（你）** | validate + writing_finish + 写文件 | 主对话 |
+```
+subagent_type: {search | general_purpose_task}
+description: {任务简述}
+query: 你是 {Agent 角色} Agent。请读取 .claude/skills/novel-chapter-writer/agents/{agent-file}.md 了解你的完整职责和输出格式。
+
+你的任务：{任务描述}
+
+{输入数据}
+
+要求：
+1. {具体要求 1}
+2. {具体要求 2}
+...
+N. 按 {agent-file}.md 中定义的输出格式产出结果
+```
 
 ## Step 0: 断点检测
 
@@ -155,10 +158,10 @@ query: 你是 Creative Director Agent。请读取 .claude/skills/novel-chapter-w
 {phase_instruction}
 
 引擎指令（按需加载）：
-- 环境设计: `skill_loader("novel-chapter-writer", "engine", "environment")`
-- 对话设计: `skill_loader("novel-chapter-writer", "engine", "dialogue")`
-- 动作设计: `skill_loader("novel-chapter-writer", "engine", "action")`
-- 因果链: `skill_loader("novel-chapter-writer", "engine", "causality")`
+- 环境设计: skill_loader("novel-chapter-writer", "engine", "environment")
+- 对话设计: skill_loader("novel-chapter-writer", "engine", "dialogue")
+- 动作设计: skill_loader("novel-chapter-writer", "engine", "action")
+- 因果链: skill_loader("novel-chapter-writer", "engine", "causality")
 
 要求：
 1. 确认事件因果链完整性

@@ -1,6 +1,6 @@
 ---
 name: novel-character
-description: 小说人物设计，含角色蒸馏法、强制外观描写、关系差异化对话和动态状态管理。触发词：设计人物/加人物/改人物
+description: 小说人物设计。触发词：设计人物/加人物/改人物
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__novel_get, mcp__novel-db__world_query, mcp__novel-db__character_create, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__relation_create, mcp__novel-db__relation_list, mcp__novel-db__skill_loader
 lifecycle: core
 ---
@@ -12,7 +12,7 @@ lifecycle: core
 ## 强制流程
 
 ```
-召回世界观 → 角色蒸馏7步 → 外观设计 → 对话设计 → character_create/update + relation_create → 🔒交叉验证
+召回世界观 → 角色蒸馏7步 → 外观设计 → 对话设计 → character_create/update + relation_create → 交叉验证
 ```
 
 **角色蒸馏7步必须完整**：萃取→深度→弧线→原型→洋葱→定标→锻造。跳过=流程违规。
@@ -50,8 +50,26 @@ appearance禁止形容词堆砌，必须具体视觉细节。标志特征1-2个�
 - `relation_create(novel_id, from_id, to_id, relation_type, ...)` → 关系
 
 ## 修改人物
-触发："改人物"
-`character_get(id)` → 修改 → `character_update` → 检查 `relation_list` 受影响关系 → git commit
+
+触发词："改人物"
+
+```
+character_get(id) → 评估修改范围 → 执行修改 → character_update
+    ↓
+relation_list(novel_id) → 筛选受影响关系 → 同步更新或添加关系变化记录
+    ↓
+git commit（修改摘要 + 影响范围）
+```
+
+**修改前必查**：
+- 该人物是否有未回收伏笔？（改设定可能破坏因果链）
+- 该人物关系网中哪些角色会受影响？
+- 外观/能力/性格变更是否需同步更新已写章节？
+
+**修改后必做**：
+- 更新 `角色深化.md` 对应章节
+- 如能力有变，同步 `ability-system.md` 阶段定义
+- 如关系有变，同步 `relationship-tracking.md` 态度追踪
 
 ## 能力设计
 觉醒者角色必须回答能力7问：`skill_loader("novel-character", "engine", "ability")` 完整模板。
