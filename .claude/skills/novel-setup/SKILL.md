@@ -1,7 +1,7 @@
 ---
 name: novel-setup
 description: 小说项目基建，含头脑风暴、世界观建模和物品档案管理。触发词：头脑风暴/建世界观/设定/加物品
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__novel_create, mcp__novel-db__novel_list, mcp__novel-db__novel_get, mcp__novel-db__novel_update, mcp__novel-db__world_upsert, mcp__novel-db__world_query, mcp__novel-db__world_delete, mcp__novel-db__engine_detail, mcp__novel-db__rule_detail
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__novel_create, mcp__novel-db__novel_list, mcp__novel-db__novel_get, mcp__novel-db__novel_update, mcp__novel-db__world_upsert, mcp__novel-db__world_query, mcp__novel-db__world_delete, mcp__novel-db__skill_loader
 lifecycle: core
 ---
 
@@ -43,13 +43,13 @@ A2: world_query(已有) → world_upsert(逐维度) → 🔒交叉验证 → git
 4. 每维度完成 → `world_upsert(novel_id, category, name, data={...})` → 🔒确认
 5. 🔒交叉验证：锚点稳固/稀缺真实/涟漪完整/价值一致性和跨维度检查
 
-**参考**: `engine_detail('causality')` 查看因果逻辑法；`references/worldbuilding-template.md`
+**加载**: `skill_loader("novel-setup", "engine", "causality")` 因果逻辑法；`skill_loader("novel-setup", "engine", "worldbuilding")` 世界观模板
 
 ## 物品档案
 触发："加物品" | 新物品首次出现时
 
 1. `world_query(name='{物品名}')` 确认不重复
-2. `engine_detail('item')` 查看文章生命周期模板
+2. `skill_loader("novel-setup", "engine", "item")` 物品生命周期模板
 3. `world_upsert(category='ability'/'economy', name='{物品名}', data={完整档案})`
 4. 🔒确认档案完整性
 

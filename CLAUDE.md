@@ -16,10 +16,42 @@ Current project: **《这次不一样了》** — 14卷+尾声, 百万字级玄�
 
 ## Architecture
 
+### Data Architecture
+
 Three-layer data architecture:
 - **novel-db MCP** (PostgreSQL): Structured data — world-building, characters, chapters, foreshadowing, timelines, dimensions. Server at `/Users/ganjie/skills/novel-db-mcp/server.py`, connects to `postgresql://localhost:5432/fcli`
 - **Memory MCP** (16 tools): Unstructured creative data — inspiration, writing experience, cross-project materials, anti-AI pattern blacklist. **必须先加载 memory skill 再调用任何 memory_memory_* 工具**。详见 [Memory Skill](#memory-integration)
 - **Git files**: Human-readable content — novel text, setting docs, review reports in `novels/{小说名}/`
+
+### Chapter Writing: Multi-Agent Pipeline
+
+章节写作采用 **4 子 Agent 流水线**，每个 Agent 上下文干净、职责单一：
+
+```
+编排器 (novel-chapter-writer)
+  │  Step 1: 调 MCP 收集原始数据
+  ↓
+Agent 1: Context Curator     → 清洗、压缩、结构化 → 上下文包
+  ↓
+Agent 2: Creative Director   → 场面设计、因果链、角色弧线、创建新实体 → 创意蓝图 + 存档
+  ↓
+Agent 3: Engine Coordinator  → 加载引擎、定制指令 → 引擎指令包
+  ↓
+Agent 4: Text Generator      → 逐场面写正文、自检 → 章节正文
+  ↓
+编排器: validate_chapter → writing_finish → 存盘
+```
+
+| 角色 | 执行者 | 上下文 | 工具权限 |
+|------|--------|--------|---------|
+| 数据采集 | 编排器（主对话） | 主对话 | MCP 全部 |
+| 信息整理 | Agent 1 (search) | 独立干净 | Read |
+| 创意决策 | Agent 2 (general_purpose_task) | 独立干净 | Read, Write, mcp__memory__*, mcp__novel-db__character_create, mcp__novel-db__relation_create, mcp__novel-db__world_upsert, mcp__novel-db__foreshadow_plant |
+| 引擎统筹 | Agent 3 (general_purpose_task) | 独立干净 | Read（加载引擎文件） |
+| 正文生成 | Agent 4 (general_purpose_task) | 独立干净 | Read（参考引擎指令） |
+| 校验存盘 | 编排器（主对话） | 主对话 | MCP 全部 |
+
+**设计原则**：每个 Agent 只看到它需要的上下文，互不污染。Agent 2 直接调 MCP 创建新人物/地点/物品/势力/伏笔——无需编排器中转。编排器负责数据采集、校验和存盘。
 
 ### Skill System
 
@@ -33,7 +65,7 @@ Skills follow **progressive disclosure** design — each SKILL.md contains core 
 | **novel-setup** | 头脑风暴/灵感/建世界观/设定 | 项目初始化、世界观构建、物品设计 | 🔒 世界观确认后才能进入人物 |
 | **novel-character** | 设计人物/加人物/人物卡 | 角色蒸馏7步、强制外观模板、关系差异化对话 | 🔒 蒸馏7步+外观+对话完整才能存入 |
 | **novel-planner** | 规划卷/大纲/卷大纲 | 全书总纲、逐卷环境先行设计、章节场景清单 | 🔒 每卷规划完必须确认才能进入场景 |
-| **novel-chapter-writer** | 写第N章/继续写/写一章 | 逐章写作引擎，Step0-4强制流程 | 🔒 Step3状态同步不可跳过，<2500字拒绝存盘 |
+| **novel-chapter-writer** | 写第N章/继续写/写一章 | Multi-Agent Pipeline 编排器，驱动 4 子 Agent 协作（Context Curator → Creative Director → Engine Coordinator → Text Generator） | 🔒 Step6 writing_finish 不可跳过 |
 | **novel-qa** | 审阅/检查/诊断/改设定/OOC | 全链路质量保障，15维度扫描+AI指纹检测 | 🔒 P0/P1问题必须修复 |
 | **novel-battle** | 写战斗/战斗场景/战斗设计 | 战斗场景设计 | - |
 | **novel-reviser** | 修复/去重/批量改/修文/润色 | 文本修订、润色 | - |
@@ -77,7 +109,7 @@ Important creative decisions are recorded as ADRs in `docs/decisions/`. See `doc
 | A2 | World-building | "建世界观"/"设定" |
 | A3 | Character design | "设计人物"/"人物卡" |
 | B1 | Volume planning | "规划卷"/"大纲" |
-| B2 | Chapter writing | "写第N章"/"继续写" |
+| B2 | Chapter writing | "写第N章"/"继续写" — Multi-Agent Pipeline（编排器+4子Agent） |
 | B3 | Review | "审阅"/"检查" |
 | C1 | Platform publishing | "上架"/"发布" |
 | C2 | Health diagnosis | "诊断"/"卡文" |
@@ -90,20 +122,31 @@ Priority on conflict: C3 > B2 > others.
 
 | 工具 | 用途 | 调用时机 |
 |------|------|----------|
-| `writing_start(novel_id, chapter_number)` | 写作前上下文注入（章节信息+前3章摘要+活跃人物+未回收伏笔+世界观+当前卷规划） | Step 1 必调 |
-| `writing_finish(chapter_id, ...)` | 写作后状态更新（摘要+事件+伏笔+时间线+维度） | Step 3 强制，不可跳过 |
+| `writing_start(novel_id, chapter_number)` | 写作前上下文注入（章节信息+前3章摘要+活跃人物+未回收伏笔+世界观+当前卷规划） | 编排器 Step 1 必调 |
+| `character_detail(id)` | 单个角色深度信息（外观+性格+说话风格+能力+状态+关系+物品） | 编排器 Step 1 批量收集 |
+| `validate_chapter(chapter_text)` | 写后硬约束校验（标点密度/否定句式/字数/创作原则） | 编排器 Step 6 强制 |
+| `writing_finish(chapter_id, ...)` | 写作后状态更新（摘要+事件+伏笔+时间线+维度） | 编排器 Step 6 强制，不可跳过 |
 | `health_check(novel_id)` | 健康诊断（伏笔积压/配角活跃/升级节奏/日常密度/暗线推进/卷完成度） | C2 诊断时 |
+
+### Multi-Agent Pipeline 子 Agent 指令
+
+| Agent | 指令文件 | 职责 |
+|-------|---------|------|
+| Agent 1: Context Curator | `.claude/skills/novel-chapter-writer/agents/context-curator.md` | 清洗压缩原始数据，产出干净上下文包 |
+| Agent 2: Creative Director | `.claude/skills/novel-chapter-writer/agents/creative-director.md` | 场面设计+因果链+角色弧线+伏笔操作+创建新实体（人物/地点/物品/势力），存档创意蓝图 |
+| Agent 3: Engine Coordinator | `.claude/skills/novel-chapter-writer/agents/engine-coordinator.md` | 加载引擎文件，为每个场面定制引擎指令 |
+| Agent 4: Text Generator | `.claude/skills/novel-chapter-writer/agents/text-generator.md` | 逐场面生成正文+反AI指纹自检+硬约束自检 |
 
 ### 写作引擎参考文档
 
 | 文档 | 用途 | 何时加载 |
 |------|------|---------|
-| `references/engine-loading.md` | 三级上下文加载协议 | Step 1 |
-| `references/engine-snapshot.md` | 场景/事件/人物快照 | Step 1 + Step 3 |
-| `references/engine-environment.md` | 环境5要素+感官描写 | Step 2.2 |
-| `references/engine-dialogue.md` | 差异化对话+弦外之音 | Step 2.3 |
-| `references/engine-action.md` | 动作链5拍+空间感知 | Step 2.2 |
-| `references/engine-item.md` | 物品全生命周期 | Step 2.2 |
+| `references/engine-loading.md` | 三级上下文加载协议 | Agent 3（引擎统筹） |
+| `references/engine-snapshot.md` | 场景/事件/人物快照 | Agent 3 + Agent 4 |
+| `references/engine-environment.md` | 环境5要素+感官描写 | Agent 3 按场面类型加载 |
+| `references/engine-dialogue.md` | 差异化对话+弦外之音 | Agent 3 按场面类型加载 |
+| `references/engine-action.md` | 动作链5拍+空间感知 | Agent 3 按场面类型加载 |
+| `references/engine-item.md` | 物品全生命周期 | Agent 3 按场面类型加载 |
 
 ## Shared Conventions (铁律)
 
@@ -121,6 +164,7 @@ Priority on conflict: C3 > B2 > others.
 ### 流程纪律
 
 - **步骤不可跳过** — 每个 skill 有编号步骤，必须按序执行
+- **Multi-Agent Pipeline** — 章节写作由 4 个独立子 Agent 协作完成，每个 Agent 上下文干净、职责单一，编排器负责 MCP 调用和数据流转
 - **🔒 关键检查点必须确认** — 执行后必须向用户确认，用户说"OK"/"继续"才能下一步
 - **断点续传** — 每次触发先检查 Memory 中的 `flow-state`，有记录则恢复而非从头开始
 - **写后必存** — `writing_finish` 是不可跳过的步骤

@@ -1,7 +1,7 @@
 ---
 name: novel-character
 description: 小说人物设计，含角色蒸馏法、强制外观描写、关系差异化对话和动态状态管理。触发词：设计人物/加人物/改人物
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__novel_get, mcp__novel-db__world_query, mcp__novel-db__character_create, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__relation_create, mcp__novel-db__relation_list, mcp__novel-db__engine_detail, mcp__novel-db__rule_detail
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__novel_get, mcp__novel-db__world_query, mcp__novel-db__character_create, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__relation_create, mcp__novel-db__relation_list, mcp__novel-db__skill_loader
 lifecycle: core
 ---
 
@@ -30,7 +30,7 @@ lifecycle: core
 6. **定标**: 用具体行为定义性格
 7. **锻造语音**: 句式节奏 + 词汇层 + 情绪偏移
 
-详细指南见 `references/character-design.md`
+详细指南: `skill_loader("novel-character", "engine", "character-design")`
 
 ## 强制外观模板
 ```
@@ -40,7 +40,7 @@ race: world_query(category="race")
 appearance禁止形容词堆砌，必须具体视觉细节。标志特征1-2个贯穿全文。
 
 ## 对话设计
-`engine_detail('dialogue')` 查看差异化对话协议。
+`skill_loader("novel-character", "engine", "dialogue")` 差异化对话协议。
 `character_get` 加载说话人档案（speech_style/catchphrase/personality）。
 关系调节表覆盖 ≥3 种关系。
 
@@ -54,6 +54,6 @@ appearance禁止形容词堆砌，必须具体视觉细节。标志特征1-2个�
 `character_get(id)` → 修改 → `character_update` → 检查 `relation_list` 受影响关系 → git commit
 
 ## 能力设计
-觉醒者角色必须回答能力7问：`engine_detail('ability')` 查看完整模板。
+觉醒者角色必须回答能力7问：`skill_loader("novel-character", "engine", "ability")` 完整模板。
 
 </supporting-info>
