@@ -1,7 +1,7 @@
 ---
 name: novel-setup
-description: 小说项目基建，含头脑风暴、世界观建模和物品档案管理。触发词：头脑风暴/建世界观/设定/加物品
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__novel_create, mcp__novel-db__novel_list, mcp__novel-db__novel_get, mcp__novel-db__novel_update, mcp__novel-db__world_upsert, mcp__novel-db__world_query, mcp__novel-db__world_delete, mcp__novel-db__skill_loader
+description: 小说项目基建。触发词：头脑风暴/建世界观/设定/加物品
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__*
 lifecycle: core
 ---
 
@@ -14,7 +14,7 @@ lifecycle: core
 ```
 A1: novel_create + 头脑风暴 → 🔒输出决策卡 → git commit
 A2: world_query(已有) → world_upsert(逐维度) → 🔒交叉验证 → git commit
-物品: world_query(查重) → engine_detail('item') → world_upsert(category='ability'/'economy')
+物品: world_query(查重) → skill_loader("novel-setup", "engine", "item") → world_upsert
 ```
 
 所有 `world_upsert` 后必须 🔒 用户确认。
@@ -23,8 +23,7 @@ A2: world_query(已有) → world_upsert(逐维度) → 🔒交叉验证 → git
 
 <supporting-info>
 
-## A1: 项目启动
-触发："头脑风暴"/"灵感"
+## A1: 项目启动（触发：头脑风暴/灵感）
 
 1. 确认小说名，`novel_create` 创建
 2. 逐问深挖：画面→主角→情绪→对立面→独特规则，每次只问一个
@@ -34,19 +33,17 @@ A2: world_query(已有) → world_upsert(逐维度) → 🔒交叉验证 → git
 
 创作决策做 ADR：`docs/decisions/ADR-TEMPLATE.md`
 
-## A2: 世界观建模
-触发："建世界观" | 前置：项目已创建
+## A2: 世界观建模（触发：建世界观 | 前置：项目已创建）
 
 1. `world_query(novel_id)` 查已有维度
-2. 引导模式（默认）：先确立双锚点（危机锚+变量锚）→ 核心稀缺资源 → 世界观刑具化 → 涟漪效应 → 逐维度展开
+2. 引导模式（默认）：双锚点（危机锚+变量锚）→ 核心稀缺资源 → 刑具化 → 涟漪效应 → 逐维度展开
 3. 快速模式：基于品类模板一次生成8维度
-4. 每维度完成 → `world_upsert(novel_id, category, name, data={...})` → 🔒确认
-5. 🔒交叉验证：锚点稳固/稀缺真实/涟漪完整/价值一致性和跨维度检查
+4. 每维度完成 → `world_upsert` → 🔒确认
+5. 🔒交叉验证：锚点稳固/稀缺真实/涟漪完整/价值一致性/跨维度检查
 
-**加载**: `skill_loader("novel-setup", "engine", "causality")` 因果逻辑法；`skill_loader("novel-setup", "engine", "worldbuilding")` 世界观模板
+加载：`skill_loader("novel-setup", "engine", "causality")` / `skill_loader("novel-setup", "engine", "worldbuilding")`
 
-## 物品档案
-触发："加物品" | 新物品首次出现时
+## 物品档案（触发：加物品/新物品首次出现）
 
 1. `world_query(name='{物品名}')` 确认不重复
 2. `skill_loader("novel-setup", "engine", "item")` 物品生命周期模板
@@ -54,6 +51,7 @@ A2: world_query(已有) → world_upsert(逐维度) → 🔒交叉验证 → git
 4. 🔒确认档案完整性
 
 ## 断点续传
+
 `memory_search(query="flow-state", tags=["project:{名},flow-state"])`
 
 </supporting-info>
