@@ -65,12 +65,17 @@ Step 6 🔒 writing_finish + 存盘
 
 | 场面类型 | 加载引擎 |
 |---------|---------|
+| **所有场面** | `skill_loader("novel-chapter-writer", "engine", "author-voice")` |
 | 环境描写 | `skill_loader("novel-chapter-writer", "engine", "environment")` |
 | 对话博弈 | `skill_loader("novel-chapter-writer", "engine", "dialogue")` |
-| 动作/战斗 | `skill_loader("novel-chapter-writer", "engine", "action")` + `skill_loader("novel-chapter-writer", "engine", "battle")` |
+| 动作/战斗 | `skill_loader("novel-chapter-writer", "engine", "action")` + `skill_loader("novel-chapter-writer", "engine", "battle")` + `skill_loader("novel-chapter-writer", "engine", "author-voice-battle")` |
+| 情感高潮 | `skill_loader("novel-chapter-writer", "engine", "author-voice-emotion")` |
+| 日常/世界呼吸 | `skill_loader("novel-chapter-writer", "engine", "author-voice-daily")` |
+| 悬疑/揭秘 | `skill_loader("novel-chapter-writer", "engine", "author-voice-mystery")` |
 | 物品使用 | `skill_loader("novel-chapter-writer", "engine", "item")` |
 | 多人物互动 | `skill_loader("novel-chapter-writer", "engine", "scene-composition")` |
 | 需要深化 | `skill_loader("novel-chapter-writer", "engine", "scene-deepening")` |
+| 世界观元素 | `skill_loader("novel-chapter-writer", "engine", "world-element-registry")` |
 
 ## 子 Agent 启动模板
 
