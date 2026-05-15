@@ -76,7 +76,9 @@ Step 6 🔒 writing_finish + 存盘
 | 多人物互动 | `skill_loader("novel-chapter-writer", "engine", "scene-composition")` |
 | 需要深化 | `skill_loader("novel-chapter-writer", "engine", "scene-deepening")` |
 | 世界观元素 | `skill_loader("novel-chapter-writer", "engine", "world-element-registry")` |
-| 三视角审查 | `skill_loader("novel-chapter-writer", "engine", "three-perspective-review")` |
+| 读者视角审查 | `skill_loader("novel-chapter-writer", "engine", "reader-perspective-agent")` |
+| 作者视角审查 | `skill_loader("novel-chapter-writer", "engine", "author-perspective-agent")` |
+| 人物视角审查 | `skill_loader("novel-chapter-writer", "engine", "character-perspective-agent")` |
 
 ## 子 Agent 启动模板
 
