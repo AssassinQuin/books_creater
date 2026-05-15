@@ -44,14 +44,31 @@ Phase 3: 重评，综合≥85通过，最多3轮
 
 ## B3: 正文审阅（触发：审阅正文/校对）
 
-Step 1: 加载角色状态（`character_get` + `chapter_get_context`）
-Step 2: 3Agent并行扫描
+Step 1: 加载上下文
+  - 角色状态（`character_get` + `chapter_get_context`）
+  - 卷级事件大纲（`novels/{小说名}/设定/章节大纲/V{卷号}-事件大纲.md`）
+  - 世界元素索引（`novels/{小说名}/设定/世界元素/索引.md`）
+  - 作者声音定义（`engines/author-voice.md`）
+
+Step 2: 4Agent并行扫描
   - Agent-人物: OOC检测/知识矛盾/说话风格一致性/关系合理性
   - Agent-逻辑: 时间线连贯/经济系统一致/伏笔回收状态/物品使用逻辑
   - Agent-质量: 战斗场面质量/章节结构/爽点分布/NPC活跃度/写作风格/AI指纹(F1-F6)
+  - **Agent-三视角: 读者视角/作者视角/人物视角审查（新增）**
+    - 加载：`skill_loader("novel-qa", "engine", "three-perspective-review")`
+    - 读者视角: 信息层级/悬念管理/角色识别/场景定位/钩子强度/逻辑跳跃
+    - 作者视角: 起承转合/伏笔操作/节奏变化/主题传达
+    - 人物视角: POV行为符合性格/对话符合风格/选择有动机/情感反应真实
+    - 交叉检查: 读者vs作者/读者vs人物/作者vs人物
+
 Step 3: `validate_chapter(chapter_text)` 硬约束复核（写时自检的补充，不替代）
 Step 4: 问题分级 P0/P1/P2/P3
+  - P0: 三视角冲突（人物逻辑 vs 作者结构）/因果链断裂/人物OOC
+  - P1: 单视角严重问题/伏笔未回收/节奏断层
+  - P2: 单视角中等问题/描写冗余/对话平淡
+  - P3: 轻微问题/标点不均/用词重复
 Step 5: 输出审阅报告 → 评级 A(≥90)/B(≥80)/C(≥70)/D(<70)
+  - 报告必须包含三视角审查结果
 
 AI指纹检测：`skill_loader("novel-qa", "engine", "anti-ai")`
 
