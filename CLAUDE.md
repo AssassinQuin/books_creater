@@ -64,10 +64,10 @@ Skills follow **progressive disclosure** design — each SKILL.md contains core 
 | **novel-writer** | 写小说/帮我写/上架/进度 | 总路由器，分发到子技能，处理上架和状态查询 | 冲突消歧按 C3>B2 优先级 |
 | **novel-setup** | 头脑风暴/灵感/建世界观/设定 | 项目初始化、世界观构建、物品设计 | 🔒 世界观确认后才能进入人物 |
 | **novel-character** | 设计人物/加人物/人物卡 | 角色蒸馏7步、强制外观模板、关系差异化对话 | 🔒 蒸馏7步+外观+对话完整才能存入 |
-| **novel-planner** | 规划卷/大纲/卷大纲 | 全书总纲、逐卷环境先行设计、章节场景清单 | 🔒 每卷规划完必须确认才能进入场景 |
+| **novel-planner** | 规划卷/大纲 | 全书总纲、逐卷环境先行设计 | 🔒 每卷规划完必须确认才能进入场景 |
+| **novel-planner-volume** | 卷大纲/章节规划/事件设计 | 卷级章节设计（场景清单+事件编排+支线体系），含独立agents目录 | 🔒 场景清单确认后才能进入正文 |
 | **novel-chapter-writer** | 写第N章/继续写/写一章 | Multi-Agent Pipeline 编排器，驱动 4 子 Agent 协作（Context Curator → Creative Director → Engine Coordinator → Text Generator） | 🔒 Step6 writing_finish 不可跳过 |
-| **novel-qa** | 审阅/检查/诊断/改设定/OOC | 全链路质量保障，15维度扫描+AI指纹检测 | 🔒 P0/P1问题必须修复 |
-| **novel-battle** | 写战斗/战斗场景/战斗设计 | 战斗场景设计 | - |
+| **novel-qa** | 审阅/检查/诊断/改设定/OOC | 全链路质量保障，三视角审查（读者/作者/人物）+AI指纹检测 | 🔒 P0/P1问题必须修复 |
 | **novel-reviser** | 修复/去重/批量改/修文/润色 | 文本修订、润色 | - |
 
 #### External Skills Repository
@@ -89,8 +89,8 @@ Skills follow **progressive disclosure** design — each SKILL.md contains core 
 
 | Bucket | Purpose | Skills | Auto-routed |
 |--------|---------|--------|-------------|
-| **core** | Core creation flow | novel-writer, novel-setup, novel-character, novel-planner, novel-chapter-writer | Yes |
-| **quality** | Quality assurance | novel-qa, novel-battle, novel-reviser | Yes |
+| **core** | Core creation flow | novel-writer, novel-setup, novel-character, novel-planner, novel-planner-volume, novel-chapter-writer | Yes |
+| **quality** | Quality assurance | novel-qa, novel-reviser | Yes |
 | **experimental** | Experimental features | darwin-skill | No |
 | **deprecated** | Deprecated | (empty) | No |
 | **meta** | Meta-tools | novel-skill-creator | No |
@@ -108,7 +108,7 @@ Important creative decisions are recorded as ADRs in `docs/decisions/`. See `doc
 | A1 | Project bootstrap | "头脑风暴"/"灵感" |
 | A2 | World-building | "建世界观"/"设定" |
 | A3 | Character design | "设计人物"/"人物卡" |
-| B1 | Volume planning | "规划卷"/"大纲" |
+| B1 | Volume planning | "规划卷"/"大纲"/"卷大纲"/"章节规划"/"事件设计" |
 | B2 | Chapter writing | "写第N章"/"继续写" — Multi-Agent Pipeline（编排器+4子Agent） |
 | B3 | Review | "审阅"/"检查" |
 | C1 | Platform publishing | "上架"/"发布" |
@@ -139,14 +139,54 @@ Priority on conflict: C3 > B2 > others.
 
 ### 写作引擎参考文档
 
-| 文档 | 用途 | 何时加载 |
-|------|------|---------|
-| `references/engine-loading.md` | 三级上下文加载协议 | Agent 3（引擎统筹） |
-| `references/engine-snapshot.md` | 场景/事件/人物快照 | Agent 3 + Agent 4 |
-| `references/engine-environment.md` | 环境5要素+感官描写 | Agent 3 按场面类型加载 |
-| `references/engine-dialogue.md` | 差异化对话+弦外之音 | Agent 3 按场面类型加载 |
-| `references/engine-action.md` | 动作链5拍+空间感知 | Agent 3 按场面类型加载 |
-| `references/engine-item.md` | 物品全生命周期 | Agent 3 按场面类型加载 |
+引擎文件位于 `.claude/skills/engines/`，按场景类型按需加载：
+
+| 引擎 | 文件 | 用途 |
+|------|------|------|
+| 环境描写 | `environment.md` | 环境5要素+感官描写 |
+| 对话系统 | `dialogue.md` | 差异化对话+弦外之音 |
+| 动作链 | `action.md` | 动作链5拍+空间感知 |
+| 物品系统 | `item.md` | 物品全生命周期 |
+| 战斗系统 | `battle.md` | 战斗场景设计（从skill迁入engine） |
+| 场景合成 | `scene-composition.md` / `scene-deepening.md` / `scene-type.md` | 场景结构+深化+类型分类 |
+| 人物关系 | `relationship.md` | 关系动态+对话风格 |
+| 能力系统 | `ability.md` | 能力全链路 |
+| 因果链 | `causality.md` | 因果逻辑校验 |
+| 快照 | `snapshot.md` | 场景/事件/人物快照 |
+| 加载协议 | `loading.md` | 三级上下文加载协议 |
+| 反AI | `anti-ai.md` / `anti-ai-patterns.md` | 反AI指纹消除 |
+| 作者声音 | `author-voice.md` + 5个变体 | 作者声音三层架构（情感/日常/战斗/悬疑/视角） |
+| 三视角审查 | `three-perspective.md` + 3个agent文件 | 读者/作者/人物三视角剧情审查 |
+| 写作风格 | `writing-style.md` / `corpus-style.md` | 文体规范+语料风格 |
+| 世界观 | `worldbuilding.md` / `world-element-registry.md` | 世界观构建+元素注册 |
+
+### 作者声音系统
+
+作者声音采用**三层架构**，存储在 `设定/作者声音.md`：
+- **引擎层** (`engines/author-voice.md`): 通用作者声音框架
+- **项目层** (`设定/作者声音.md`): 项目专属声音定制
+- **变体层** (`engines/author-voice-{emotion,daily,battle,mystery}.md`): 按场景类型的情绪变体
+
+### 三视角审查系统
+
+审查由三个独立 Agent 执行，各自持有不同视角标准：
+- **读者视角** (`engines/reader-perspective-agent.md`): 追读体验、悬念节奏、信息投放
+- **作者视角** (`engines/author-perspective-agent.md`): 结构完整性、因果链、伏笔管理
+- **人物视角** (`engines/character-perspective-agent.md`): 角色一致性、动机合理性、OOC检测
+
+### 阶段指令文件
+
+`.claude/skills/phases/` 目录包含各工作阶段的指令文件：
+
+| 文件 | 阶段 | 用途 |
+|------|------|------|
+| `a1-brainstorm.md` | A1 | 头脑风暴 |
+| `a2-worldbuilding.md` | A2 | 世界观构建 |
+| `a3-character.md` | A3 | 人物设计 |
+| `b1-volume.md` | B1 | 全书大纲规划 |
+| `b2-chapter.md` | B2 | 章节写作 |
+| `c2-diagnose.md` | C2 | 健康诊断 |
+| `c3-update.md` | C3 | 级联更新 |
 
 ## Shared Conventions (铁律)
 
@@ -216,13 +256,15 @@ L3 加事件（>50%）     → 361考核 + 强制从大纲找事件或加微事�
 - **单源维护**: 同一内容(伏笔/线索/关系/设定)只在主文件描述完整, 其他文件用指针引用
 - **写作执行规范** (`设定/写作执行规范.md`): **最高优先级**，每章必须严格遵守字数要求、内容依据、写作规范、检查清单。违反规范必须重写。详见文件内容。
 
-## Current Project Status (2026-05-10)
+## Current Project Status (2026-05-15)
 
 - 14卷+尾声大纲完成, Phase3验证通过(综合90/100)
-- 10维度达尔文评估→R1-R5女娲修复→Phase3验证全流程完成
-- 审阅报告存于 `审阅报告/大纲审查-Phase2修复-2026-05-09/`
-- novel-db数据库已同步(15卷/15章/21伏笔/4时间线事件)
-- 残留4条P3轻微问题(不影响正文): 鸦成长中间节点/F8伏笔/V3爽感/V4练习场
+- 达尔文v3.2审计完成(2026-05-14), 含5层验证(L1故事逻辑~L5叙事动力)
+- V1 Ch001-009深度审计完成, 存于 `审阅报告/V1Ch001-009深度审计/`
+- 多轮审阅完成: 冲突检测、锁定设定校验、因果逻辑审计、三视角审查
+- 正文碎片V01-V14已完成(卷级碎片, 存于 `正文碎片/`)
+- novel-db当前未同步数据，正文生成前需先 `sync_lorebook`
+- 架构变更: novel-battle迁入engines、新增novel-planner-volume skill、作者声音系统、三视角审查、阶段指令文件(phases/)
 - 下一步: 正文生成(B2), 从V1开始
 
 ## Anti-AI Writing System (Critical)
