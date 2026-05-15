@@ -61,6 +61,8 @@ Step 6 🔒 writing_finish + 存盘
 
 **引擎按需加载**：Agent 3 根据场面类型调用 `skill_loader` 加载对应引擎；Agent 4 写作前加载 `skill_loader("novel-chapter-writer", "engine", "anti-ai")`。
 
+**所有场面必须加载**：`skill_loader("novel-chapter-writer", "engine", "author-voice")` — 叙事声音指纹（视角/句式/比喻/信息投放/留白/词汇）。
+
 | 场面类型 | 加载引擎 |
 |---------|---------|
 | 环境描写 | `skill_loader("novel-chapter-writer", "engine", "environment")` |
