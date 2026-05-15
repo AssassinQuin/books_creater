@@ -1,13 +1,14 @@
 ---
 name: novel-writer
 description: 网文创作总路由器，分发到子技能并处理上架和状态查询。触发词：写小说/帮我写/上架/进度
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__novel_get, mcp__novel-db__novel_list, mcp__novel-db__novel_update, mcp__novel-db__novel_delete, mcp__novel-db__world_query, mcp__novel-db__chapter_list, mcp__novel-db__volume_list, mcp__novel-db__foreshadow_list, mcp__novel-db__character_list, mcp__novel-db__db_search, mcp__novel-db__writing_start, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__engine_detail, mcp__novel-db__rule_detail, mcp__novel-db__health_check
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__novel_get, mcp__novel-db__novel_list, mcp__novel-db__novel_update, mcp__novel-db__novel_delete, mcp__novel-db__world_query, mcp__novel-db__chapter_list, mcp__novel-db__volume_list, mcp__novel-db__foreshadow_list, mcp__novel-db__character_list, mcp__novel-db__db_search, mcp__novel-db__writing_start, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__engine_detail, mcp__novel-db__rule_detail, mcp__novel-db__health_check
 lifecycle: core
 ---
 
 # 网文创作总入口
 
 > **术语定义**: 读 `NOVEL-CONTEXT.md`（项目根目录）
+> **写作架构**: 章节写作采用 Multi-Agent Pipeline（4 子 Agent 协作），见 novel-chapter-writer
 
 <what-to-do>
 
@@ -19,7 +20,7 @@ lifecycle: core
 "头脑风暴"/"灵感"/"建世界观"/"设定"/"加物品"     → novel-setup
 "设计人物"/"加人物"/"人物卡"/"改人物"             → novel-character
 "规划卷"/"大纲"/"卷大纲"                         → novel-planner
-"写第N章"/"继续写"/"写一章"                      → novel-chapter-writer
+"写第N章"/"继续写"/"写一章"                      → novel-chapter-writer（Multi-Agent Pipeline）
 "审阅"/"检查"/"诊断"/"卡文"/"改设定"/"OOC"       → novel-qa
 "写战斗"/"战斗场景"/"战斗设计"                    → novel-battle
 "修复"/"去重"/"批量改"/"修文"/"润色"             → novel-reviser

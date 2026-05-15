@@ -1,7 +1,7 @@
 ---
 name: novel-chapter-writer
 description: 逐章写作编排器，驱动 4 个独立子 Agent 协作完成章节。触发词：写第N章/继续写/写一章
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__writing_start, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__rule_detail, mcp__novel-db__character_detail, mcp__novel-db__event_checklist, mcp__novel-db__engine_detail, mcp__novel-db__author_voice, mcp__novel-db__writing_spec, mcp__novel-db__character_get, mcp__novel-db__character_list, mcp__novel-db__relation_list, mcp__novel-db__foreshadow_list, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_query, mcp__novel-db__world_upsert, mcp__novel-db__timeline_query, mcp__novel-db__volume_get, mcp__novel-db__chapter_list, mcp__memory__memory_store, mcp__memory__memory_search
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__writing_start, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__skill_loader, mcp__novel-db__character_detail, mcp__novel-db__event_checklist, mcp__novel-db__author_voice, mcp__novel-db__writing_spec, mcp__novel-db__character_get, mcp__novel-db__character_list, mcp__novel-db__relation_list, mcp__novel-db__foreshadow_list, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_query, mcp__novel-db__world_upsert, mcp__novel-db__timeline_query, mcp__novel-db__volume_get, mcp__novel-db__chapter_list, mcp__memory__memory_store, mcp__memory__memory_search
 lifecycle: core
 ---
 
@@ -20,10 +20,8 @@ Step 1 编排器调 MCP 收集原始数据
   ↓
 Step 2 启动 Agent 1: Context Curator → 产出干净的上下文包
   ↓
-Step 3 启动 Agent 2: Creative Director → 产出创意蓝图（含新实体清单）+ 存档
+Step 3 启动 Agent 2: Creative Director → 产出创意蓝图（含新实体创建）+ 存档
   ↓  🔒 检查点 A: 确认创意蓝图（场面数量/因果链/角色弧线）
-Step 3.5 编排器创建新实体 → 调 MCP 创建人物/地点/物品/势力/伏笔
-  ↓
 Step 4 启动 Agent 3: Engine Coordinator → 产出引擎指令包
   ↓
 Step 5 启动 Agent 4: Text Generator → 产出章节正文
@@ -51,52 +49,32 @@ Step 6 🔒 writing_finish + 存盘
 | Agent | 必填字段 | 格式 |
 |-------|---------|------|
 | Agent 1 | `人物档案` `伏笔清单` `缺口标注` | 人物档案 ≤200字/人，伏笔含本章操作，缺口含缺失信息类型 |
-| Agent 2 | `场面设计` `因果链` `角色行为弧线` `叙事节奏` `新实体清单` | 场面 2-4 个，因果链含前因→后果→角色选择，弧线含失控时刻 |
+| Agent 2 | `场面设计` `因果链` `角色行为弧线` `叙事节奏` `已创建实体` | 场面 2-4 个，因果链含前因→后果→角色选择，弧线含失控时刻，新实体已通过 MCP 创建并记录 ID |
 | Agent 3 | `场面引擎指令` `反AI指令(F1-F6)` `硬约束清单` | 每场面有定制引擎指令，反AI指令具体到本章可执行项 |
 | Agent 4 | `章节正文` `自检报告` | 正文 ≥2500 字，纯净化无注释；自检报告含反AI逐项结果+硬约束逐条结果 |
 
 编排器接收每个 Agent 输出后，对照上表逐字段检查。任一必填字段缺失 → 按 Agent 失败处理表重试。
 
-## 调研注入：章节级方法论（强制）
+## 阶段指令加载
 
-以下方法论来自 2026-05-15 大纲剧情设计深度调研，本章写作必须遵守。
+本章写作阶段指令：`skill_loader("novel-chapter-writer", "phase", "b2-chapter")`
 
-### 章级起承转合（强制）
+编排器在 Step 2 启动前加载阶段指令，注入当前上下文。
 
-每章必须有完整的四段式结构：
+## 引擎按需加载
 
-```
-起（开篇钩子，10-15%）：建立场景+悬念/冲突/异常信号
-承（发展，40-50%）：事件推进+信息投放+关系深化
-转（小反转/揭露，20-25%）：认知更新/情绪转折/意外发现
-合（收束+下章钩子，10-15%）：本章收束+制造新的信息缺口
-```
+Agent 3 根据场面类型，按需调用 `skill_loader` 加载引擎：
 
-Agent 2 设计场面时，必须将 2-4 个场面分配到起承转合四段中。
-Agent 4 写作时，必须确保每段字数占比符合上述比例。
+| 场面类型 | 加载引擎 |
+|---------|---------|
+| 环境描写 | `skill_loader("novel-chapter-writer", "engine", "environment")` |
+| 对话博弈 | `skill_loader("novel-chapter-writer", "engine", "dialogue")` |
+| 动作/战斗 | `skill_loader("novel-chapter-writer", "engine", "action")` |
+| 物品使用 | `skill_loader("novel-chapter-writer", "engine", "item")` |
+| 多人物互动 | `skill_loader("novel-chapter-writer", "engine", "scene-composition")` |
+| 需要深化 | `skill_loader("novel-chapter-writer", "engine", "scene-deepening")` |
 
-### 悬念五种"未知"模型（强制）
-
-每章必须维持至少 1 个信息缺口，五种类型轮换使用（相邻章节不得重复同一类型）：
-
-| 未知类型 | 读者疑问 | 本章操作 |
-|---------|---------|---------|
-| **谁** | 身份谜题 | 引入可疑人物/匿名信息 |
-| **为什么** | 动机谜题 | 展示反常行为但不解释 |
-| **怎么** | 方法谜题 | 展示结果但不展示过程 |
-| **什么时候** | 倒计时张力 | 设置明确的时间限制 |
-| **会怎样** | 后果焦虑 | 展示风险但不揭示结果 |
-
-Agent 2 设计本章时，选择 1 种未知类型作为本章悬念锚点。
-回答旧"未知"的同时必须提出新"未知"——读者始终处于"知道了一些但想知道更多"的状态。
-
-### 螺旋上升情绪控制（强制）
-
-情绪强度逐章递增，而非匀速：
-
-- Agent 2 设计叙事节奏时，本章情绪峰值必须 ≥ 上一章情绪峰值
-- 连续高压章节 ≤ 3 章，之后必须接 1-2 章慢节奏
-- Agent 3 加载引擎时，根据本章在卷中的位置调节描写密度：前期密集→中期拉长→后期再密集
+Agent 4 写作前加载：`skill_loader("novel-chapter-writer", "engine", "anti-ai")`
 
 ## 角色分工
 
@@ -104,8 +82,7 @@ Agent 2 设计本章时，选择 1 种未知类型作为本章悬念锚点。
 |------|------|------|--------|
 | 数据采集 | **编排器（你）** | 调 MCP 工具收集原始数据 | 主对话 |
 | 信息整理 | **Agent 1** (search) | 清洗、压缩、结构化上下文 | 独立干净 |
-| 创意决策 | **Agent 2** (general_purpose_task) | 场面设计、因果链、角色弧线、识别新实体 | 独立干净 |
-| 实体创建 | **编排器（你）** | 根据 Agent 2 的新实体清单调 MCP 创建 | 主对话 |
+| 创意决策 | **Agent 2** (general_purpose_task) | 场面设计、因果链、角色弧线、创建新实体（调 MCP） | 独立干净 |
 | 引擎统筹 | **Agent 3** (general_purpose_task) | 加载引擎文件、定制指令 | 独立干净 |
 | 正文生成 | **Agent 4** (general_purpose_task) | 逐场面写正文、自检 | 独立干净 |
 | 校验存盘 | **编排器（你）** | validate + writing_finish + 写文件 | 主对话 |
@@ -174,93 +151,28 @@ query: 你是 Creative Director Agent。请读取 .claude/skills/novel-chapter-w
 上下文包：
 {context_package}
 
+阶段指令（已加载）：
+{phase_instruction}
+
+引擎指令（按需加载）：
+- 环境设计: `skill_loader("novel-chapter-writer", "engine", "environment")`
+- 对话设计: `skill_loader("novel-chapter-writer", "engine", "dialogue")`
+- 动作设计: `skill_loader("novel-chapter-writer", "engine", "action")`
+- 因果链: `skill_loader("novel-chapter-writer", "engine", "causality")`
+
 要求：
 1. 确认事件因果链完整性
-2. 将 2-4 个场面分配到章级起承转合四段中（见上方「调研注入：章级起承转合」）
-3. 选择 1 种悬念未知类型作为本章锚点（见上方「悬念五种未知模型」）
+2. 将 2-4 个场面分配到章级起承转合四段中
+3. 选择 1 种悬念未知类型作为本章锚点
 4. 设计每个场面的密度/角色矩阵/微事件/伏笔操作/镜头序列
 5. 设计叙事节奏（情绪曲线+节奏断层+刀锋技法），本章情绪峰值 ≥ 上一章
 6. 设计每个出场角色的行为弧线（含失控时刻）
-7. 将创意蓝图保存到 novels/{小说名}/创意决策/Ch{N}-创意蓝图.md
-8. 按 creative-director.md 中定义的输出格式产出创意蓝图
+7. 识别需要新建的人物/地点/物品/势力/伏笔，直接调用 MCP 创建（见 creative-director.md 步骤 5）
+8. 将创意蓝图保存到 novels/{小说名}/创意决策/Ch{N}-创意蓝图.md
+9. 按 creative-director.md 中定义的输出格式产出创意蓝图（含已创建实体 ID）
 ```
 
 Agent 2 返回 → **创意蓝图**（creative_blueprint）
-
-## Step 3.5: 编排器创建新实体
-
-Agent 2 的创意蓝图中可能包含「需要新建的实体」清单。编排器必须在进入 Agent 3 之前，逐项调用 MCP 创建这些实体。
-
-### 3.5.1 创建新人物
-
-对创意蓝图中每个新人物，调用：
-
-```
-character_create(
-  novel_id,
-  name={姓名},
-  role={protagonist/ally/antagonist/mentor/rival/love_interest/npc},
-  appearance={外貌},
-  personality={性格},
-  speech_style={说话风格},
-  ability_level={能力等级},
-  background={背景},
-  goals={目标},
-  weaknesses={弱点},
-  catchphrase={口头禅},
-  first_appearance_chapter={N}
-)
-```
-
-创建成功后，记录返回的 `character_id`，用于后续 `relation_create` 和 `writing_finish`。
-
-### 3.5.2 创建新人物关系
-
-如果新人物与现有角色有关系，调用：
-
-```
-relation_create(
-  novel_id,
-  from_character_id={新人物ID},
-  to_character_id={现有角色ID},
-  relation_type={ally/enemy/mentor/lover/family/rival/subordinate},
-  description={关系描述},
-  chapter_established={N}
-)
-```
-
-### 3.5.3 创建新地点/物品/势力
-
-对每个新地点/物品/势力，调用：
-
-```
-world_upsert(
-  novel_id,
-  category={location/ability/economy/faction},
-  name={名称},
-  data={JSON 数据}
-)
-```
-
-### 3.5.4 埋设新伏笔
-
-对创意蓝图中每个新伏笔，调用：
-
-```
-foreshadow_plant(
-  novel_id,
-  description={描述},
-  importance={high/medium/low},
-  planted_chapter_id={当前章节ID},
-  planned_recall_chapter={计划回收章节},
-  related_characters=[{角色ID列表}],
-  tags=[{标签列表}]
-)
-```
-
-### 3.5.5 汇总
-
-将所有新创建的实体 ID 追加到创意蓝图中，形成**完整版创意蓝图**，传递给 Agent 3。
 
 ## Step 4: 启动 Agent 3 — Engine Coordinator
 

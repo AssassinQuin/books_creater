@@ -11,3 +11,10 @@ timestamp	commit	skill	old_score	new_score	status	dimension	note	eval_mode
 timestamp	commit	skill	old_score	new_score	status	dimension	note	eval_mode
 2026-05-08T14:42:28+0000	592cd57	three-perspective-analysis	48.6	83.5	keep	探索性重写(全部维度)	补frontmatter+7步流程+3🔒+Weiland框架+量化标准+fallback	dry_run
 2026-05-08T14:44:04+0000	79d6f6a	three-perspective-analysis	83.5	83.5	keep	体积压缩	模板→字段列表,222→167行,150%合规	dry_run
+2026-05-15T08:00:00+08:00	baseline	novel-chapter-writer	-	66.4	baseline	-	基线评估(2026调研后重评)	dry_run
+2026-05-15T08:10:00+08:00	4f42ae6	novel-chapter-writer	66.4	69.8	keep	边界条件+检查点	Agent失败处理表+检查点A/B	dry_run
+2026-05-15T08:15:00+08:00	bd3b22f	novel-chapter-writer	69.8	72.8	keep	指令具体性	Agent输出格式定义+编排器验证表	dry_run
+2026-05-15T08:20:00+08:00	f7c55bd	novel-chapter-writer	72.8	79.3	keep	实测表现+整体架构	注入调研方法论(章级起承转合+悬念未知+螺旋情绪)	dry_run
+2026-05-15T08:25:00+08:00	baseline	novel-planner	-	66.7	baseline	-	基线评估(2026调研后重评)	dry_run
+2026-05-15T08:30:00+08:00	8ae5f55	novel-planner	66.7	72.7	keep	工作流清晰度+指令具体性+整体架构	整体架构重构(what-to-do 65→155行,去重去冗余)	dry_run
+2026-05-15T08:35:00+08:00	64d1c04	novel-planner	72.7	76.7	keep	实测表现+边界条件+资源整合度	注入调研方法论(起承转合嵌套+伏笔五级+支线三检验+人物弧光+悬念轮换)	dry_run
