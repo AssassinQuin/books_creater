@@ -125,6 +125,42 @@ Priority on conflict: C3 > B2 > others.
 - **断点续传** — 每次触发先检查 Memory 中的 `flow-state`，有记录则恢复而非从头开始
 - **写后必存** — `writing_finish` 是不可跳过的步骤
 
+## Mandatory Enforcement (强制铁律)
+
+**这是最高优先级规则，覆盖所有 skill 文件中的推荐/建议/可选措辞。**
+
+### 规则 1: 全部强制，没有推荐
+
+- `writing-constraints.md` 中所有约束（硬约束百分比、硬约束绝对值、创作原则）**全部强制**
+- 不再有"推荐遵守"或"写中自觉"——全部是"**硬约束，不通过拒绝存盘**"
+- MCP `validate_chapter` 将所有约束作为 violations 返回，`writing_finish` 检测到 violations 拒绝存盘
+- "7条核心—写中强制检查"和"4条补充—必须执行"**必须逐条执行，不可跳过**
+
+### 规则 2: 审计强制，不可跳过
+
+- `validate_chapter()` 是写后的**强制**步骤，每章必须调用
+- `writing_finish` 的 `self_check='passed'` 是**强制**参数，不自检通过禁止存盘
+- 审阅发现的 P0/P1 问题**必须修复**后才能继续下一章
+- C3 级联更新**必须**执行 `db_search` 扫描全部影响范围，不允许局修
+
+### 规则 3: 内容充实激励引擎（字数不足时强制触发）
+
+字数不足触发 `validate_chapter.violations` 中 `word_count` 时，`writing_finish` 和 `validate_chapter` 自动返回 `enrichment` 字段（PUA 风格三层加压），**必须**按其强制动作执行：
+
+```
+L1 引擎丰富（<20%）   → 温和失望 + 抗合理化反击 + 强制选1个 engine_detail 展开
+L2 场景深化（20-50%） → 灵魂拷问 + 因果链/Telling→Showing/子冲突三选强制
+L3 加事件（>50%）     → 361考核 + 强制从大纲找事件或加微事件
+```
+
+**不准说**：「字数够了」「内容很紧凑了」「信息密度高不需要更多」
+**不准磨洋工**：同一段扩三遍不算干事，必须加**新内容**（动作/对话/冲突/事件）
+**不准跳过**：`writing_finish` 返回 `enrichment` 字段后必须充实到字数达标，不准原样重调
+
+每次调用 `writing_finish` 被 reject 后，AI 必须比上一次更努力：上次只用1个引擎？这次至少用2个。上次只改了一段？这次改两段。
+
+违反上述任意规则 = 流程违规，必须重做。
+
 ## File Organization Rules
 
 - **反AI系统 (`SENTENCE-PATTERNS.md`)**: 反AI句式系统，包含6大引擎（标点多样性/信息投放节奏/场景结构随机组合/否定句式管理/意象梯度/环境音效轮换）。写作前必读，写作后逐项检查。与 writing-style.md 同级。
