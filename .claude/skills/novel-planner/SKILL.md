@@ -1,95 +1,93 @@
 ---
 name: novel-planner
-description: 全书大纲设计。确定小说框架、脉络、卷级规划。触发词：规划全书/设计大纲/全书框架/卷级规划
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*
+description: 全书大纲设计 — 小说骨架+血管。从全局视角确定每卷目标/角色弧线/暗线规划/伏笔基础。不设计具体事件，只确定"每卷做什么"，为下层(novel-planner-volume)提供约束和指导。触发词：规划全书/设计大纲/全书框架/卷级规划
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, mcp__memory__*
 lifecycle: core
 ---
 
 # 全书大纲设计
 
-> 确定小说整体框架、脉络走向、卷级划分。不设计具体事件，只确定"每卷做什么"。
+> **定位**：小说骨架+血管。全局视角 → 每卷"做什么"（目标/角色弧线方向/暗线推进/伏笔基础）。下层 novel-planner-volume 据此设计"具体事件怎么做"。
+> **与下层的关系**：骨架→肌肉→皮肤/动作（novel-planner → novel-planner-volume → novel-chapter-writer）
 
 <what-to-do>
 
 ## 强制流程
 
 ```
-Step 0: 断点检测 → MCP数据采集（世界观/人物/已有卷）
+Step 0: 断点检测 → 数据采集（世界观/人物/已有卷）+ 加载引擎
   ↓
-Step 1: Agent 1 — 框架建筑师 → 全书骨架（起承转合+卷级定位）
+Step 1: Agent — 框架建筑师 → 全书骨架（起承转合+卷功能定位+卷间关系）         agents/framework-architect.md
   ↓
-Step 2: Agent 2 — 脉络设计师 → 主线脉络+暗线递进+情绪曲线
-  ↓  🔒检查点A: 确认全书框架
-Step 3: Agent 3 — 卷级规划师 → 每卷目标+核心事件类型+钩子设计
+Step 2: Agent — 脉络设计师 → 主线脉络+暗线递进+人物弧光总图+情绪曲线          agents/vein-designer.md
+  ↓  🔒检查点A: 确认全书框架（骨架+脉络）
+Step 3: 编排器 — 卷级目标卡 → 基于框架输出每卷目标/角色变化方向/暗线推进度     (编排器直接生成，不改agent)
   ↓
-Step 4: Agent 4 — 支线规划师 → 全书支线体系+支线-主线交织图
+Step 4: Agent — 支线规划师 → 全书支线体系+支线-主线交织图                     agents/subplot-planner.md
   ↓  🔒检查点A2: 确认支线体系
-Step 5: Agent 5 — 框架验证器 → 10项全书级检查+支线完整性验证
-  ↓  🔒检查点B: 确认验证通过
-Step 6: 保存（DB+文件）+ 跨卷伏笔总图+支线总图
+Step 5: Agent — 框架验证器 → 12项全书检查+三视角审查(3Agent并行)               agents/framework-validator.md
+  ↓  🔒检查点B: 确认验证通过(P0必须修复)
+Step 6: 保存（DB + 文件）+ 跨卷伏笔总图+支线总图
 Step 7: 🔒用户确认 → git commit
 ```
 
 ## 编排器职责
 
-只负责：**MCP调用 + Agent启动 + 检查点确认 + 保存**。不直接设计框架。
+只负责：**MCP调用 + 引擎加载 + Agent启动 + 检查点确认 + Step3卷级目标卡生成**。不直接设计框架/脉络/支线。
 
-## Step 0: 数据采集
+## Step 0: 数据采集与引擎加载
 
 ```python
+# 基础数据
 novel_get(novel_id)          # 小说基本信息
 world_query(novel_id)        # 世界观全部数据
 character_list(novel_id)     # 角色列表（含主角/反派/关键配角）
 volume_list(novel_id)        # 已有卷信息（如有）
 foreshadow_list(novel_id)    # 全局伏笔（如有）
+
+# 引擎加载（按步骤按需加载，编排器在启动对应Agent时传入）
+# Step 1/2 需要：
+skill_loader("novel-planner", "engine", "causality")        # 因果逻辑大纲法 — Agent 1/2 必须用因果链约束全书
+skill_loader("novel-planner", "engine", "three-perspective") # 三视角框架 — Agent 2 用读者视角的爽点节奏标准
+# Step 5 需要：
+skill_loader("novel-planner", "engine", "reader-perspective-agent")
+skill_loader("novel-planner", "engine", "author-perspective-agent")
+skill_parser("novel-planner", "engine", "character-perspective-agent")
 ```
 
-## Step 1: Agent 1 — 框架建筑师
+**强制原则**：以上引擎内容编排器在启动Agent时打包传入，Agent**必须使用**。因果逻辑法约束全书因果链，三视角框架约束爽点节奏。
 
-### 输入
-- 世界观核心设定（能力体系/势力分布/历史背景）
-- 主角初始状态+目标
-- 预估总卷数（用户提供或根据字数推算）
+## Step 1: Agent — 框架建筑师
 
-### 指令文件
-`agents/framework-architect.md`
+**Agent指令**: `agents/framework-architect.md`
+**强制加载引擎**: `engines/causality.md`（因果逻辑法约束卷间关系必须基于因果而非时间顺序）
 
-### 输出
-- **全书起承转合**：
-  - 起（V1-V3）：主角入场→世界展开→第一次重大挫折
-  - 承（V4-V7）：成长线→暗线推进→势力博弈
-  - 转（V8-V11）：真相揭露→世界观颠覆→代价付出
-  - 合（V12-V14+尾声）：最终对决→回收所有伏笔→结局
-- **每卷定位**：该卷在全书中的功能（如"建立信任""揭露背叛""能力质变"）
-- **卷间关系**：每卷如何承接上一卷、如何引出下一卷
+### 编排器操作
+1. 打包：世界观设定 + 主角初始状态 + 预估总卷数 → 传给 Agent
+2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/framework-architect.md`
+3. Agent 输出：全书起承转合 + 每卷功能定位 + 卷间关系
 
 ### 输出验证
 - [ ] 起承转合四段比例合理（起25%/承35%/转25%/合15%）
-- [ ] 每卷有明确功能定位，不重复
-- [ ] 卷间过渡有明确钩子
+- [ ] 每卷功能定位唯一、不重复
+- [ ] 卷间关系有因果链（因为V{N}的后果→所以V{N+1}面对什么）
 
-## Step 2: Agent 2 — 脉络设计师
+## Step 2: Agent — 脉络设计师
 
-### 输入
-- Agent 1 的框架输出
-- 角色档案（主角/反派/关键配角的初始状态+目标+恐惧）
-- 暗线设定（用户提供或Agent推断）
+**Agent指令**: `agents/vein-designer.md`
+**强制加载引擎**:
+- `engines/causality.md` — 主线因果链（每节点必须回答"因为什么→所以什么→逼出什么"）
+- `engines/three-perspective.md` — 读者视角爽点节奏标准（每2-3卷小爽点/4-5卷大爽点）
 
-### 指令文件
-`agents/vein-designer.md`
-
-### 输出
-- **主线脉络**：主角从A到Z的完整路径（每卷的关键节点）
-- **暗线递进**：隐藏真相的分卷揭露计划（每卷揭示多少）
-- **情绪曲线**：全书情绪振幅图（高潮/低谷/转折点位置）
-- **人物弧光总图**：每个主要角色的变化轨迹（与卷级节点对齐）
-- **悬念总图**：五种"未知"的分布（谁/为什么/怎么/什么时候/会怎样）
+### 编排器操作
+1. 打包：Agent 1 输出 + 角色档案 + 暗线设定 → 传给 Agent
+2. 启动 Agent，传入引擎内容
+3. Agent 输出：主线脉络 + 暗线递进 + 人物弧光总图 + 情绪曲线
 
 ### 输出验证
-- [ ] 主线有清晰因果链（每步都有"因为...所以..."）
+- [ ] 主线因果链完整（每步"因为所以"，通过可替换性测试）
 - [ ] 暗线每卷至少推进一次，不一次揭完
-- [ ] 情绪曲线有起伏，不是单调上升
-- [ ] 人物弧光与剧情节点对齐
+- [ ] 情绪曲线有起伏，无连续3卷无爽点
 
 ## 🔒检查点A: 确认全书框架
 
@@ -97,64 +95,61 @@ foreshadow_list(novel_id)    # 全局伏笔（如有）
 
 ```
 【全书框架】
-起(V1-V3): {功能概述}
-承(V4-V7): {功能概述}
-转(V8-V11): {功能概述}
-合(V12-V14): {功能概述}
+起(V1-V{N}): {功能概述}
+承(V{N}-V{N}): {功能概述}
+转(V{N}-V{N}): {功能概述}
+合(V{N}-V{N}+尾声): {功能概述}
+
+【卷功能定位】
+V1: {1句} | V2: {1句} | ... | V{N}: {1句}
 
 【主线脉络】
-{V1节点} → {V3节点} → {V7节点} → {V11节点} → {结局}
+V1{节点} → V3{节点} → V7{节点} → V11{节点} → V14{结局}
 
 【暗线递进】
-V1-V3: {揭示程度} | V4-V7: {揭示程度} | V8-V11: {揭示程度} | V12-V14: {完全揭露}
+V1-V3: {揭示程度} | V4-V7: {揭示程度} | V8-V11: {揭示程度} | V12-V14: 完全揭露
 
 【情绪曲线】
-{V1起点} → {V3第一次低谷} → {V7中点高潮} → {V11最大危机} → {结局}
+高危区间标注：{哪些卷无小爽点}
 
-确认后进入卷级规划。输入"OK"或修改意见。
+输入"OK"进入卷级目标规划，或提修改意见。
 ```
 
-## Step 3: Agent 3 — 卷级规划师
+## Step 3: 编排器 — 卷级目标卡（全书级→卷级的桥梁）
 
-### 输入
-- 确认后的框架+脉络
-- 每卷预估字数（总字数÷卷数）
-- 角色状态表（每卷开始时的角色状态）
+**不调用 Agent**，编排器基于 Step 1-2 的确认输出直接生成。
 
-### 指令文件
-`agents/volume-planner.md`
+### 生成逻辑
 
-### 输出（每卷）
-- **卷目标**：该卷要达成的具体目标（如"沈野获得第一次能力升级""揭露灵站真相"）
-- **核心事件类型**：该卷以什么类型的事件为主（战斗/探索/对话/揭秘/成长）
-- **钩子设计**：
-  - 卷首钩子：承接上卷+引入新冲突
-  - 卷末钩子：引出下卷+埋伏笔
-- **关键角色**：该卷活跃的角色名单
-- **情绪锚点**：该卷的情绪起点→终点
-- **能力/势力变化**：该卷中能力体系或势力格局的变化
+对每卷，基于 Step 1 的"卷功能定位" + Step 2 的"人物弧光总图"+"暗线递进"生成该卷的约束卡片：
+
+```
+V{N}《{卷名}》目标卡
+├─ 卷功能：{来自Step 1}
+├─ 本卷必须达成的目标（2-3条）：{可衡量的目标}
+│  ├─ 角色变化：{哪个角色从什么状态变到什么状态}
+│  ├─ 暗线推进：{这条暗线在本卷揭示到什么程度}
+│  ├─ 伏笔操作：{新埋/深化的伏笔}
+├─ 核心冲突类型：{战斗/探索/对话/揭秘/成长/混合}
+├─ 下卷接口：{本卷末留什么钩子给V{N+1}}
+```
 
 ### 输出验证
 - [ ] 每卷目标可衡量（能判断是否达成）
-- [ ] 卷首/卷末钩子明确
-- [ ] 情绪锚点与全书情绪曲线一致
+- [ ] 暗线推进度与暗线递进总图一致
+- [ ] 角色变化与人物弧光总图一致
+- [ ] 目标卡直接提供给 novel-planner-volume 作为输入约束
 
-## Step 4: Agent 4 — 支线规划师
+**目标卡的作用**：这是 novel-planner → novel-planner-volume 的正式输出。volume-planner 收到目标卡后，才知道"这卷要做什么"，然后设计"事件怎么做"。
 
-### 输入
-- 确认后的框架+脉络（Agent 1-2 输出）
-- 卷级规划（Agent 3 输出）
-- 角色档案（全部角色）
-- 世界观设定
+## Step 4: Agent — 支线规划师
 
-### 指令文件
-`agents/subplot-planner.md`
+**Agent指令**: `agents/subplot-planner.md`
 
-### 输出
-- **支线清单**：全书所有支线（类型/关联角色/跨卷分布/三检验结果）
-- **支线-主线交织图**：每条支线与主线的交汇节点（卷章/方式/结果）
-- **支线弧光总图**：连续型/跨卷慢线的完整弧光
-- **支线角色管理**：核心角色/支援角色/新角色需求/出场规划
+### 编排器操作
+1. 打包：确认后的框架+脉络 + 全部角色档案 + 世界观设定 → 传给 Agent
+2. 启动 Agent，传入 `agents/subplot-planner.md`
+3. Agent 输出：支线清单 + 支线-主线交织图 + 支线弧光总图 + 支线角色管理
 
 ### 输出验证
 - [ ] 每条支线通过三检验（删除/独立阅读/主题）
@@ -179,119 +174,103 @@ V1-V3: {揭示程度} | V4-V7: {揭示程度} | V8-V11: {揭示程度} | V12-V14
 【支线角色】
 - {支线1}: 核心{角色A} | 新角色需求: {是/否}
 
-确认后进入框架验证。输入"OK"或修改意见。
+输入"OK"进入框架验证，或提修改意见。
 ```
 
-## Step 5: Agent 5 — 框架验证器（三视角审查+支线完整性）
+## Step 5: Agent — 框架验证器（12项全书检查+三视角审查）
 
-### 输入
-- Agent 3 的卷级规划
-- Agent 4 的支线体系
-- Agent 1-2 的框架+脉络
-- `skill_loader("novel-planner", "engine", "reader-perspective-agent")` — 框架级读者视角
-- `skill_loader("novel-planner", "engine", "author-perspective-agent")` — 框架级作者视角
-- `skill_loader("novel-planner", "engine", "character-perspective-agent")` — 框架级人物视角
+**Agent指令**: `agents/framework-validator.md`
+**强制加载引擎**: `engines/reader-perspective-agent.md`, `engines/author-perspective-agent.md`, `engines/character-perspective-agent.md`
 
-### 指令文件
-`agents/framework-validator.md`
+### 编排器操作
+1. 收集：Agent 1-2 框架+脉络 + Step 3 卷级目标卡 + Agent 4 支线体系 → 传给 Agent
+2. 编排器在 Agent 5 内部启动 3 个审查 Agent 并行（互不依赖）：
+   - **Agent-读者**: 加载 `engines/reader-perspective-agent.md` → 框架级读者审查
+   - **Agent-作者**: 加载 `engines/author-perspective-agent.md` → 框架级作者审查  
+   - **Agent-人物**: 加载 `engines/character-perspective-agent.md` → 框架级人物审查
+3. Agent 5 汇总三视角结果 + 执行交叉检查 → 输出验证报告
 
-### 验证流程
-
-**第一阶段：结构检查（原有10项）**
-
-| # | 检查项 | 标准 |
-|---|--------|------|
-| 1 | 起承转合比例 | 起25%±5%/承35%±5%/转25%±5%/合15%±5% |
-| 2 | 卷功能不重复 | 每卷功能定位唯一 |
-| 3 | 主线因果链完整 | 从起点到终点每步有前因 |
-| 4 | 暗线递进节奏 | 每卷至少推进一次，不一次揭完 |
-| 5 | 情绪曲线起伏 | 至少3个高潮+2个低谷 |
-| 6 | 人物弧光覆盖 | 主要角色都有变化轨迹 |
-| 7 | 悬念分布均衡 | 五种"未知"不集中在同一卷 |
-| 8 | 卷间过渡自然 | 每卷末钩子与下卷首承接 |
-| 9 | 能力/势力升级节奏 | 不单调递增，有平台期 |
-| 10 | 日常密度合理 | 承转段日常≥30%，起合段≤20% |
-
-**第二阶段：支线完整性验证（新增）**
-
-| # | 检查项 | 标准 |
-|---|--------|------|
-| 11 | 支线-主线交织密度 | 连续型支线每卷≥1节点，独立型本卷≥1交汇 |
-| 12 | 支线角色利用率 | 每条支线给≥1个配角提供存在感 |
-| 13 | 支线弧光完整 | 连续型支线有起点→催化→挣扎→蜕变→终点 |
-| 14 | 支线不冲突 | 支线因果链不与主线冲突 |
-| 15 | 支线主题一致 | 所有支线呼应核心主题 |
-
-**第三阶段：三视角审查（3个独立Agent并行）**
-
-三个Agent并行执行，每个Agent只负责自己的视角：
-
-- **Agent-读者**: 加载 `reader-perspective-agent.md` → 按**框架级标准**审查（开篇钩子/信息层级递进/悬念分布/角色可识别/期待感持续/爽点节奏/情感共鸣）
-- **Agent-作者**: 加载 `author-perspective-agent.md` → 按**框架级标准**审查（起承转合/因果链/伏笔层级/主题一致性/节奏控制/支线管理/卷间过渡）
-- **Agent-人物**: 加载 `character-perspective-agent.md` → 按**框架级标准**审查（弧光与剧情对齐/动机充分/选择必然/代价明确/能力边界/关系演变）
-
-**交叉检查**（由编排器汇总后执行）：
+### 交叉检查
 - [ ] 读者vs作者无冲突（结构服务读者体验）
 - [ ] 读者vs人物无冲突（人物选择优先，但有动机）
 - [ ] 作者vs人物无冲突（人物逻辑>结构需求）
-
 **核心原则**：人物 > 读者 > 作者
 
-### 输出
-- 结构检查结果（10项）
-- 支线完整性结果（5项）
-- 三视角审查结果（3份独立报告 + 交叉检查汇总）
-- 问题分级（P0=三视角冲突/P1=单视角严重/P2=单视角中等/P3=轻微）
-- 总体评估
+### 问题分级
+| 级别 | 判定标准 | 处理要求 |
+|------|---------|---------|
+| P0 | 因果链断裂/三视角冲突/角色OOC | **必须修复**，阻断保存 |
+| P1 | 节奏断层/伏笔遗漏 | 建议修复 |
+| P2 | 微调建议 | 可选 |
 
 ## 🔒检查点B: 确认验证通过
 
-P0问题→必须修复。无P0→进入保存。
+P0→必须修复（回对应Step）。无P0→进入保存。
 
 ## Step 6: 保存
 
-### DB保存
-```python
-volume_create(novel_id, number, title, main_plotlines, notes)
-# 每卷一条记录
-```
-
 ### 文件落盘
 ```
-novels/{小说名}/设定/章节大纲/全书框架.md
-novels/{小说名}/设定/章节大纲/主线脉络.md
-novels/{小说名}/设定/章节大纲/暗线递进.md
-novels/{小说名}/设定/章节大纲/情绪曲线.md
-novels/{小说名}/设定/章节大纲/卷级规划.md
-novels/{小说名}/设定/章节大纲/支线总图.md
+novels/{小说名}/设定/大纲/
+├── 全书框架.md            # Agent 1输出
+├── 全书脉络.md            # Agent 2输出  
+├── 卷级目标卡.md           # Step 3编排器生成
+├── 支线总图.md            # Agent 4输出
+├── 跨卷伏笔总图.md         # 编排器汇总
+└── 全书框架审计.md         # Agent 5输出
 ```
 
-### 跨卷伏笔总图
-```
-novels/{小说名}/设定/章节大纲/伏笔总图.md
+落盘后，novel-planner-volume 的 Step 0 读取以上文件作为输入约束。
+
+### DB保存
+```python
+# 卷级目标 → volume_update
+for card in volume_target_cards:
+    volume_update(card.volume_id, main_plotlines=card.targets)
+
+# 伏笔 → foreshadow_plant
+for f in cross_volume_foreshadows:
+    foreshadow_plant(novel_id, description=f.desc, planned_recall_chapter=f.recall)
+
+# 支线 → world_upsert
+for s in subplots:
+    world_upsert(novel_id, category='subplot', name=s.name, data={...})
 ```
 
 ## Step 7: git commit
 
 ```
-B1: 全书框架+卷级规划+支线体系完成
+B1: 全书框架+脉络+卷级目标卡+支线体系+审计通过
 ```
 
 </what-to-do>
 
 <supporting-info>
 
-## 与下层的关系
+## 三层架构
 
-- **novel-planner**（本skill）：确定"每卷做什么"
-- **novel-planner-volume**：根据"每卷做什么"设计"每章发生什么"
-- **novel-chapter-writer**：根据"每章发生什么"生成"正文怎么写"
+| 层 | Skill | 输出 | 粒度 |
+|----|-------|------|------|
+| **骨架+血管** | novel-planner（本skill） | 全书框架/脉络/卷级目标卡 | 卷级"做什么" |
+| **肌肉** | novel-planner-volume | 逐章大纲+事件因果链+伏笔场景化 | 章级"怎么做" |
+| **皮肤/动作** | novel-chapter-writer | 正文（场景+对话+描写） | 场景级"怎么写" |
 
-## 项目专属数据
+## 引用资源
 
-《这次不一样了》的专属数据（14卷情绪锚点、角色名单）存于：
-`references/novel-planner/project-context.md`
+| 引擎 | 用途 | 强制步骤 |
+|------|------|---------|
+| `engines/causality.md` | 因果逻辑大纲法—约束全书因果链 | Step 1/2 |
+| `engines/three-perspective.md` | 三视角框架—读者爽点节奏标准 | Step 2 |
+| `engines/reader-perspective-agent.md` | 读者视角审查清单 | Step 5 |
+| `engines/author-perspective-agent.md` | 作者视角审查清单 | Step 5 |
+| `engines/character-perspective-agent.md` | 人物视角审查清单 | Step 5 |
 
-Agent 1-3 设计时，编排器将此文件作为附加输入提供。
+## 异常处理
+
+| 场景 | 处理 |
+|------|------|
+| agents/目录缺少文件 | 需创建后再启动对应Step |
+| Step 0 数据为空（新小说） | 允许，基于默认模板构建 |
+| Step 5 发现P0 | 回到对应Step修复，修复后重跑验证 |
 
 </supporting-info>
