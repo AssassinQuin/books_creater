@@ -14,6 +14,8 @@ Current project: **《这次不一样了》** — 14卷+尾声, 百万字级玄�
 
 **`SENTENCE-PATTERNS.md`**（项目根目录）定义了反AI句式系统——标点多样性引擎、信息投放节奏、场景结构随机组合、否定句式管理、意象梯度系统、环境音效轮换库。所有章节写作必须遵守其中的反AI指纹消除规则。
 
+**`.claude/skills/lorecraft/references/term-map.md`**（项目根目录 `.claude/skills/lorecraft/references/term-map.md`）定义了灵能玄幻世界观的术语映射规范——禁止现代科技/行政/计算机术语（数据/系统/信号/参数/权限/终端等），替换为有文化根脉的灵能术语。**卷级大纲/章节正文/设定文件生成前必须加载，写后必须逐条检查禁止术语残留。** 详见 `.claude/skills/lorecraft/SKILL.md`。
+
 ## Architecture
 
 ### Data Architecture
@@ -30,7 +32,7 @@ Three-layer data architecture:
 | 数据类型 | 权威源 | 文件角色 | 写入规则 | 读取规则 |
 |---------|--------|---------|---------|---------|
 | 世界观/地点/物品/能力 | **DB** (`world_query`) | 人可读副本 (`设定/世界观.md` / `地图.md` / `物品.md`) | 先写 DB，再写文件 | `world_query()` 优先；返回空时回退读文件 |
-| 角色档案/关系 | **DB** (`character_detail` / `relation_list`) | 人可读副本 (`设定/人物/{名}.md` / `角色总览.md`) | 先写 DB，再写文件 | `character_detail()` 优先 |
+| 角色档案/关系 | **DB** (`character_detail` / `relation_list`) | 人可读副本 (`设定/人物/{名}.md`) | 先写 DB，再写文件 | `character_detail()` 优先 |
 | 伏笔 | **DB** (`foreshadow_list`) | 人可读副本 (`设定/大纲/` 中伏笔清单) | 先写 DB，再写文件 | `foreshadow_list()` 优先 |
 | 卷级大纲（叙事内容） | **文件** (`设定/大纲/V{N}-{卷名}.md`) | 权威源 | 先写文件，再写 DB 摘要 | `Read()` 文件获取完整大纲；`volume_get()` 获取摘要 |
 | 章节规划（逐章大纲） | **文件** (`设定/大纲/V{N}-{卷名}.md`) | 权威源 | 先写文件，再写 DB 摘要 | `Read()` 文件获取完整大纲；`chapter_list()` 获取摘要 |

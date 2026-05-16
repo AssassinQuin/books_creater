@@ -133,6 +133,12 @@ skill_loader("novel-planner-volume", "engine", "author-perspective-agent")
 skill_loader("novel-planner-volume", "engine", "character-perspective-agent")
 # 共享约束（Step 1/2 都需要）：
 skill_loader("novel-planner-volume", "agent", "shared-constraints")
+
+# 🔒 术语规范（全程强制加载——所有 Agent 写前必读、写后自检）：
+# 路径：.claude/skills/lorecraft/references/term-map.md
+# 作用：禁止现代术语（数据/系统/信号/参数/权限等），确保所有产出使用有文化根脉的灵能术语
+Read(".claude/skills/lorecraft/references/term-map.md")
+Read(".claude/skills/lorecraft/SKILL.md")
 ```
 
 **世界观加载原则**：大纲设计必须基于已有世界观。世界观是创作的边界，不是建议。
@@ -508,6 +514,7 @@ P0=全书级关键伏笔 | P1=卷级重要线索 | P2=可延期
 - 人物互动：每个主要角色≥2个不同角色独立互动 ✓/✗
 - 因果链：每个关键事件有显式前因 ✓/✗
 - 巧合计 ≤1次/卷且必须有伏笔支撑 ✓/✗
+- 术语规范（lorecraft）：逐项检查 `term-map.md` 禁止术语，产出中无违规 ✓/✗
 ```
 
 ##### 模板使用说明

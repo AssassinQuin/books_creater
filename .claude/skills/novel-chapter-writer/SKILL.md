@@ -231,6 +231,7 @@ query: 你是 Engine Coordinator Agent。请读取 .claude/skills/novel-chapter-
 你需要读取的文件（使用 Read 工具）：
 - .claude/skills/engines/anti-ai-quickref.md（反AI指纹速查卡，替代全量SENTENCE-PATTERNS.md）
 - .claude/skills/engines/writing-style.md
+- .claude/skills/lorecraft/references/term-map.md（🔒 术语规范——写前必读，写作全程使用有文化根脉的灵能术语，禁止现代术语）
 - 根据场面类型，按 engine-coordinator.md 的步骤 2 加载对应引擎文件
 
 注意：writing-constraints.md 的规则已由编排器通过 get_chapter_context 注入，无需重复读取。
@@ -241,7 +242,8 @@ query: 你是 Engine Coordinator Agent。请读取 .claude/skills/novel-chapter-
 3. 提取反 AI 指纹指令（F1-F6 具体到本章）
 4. 提取硬约束检查清单（转化为可执行指令）
 5. 为每个场面生成定制化的引擎指令
-6. 按 engine-coordinator.md 中定义的输出格式产出引擎指令包
+6. 在引擎指令包中加入术语规范（引用 `term-map.md` 的禁止术语清单），提示 Agent 4 写后逐项自检
+7. 按 engine-coordinator.md 中定义的输出格式产出引擎指令包
 ```
 
 Agent 3 返回 → 编排器验证必填字段 → **保存到临时文件**：
@@ -270,8 +272,9 @@ query: 你是 Text Generator Agent。请读取 .claude/skills/novel-chapter-writ
 3. 确保每段字数占比：起 10-15% / 承 40-50% / 转 20-25% / 合 10-15%
 4. 每完成一个场面，对照反 AI 指纹指令逐项自检
 5. 全文通读后，对照硬约束清单逐条自检
-6. 正文部分纯净化，不含注释、统计、审计备注
-7. 按 text-generator.md 中定义的输出格式产出正文+自检报告
+6. **写后必检**：对照 `term-map.md` 禁止术语清单逐项检查，确保全文无现代术语违规（如数据/系统/信号/参数/权限等）
+7. 正文部分纯净化，不含注释、统计、审计备注
+8. 按 text-generator.md 中定义的输出格式产出正文+自检报告
 ```
 
 Agent 4 返回 → **章节正文**（chapter_text）+ **自检报告**
