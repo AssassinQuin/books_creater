@@ -612,6 +612,28 @@ for character in changed_characters:
 # 6. 创建人物关系（如有新关系）
 for relation in new_relations:
     relation_create(novel_name="这次不一样了", from_character_id, to_character_id, relation_type, ...)
+
+# 7. 注册暗线/支线（新增——确保 get_chapter_context 能读到活跃线索）
+for thread in volume_threads:
+    plot_thread_create(
+        novel_name="这次不一样了",
+        name=thread.name,
+        thread_type=thread.type,  # mainline/subplot/darkline/mystery/clue
+        description=thread.description,
+        start_chapter_id=thread.start_chapter_id,
+        volume_scope=json.dumps(thread.volume_scope),   # 涉及卷号列表
+        related_characters=json.dumps(thread.related_characters),  # 角色名列表
+        related_foreshadows=json.dumps(thread.related_foreshadows)  # 伏笔ID列表
+    )
+
+# 8. 更新已有暗线/支线状态（本卷推进/收束的线索）
+for thread in updated_threads:
+    plot_thread_update(
+        thread_id=thread.id,
+        status=thread.new_status,  # active/resolved/dormant/abandoned
+        end_chapter_id=thread.end_chapter_id,
+        progress_notes=json.dumps(thread.progress_notes)  # 本卷进展备注
+    )
 ```
 
 **DB同步原则**：大纲阶段产出的所有结构化数据（地点/物品/人物/势力/伏笔/章节）必须同步到DB，确保正文生成阶段（novel-chapter-writer）通过 `get_chapter_context` 聚合调用能获取到完整信息。
