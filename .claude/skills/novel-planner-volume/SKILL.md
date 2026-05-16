@@ -107,6 +107,26 @@ Read("novels/{小说名}/设定/世界观.md")            # 完整世界观
 Read("novels/{小说名}/设定/地图.md")              # 地理信息（如有）
 Read("novels/{小说名}/设定/物品.md")              # 物品体系（如有）
 world_query(novel_id)                             # DB中的世界观条目
+
+# 引擎加载（按步骤按需加载）
+# Step 1 事件架构师用：
+skill_loader("novel-planner-volume", "engine", "causality")        # 因果逻辑大纲法
+skill_loader("novel-planner-volume", "engine", "relationship")     # 人物关系追踪
+# Step 2 章节设计师用：
+skill_loader("novel-planner-volume", "engine", "scene-type")      # 场景类型写作策略
+skill_loader("novel-planner-volume", "engine", "scene-composition")# 场面密度分级+多人动力学
+skill_loader("novel-planner-volume", "engine", "author-voice")     # 作者声音三层架构
+skill_loader("novel-planner-volume", "engine", "author-voice-battle")
+skill_loader("novel-planner-volume", "engine", "author-voice-emotion")
+skill_loader("novel-planner-volume", "engine", "author-voice-daily")
+skill_loader("novel-planner-volume", "engine", "author-voice-mystery")
+# Step 3 卷级验证用：
+skill_loader("novel-planner-volume", "engine", "three-perspective")         # 三视角大纲分析框架
+skill_loader("novel-planner-volume", "engine", "reader-perspective-agent")  # 读者视角审查标准
+skill_loader("novel-planner-volume", "engine", "author-perspective-agent")  # 作者视角审查标准
+skill_loader("novel-planner-volume", "engine", "character-perspective-agent") # 人物视角审查标准
+# 新实体管理用：
+skill_loader("novel-planner-volume", "engine", "world-element-registry")    # 世界元素注册规范
 ```
 
 **世界观加载原则**：大纲设计必须基于已有世界观。世界观是创作的边界，不是建议。
@@ -121,6 +141,9 @@ if mode == "增量审计":
 ## Step 1: Agent — 事件架构师
 
 **Agent指令**: `agents/event-architect.md`
+**加载引擎**:
+- `skill_loader("novel-planner-volume", "engine", "causality")` — 因果逻辑网四步法（世界观刑具化→因果链编织→雪球效应→不可逆节点）
+- `skill_loader("novel-planner-volume", "engine", "relationship")` — 人物关系变化追踪（互动矩阵设计时参考）
 
 ### 编排器操作
 1. 收集以下数据，打包传给 Agent：
@@ -130,15 +153,28 @@ if mode == "增量审计":
    - 未回收伏笔列表（foreshadow_list, status='planted'）
    - 上卷末角色状态（从上一卷大纲"人物弧光"表提取）
    - 卷定位（起/承/转/合）+ 全书第几卷
+   - 因果逻辑引擎（`engines/causality.md`）— Agent 参考其中的四步构建法和因果链公式
+   - 关系追踪引擎（`engines/relationship.md`）— Agent 参考关系强度量表和变化追踪
 2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/event-architect.md`
 3. Agent 输出事件架构（因果链+起承转合+人物弧光+悬念锚点+伏笔操作）
 
 ### Agent 核心方法论
-从"卷末谁变了、变到什么状态"反推事件。不要从开头想。
+参考 `engines/causality.md` 的因果逻辑网构建法，结合自主方法论：
+
+**自主方法论**：从"卷末谁变了、变到什么状态"反推事件。不要从开头想。
 ```
 卷末状态 - 卷初状态 = 需要发生的变化
 每个变化 → 触发事件 → 因果链
 ```
+
+**因果逻辑网补充**（从 causality.md 集成）：
+```
+事件N = f(事件N-1的 consequences, 角色 choices, 世界观 rules)
+不是"第N天主角去了X地方"——而是"因为事件N-1导致Z后果，主角被迫做出A选择"
+四步法：世界观刑具化→因果链编织→雪球效应→不可逆节点
+```
+
+Agent 输出的事件因果链必须通过"可替换性测试"和"可删减性测试"（来自 causality.md 的验证标准）。
 
 ### Agent 硬约束
 - 每章至少3个可辨识事件
@@ -231,11 +267,14 @@ Ch018: 沈野在荒原第一夜转了转残片，手感告诉他——这不是�
 
 ### 🔒新实体确认（事件架构中的新实体）
 
+**参考引擎**: `engines/world-element-registry.md`（世界元素注册规范—定义元素分类、属性模板、关联关系、注册步骤）
+
 如果事件架构师在设计中引入了**世界观中不存在的新实体**（新物品、新地点、新NPC、新能力、新概念等），编排器必须：
 
-1. **列出所有新实体**：名称+类型+用途+为什么需要新增
-2. **暂停等用户确认**：用户说"OK"才继续，否则修改或删除
-3. **确认后保存**：
+1. **列出所有新实体**：名称+类型+用途+为什么需要新增（参考 world-element-registry.md 的元素分类框架）
+2. **查重**：对照 `world_query(novel_id)` 和已有设定文件确认不重复
+3. **暂停等用户确认**：用户说"OK"才继续，否则修改或删除
+4. **确认后保存**：
    - 文件：追加到 `novels/{小说名}/设定/世界观.md` / `物品.md` / `地图.md` 等对应文件
    - DB：调用 `world_upsert(novel_id, category, name, data)` 或 `character_create(novel_id, name, ...)`
 
@@ -249,16 +288,27 @@ Ch018: 沈野在荒原第一夜转了转残片，手感告诉他——这不是�
 | 新能力/概念 | 设定/世界观.md | world_upsert(category='ability') |
 | 新势力/组织 | 设定/世界观.md | world_upsert(category='faction') |
 
+**注册规范**（参考 world-element-registry.md）：
+- 每个新实体必须包含：名称/类型/描述/关联元素/首次出现章节
+- 新物品需定义：外观/功能/获取方式/限制条件
+- 新地点需定义：位置/环境特征/势力归属/危险等级
+- 新NPC需定义：身份/性格/动机/与现有角色的关系
+
 **禁止**：Agent自行创建新实体后不通知编排器。所有新实体必须经过用户确认。
 
 ## Step 2: Agent — 章节设计师
 
 **Agent指令**: `agents/chapter-designer.md`
+**加载引擎**:
+- `skill_loader("novel-planner-volume", "engine", "scene-type")` — 6种场景类型写作策略（对话/动作/氛围/心理/日常/混合，影响每章场景结构选择）
+- `skill_loader("novel-planner-volume", "engine", "scene-composition")` — 场面密度分级（轻量/中量/重量/大场面）+ 多人场景动力学 + 注意力分配规则
+- `skill_loader("novel-planner-volume", "engine", "author-voice")` — 作者声音三层架构（影响场景的声音层标注）
 
 ### 编排器操作
 1. 将 Step 1 确认后的事件架构 + 角色蒸馏卡 + 世界观索引打包传给 Agent
-2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/chapter-designer.md`
-3. Agent 输出逐章大纲（每章场景序列+伏笔场景化+人物互动矩阵+声音适配）
+2. 将场景引擎（`engines/scene-type.md`, `engines/scene-composition.md`）和作者声音引擎（`engines/author-voice.md` + 对应变体）作为附加参考传入
+3. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/chapter-designer.md`
+4. Agent 输出逐章大纲（每章场景序列+场景类型标注+伏笔场景化+人物互动矩阵+声音适配+场面密度分配）
 
 ### Agent 核心方法论
 每章是微型故事：开场钩子→主体事件（2-4场景）→章末钩子。
@@ -306,11 +356,23 @@ Ch018: 沈野在荒原第一夜转了转残片，手感告诉他——这不是�
 
 ### 三视角审查（3个Agent并行）
 
-- **读者视角**: 追读体验（钩子/悬念/爽点间隔/信息投放/情感共鸣）
-- **作者视角**: 结构工艺（起承转合/因果链/伏笔管理/节奏控制）
-- **人物视角**: 角色一致性（行为符合性格/动机充分/选择必然/OOC检测）
+**加载引擎**：
+- `skill_loader("novel-planner-volume", "engine", "three-perspective")` — 完整的三视角分析框架（读者/作者/编辑），含评分标准和交叉对比规则
+
+**三个Agent分别加载独立视角引擎**（各自有完整的审查清单和评分标准）：
+
+- **Agent-读者**: 加载 `engines/reader-perspective-agent.md` → 按框架级标准审查（开篇钩子/信息层级递进/悬念分布/角色可识别/期待感持续/爽点节奏/情感共鸣/追更欲望评分）
+- **Agent-作者**: 加载 `engines/author-perspective-agent.md` → 按框架级标准审查（起承转合/因果链穿透/伏笔层级/主题一致性/节奏控制/支线管理/卷间过渡/Weiland弧线框架）
+- **Agent-人物**: 加载 `engines/character-perspective-agent.md` → 按框架级标准审查（弧光与剧情对齐/动机充分/选择必然/代价明确/能力边界/关系演变/OOC检测）
+
+**交叉检查**（编排器汇总后执行，参考 `engines/three-perspective.md` 的汇总规则）：
+- [ ] 读者vs作者无冲突（结构服务读者体验）
+- [ ] 读者vs人物无冲突（人物选择优先，但有动机）
+- [ ] 作者vs人物无冲突（人物逻辑>结构需求）
 
 **核心原则**：人物 > 读者 > 作者
+
+**审计报告保存**：输出到 `novels/{小说名}/审阅报告/V{N}-卷级审计.md`，包含三视角独立报告 + 交叉检查汇总 + 问题分级清单。下次增量审计时读取该报告。
 
 ### 问题分级
 - **P0**: 三视角冲突 / 角色OOC / 因果链断裂
@@ -613,32 +675,42 @@ B1: V{N}《{卷名}》卷级大纲{变更描述}
 
 ## 本层不做的事（明确边界）
 
-| 不做 | 原因 | 谁做 |
-|------|------|------|
-| 世界元素注册（具体感官/功能/外观） | 卷级只知道事件框架，具体物品/地点/能力的五感细节是正文写作时才确定的 | novel-chapter-writer (Agent 2 Creative Director) |
-| 感官5要素分配 | 每个场景的视觉/听觉/嗅觉在正文写作时才有意义 | novel-chapter-writer (Agent 3 Engine Coordinator) |
-| 逐章字数精确控制 | 大纲阶段预估章节字数，实际字数由 writing-constraints.md 在写作时控制 | novel-chapter-writer + validate_chapter |
-| 完整对话撰写 | 大纲只留全书级核心句（≤3句），其余对话留给正文 | novel-chapter-writer (Agent 4 Text Generator) |
+| 不做 | 原因 | 谁做 | 相关引擎 |
+|------|------|------|---------|
+| 世界元素注册（具体感官/功能/外观） | 卷级只知道事件框架，具体物品/地点/能力的五感细节是正文写作时才确定的 | novel-chapter-writer (Agent 2 Creative Director) | `engines/world-element-registry.md` |
+| 感官5要素分配 | 每个场景的视觉/听觉/嗅觉在正文写作时才有意义 | novel-chapter-writer (Agent 3 Engine Coordinator) | `engines/environment.md` 环境5要素 |
+| 逐章字数精确控制 | 大纲阶段预估章节字数，实际字数由 writing-constraints.md 在写作时控制 | novel-chapter-writer + validate_chapter | — |
+| 完整对话撰写 | 大纲只留全书级核心句（≤3句），其余对话留给正文 | novel-chapter-writer (Agent 4 Text Generator) | `engines/dialogue.md` 对话系统 |
+| 反AI指纹检测 | 正文生成后通过 validate_chapter 做硬约束校验 | novel-chapter-writer + `SENTENCE-PATTERNS.md` | `engines/anti-ai.md` + `engines/anti-ai-patterns.md` |
 
 **本层新增职责**（V2优化后）：
-| 新增职责 | 原因 |
-|---------|------|
-| 费笔配额设计 | 费笔事件需要在因果链中有位置，不能正文时临时塞。大纲阶段规划"谁在哪里做了什么日常" |
-| 人物互动矩阵 | 确保角色出场均衡、罕见组合不遗漏——这是结构问题不是正文细节 |
-| 伏笔场景化 | 每个伏笔必须有具体埋设场景设计——"在Ch{N}提到"不是大纲，是偷懒 |
-| 配角独立场景 | 确保配角有自己的生活线——大纲不规划，正文就会把所有配角写成围着主角转 |
+| 新增职责 | 原因 | 参考引擎 |
+|---------|------|---------|
+| 费笔配额设计 | 费笔事件需要在因果链中有位置，不能正文时临时塞。大纲阶段规划"谁在哪里做了什么日常" | — |
+| 人物互动矩阵 | 确保角色出场均衡、罕见组合不遗漏——这是结构问题不是正文细节 | `engines/relationship.md` 关系变化追踪+强度量表 |
+| 伏笔场景化 | 每个伏笔必须有具体埋设场景设计——"在Ch{N}提到"不是大纲，是偷懒 | `engines/causality.md` 因果链编织 |
+| 配角独立场景 | 确保配角有自己的生活线——大纲不规划，正文就会把所有配角写成围着主角转 | — |
 
 ## 声音适配规则
 
+**相关引擎**: `engines/author-voice.md`（作者声音三层架构）+ 5个变体文件：
+- `engines/author-voice-emotion.md` — 情感场景的感性与克制平衡
+- `engines/author-voice-daily.md` — 日常场景的松弛与真实感
+- `engines/author-voice-battle.md` — 战斗场景的节奏与压迫感
+- `engines/author-voice-mystery.md` — 悬疑场景的克制与信息释放
+- `engines/author-voice.md` 项目层：`设定/作者声音.md`
+
 Agent 2（章节设计师）为每章标记声音层，写入大纲供正文写作时加载：
 
-| 章节事件类型 | 加载声音层 |
-|-------------|-----------|
-| 战斗/动作 | author-voice-battle |
-| 情感高潮/离别/重逢 | author-voice-emotion |
-| 日常/世界呼吸/荒诞 | author-voice-daily |
-| 悬疑/揭秘/伏笔回收 | author-voice-mystery |
-| 混合类型 | 主类型+辅助声音层 |
+| 章节事件类型 | 加载声音层 | 参考引擎 |
+|-------------|-----------|---------|
+| 战斗/动作 | author-voice-battle | `engines/author-voice-battle.md` |
+| 情感高潮/离别/重逢 | author-voice-emotion | `engines/author-voice-emotion.md` |
+| 日常/世界呼吸/荒诞 | author-voice-daily | `engines/author-voice-daily.md` |
+| 悬疑/揭秘/伏笔回收 | author-voice-mystery | `engines/author-voice-mystery.md` |
+| 混合类型 | 主类型+辅助声音层 | 同时加载对应变体 |
+
+Agent 2 输出每章大纲时标注 `声音层: {类型}` 字段，正文写作阶段（novel-chapter-writer）根据此字段加载对应声音引擎。
 
 ## 增量审计设计
 
