@@ -46,24 +46,24 @@ Phase 3: 重评，综合≥85通过，最多3轮
 
 Step 1: 加载上下文
   - 角色状态（`character_get` + `chapter_get_context`）
-  - 卷级事件大纲（`novels/{小说名}/设定/章节大纲/V{卷号}-事件大纲.md`）
-  - 全书支线总图（`novels/{小说名}/设定/章节大纲/支线总图.md`）
-  - 世界元素索引（`novels/{小说名}/设定/世界元素/索引.md`）
+  - 卷级大纲（`novels/{小说名}/设定/大纲/V{卷号}-{卷名}.md`）
+  - 全书支线总图（`novels/{小说名}/设定/大纲/支线总图.md`）
+  - 世界观数据（`world_query(novel_id)` 优先；返回空时回退读 `设定/世界观.md`）
   - 作者声音定义（`engines/author-voice.md`）
 
 Step 2: 4Agent并行扫描
   - Agent-人物: OOC检测/知识矛盾/说话风格一致性/关系合理性
   - Agent-逻辑: 时间线连贯/经济系统一致/伏笔回收状态/物品使用逻辑
   - Agent-质量: 战斗场面质量/章节结构/爽点分布/NPC活跃度/写作风格/AI指纹(F1-F6)
-  - **Agent-支线: 支线完整性审查（新增）**
+  - **Agent-支线: 支线完整性审查**
     - 本卷支线节点是否按全书总图执行
     - 支线-主线交织方式是否清晰
     - 支线角色出场是否突兀
     - 支线三检验是否通过
-  - **Agent-三视角: 3个独立Agent并行审查（新增）**
-    - Agent-读者: 加载 `reader-perspective-agent.md` → 按**章节级标准**审查（开头钩子/信息不跳级/悬念管理/角色识别/场景定位/情感共鸣/结尾期待/逻辑跳跃/设定突兀/人物行为/时间线）
-    - Agent-作者: 加载 `author-perspective-agent.md` → 按**章节级标准**审查（起承转合/伏笔操作/节奏变化/主题传达/结构力度/信息投放/场景结构）
-    - Agent-人物: 加载 `character-perspective-agent.md` → 按**章节级标准**审查（POV行为符合性格/对话符合风格/知识边界/动机充分/情感反应真实/选择有代价/微表情动作）
+  - **Agent-三视角: 3个独立Agent并行审查**
+    - Agent-读者: 加载 `engines/reader-perspective-agent.md` → 按**章节级标准**审查（开头钩子/信息不跳级/悬念管理/角色识别/场景定位/情感共鸣/结尾期待/逻辑跳跃/设定突兀/人物行为/时间线）
+    - Agent-作者: 加载 `engines/author-perspective-agent.md` → 按**章节级标准**审查（起承转合/伏笔操作/节奏变化/主题传达/结构力度/信息投放/场景结构）
+    - Agent-人物: 加载 `engines/character-perspective-agent.md` → 按**章节级标准**审查（POV行为符合性格/对话符合风格/知识边界/动机充分/情感反应真实/选择有代价/微表情动作）
     - 交叉检查: 读者vs作者/读者vs人物/作者vs人物（由编排器汇总后执行）
 
 Step 3: `validate_chapter(chapter_text)` 硬约束复核（写时自检的补充，不替代）

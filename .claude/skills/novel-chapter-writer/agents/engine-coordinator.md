@@ -18,12 +18,12 @@
 
 | 类型 | 特征 | 核心引擎 |
 |------|------|---------|
-| 对话型 | 以人物对话推动 | engine-dialogue |
-| 动作型 | 以身体动作/战斗推动 | engine-action |
-| 氛围型 | 以环境/情绪渲染为主 | engine-environment |
-| 心理型 | 以内心独白/意识流为主 | engine-dialogue（微表情+弦外之音） |
-| 日常型 | 以生活细节展示世界观 | engine-environment + engine-item |
-| 蒙太奇型 | 多时空快速切换 | engine-action（动作链加速） |
+| 对话型 | 以人物对话推动 | engines/dialogue.md |
+| 动作型 | 以身体动作/战斗推动 | engines/action.md |
+| 氛围型 | 以环境/情绪渲染为主 | engines/environment.md |
+| 心理型 | 以内心独白/意识流为主 | engines/dialogue.md（微表情+弦外之音） |
+| 日常型 | 以生活细节展示世界观 | engines/environment.md + engines/item.md |
+| 蒙太奇型 | 多时空快速切换 | engines/action.md（动作链加速） |
 | 复合型 | 多种类型混合 | 按主导选主引擎，辅助选副引擎 |
 
 ### 步骤 2：引擎文件加载
@@ -31,32 +31,26 @@
 根据场面类型，读取对应的引擎参考文件：
 
 **必读文件（所有章节）**：
-- `SENTENCE-PATTERNS.md`（项目根目录）—— 反 AI 句式系统（6 大引擎）
-- `writing-constraints.md`（.claude/skills/）—— 硬约束配置
-- `references/writing-style.md`（novel-writer/references/）—— 写作通用标准 16 节
-- **`author-voice.md`（engines/）—— 叙事声音指纹。项目专属定义见 `novels/这次不一样了/设定/作者声音.md`（核心偏执/审美/情感方式/世界呼吸/角色反差/对话风格/标点审美/幽默/愤怒/疯劲/比喻库）**
+- `engines/anti-ai-quickref.md` —— 反AI指纹速查卡（F1-F13+禁用词+否定替代+场景组合）。编排器已注入，Agent 无需读取完整 SENTENCE-PATTERNS.md
+- `engines/writing-style.md` —— 写作通用标准。编排器已通过 skill_loader 注入
+- **`engines/author-voice.md` —— 叙事声音指纹**
+- writing-constraints.md 规则已由编排器通过 writing_start 注入，无需重复读取
 
 **按场面类型加载**：
 
 | 场面有 | 加载文件 |
 |--------|---------|
-| 对话博弈 | `references/engine-dialogue.md`（说话人档案→关系调节→弦外之音） |
-| 动作/战斗 | `references/engine-action.md`（动作链 5 拍） |
-| 环境描写 | `references/engine-environment.md`（环境 5 要素+感官描写） |
-| 物品使用 | `references/engine-item.md`（物品全生命周期） |
-| 多人物互动 | `references/scene-composition-guide.md`（角色矩阵+镜头语言） |
-| 需要深化 | `references/scene-deepening-guide.md`（反注水 6 大技法） |
-| 特定场景类型 | `references/scene-type-guide.md`（7 种类型策略） |
-
-**参考示例（按需）**：
-- `references/reference-dialogue-examples.md`
-- `references/reference-writing-examples.md`
-- `references/reference-scene-templates.md`
-- `references/reference-item-example.md`
+| 对话博弈 | `engines/dialogue.md`（说话人档案→关系调节→弦外之音） |
+| 动作/战斗 | `engines/action.md`（动作链 5 拍） |
+| 环境描写 | `engines/environment.md`（环境 5 要素+感官描写） |
+| 物品使用 | `engines/item.md`（物品全生命周期） |
+| 多人物互动 | `engines/scene-composition.md`（角色矩阵+镜头语言） |
+| 需要深化 | `engines/scene-deepening.md`（反注水 6 大技法） |
+| 特定场景类型 | `engines/scene-type.md`（7 种类型策略） |
 
 ### 步骤 3：反 AI 指纹指令提取
 
-从 `SENTENCE-PATTERNS.md` 中提取本章需要特别注意的反 AI 指令：
+从 `anti-ai-quickref.md`（编排器已注入）中提取本章需要特别注意的反 AI 指令：
 
 | 指纹 | 本章指令 |
 |------|---------|
@@ -69,29 +63,9 @@
 
 ### 步骤 4：硬约束提取
 
-从 `writing-constraints.md` 提取本章必须满足的硬约束清单：
+从 writing-constraints.md 提取（编排器已通过 skill_loader 注入）。提取本章必须满足的硬约束清单，转化为可执行指令。
 
-**标点密度目标**：
-- 破折号 ——：2.0-4.0‰
-- 省略号 ……：0.8-1.5‰
-- 分号 ；：0.3-0.8‰
-- 感叹号 ！：0.3-1.0‰
-
-**绝对值目标**：
-- 字数≥3000
-- 否定句式≤1
-- 长段落(≥180字)≥2
-- 平均每段标点类型≥2.5
-- 对话打断/转折≥4
-
-**创作原则**（7 条核心，逐条对应本章如何满足）：
-1. 刀锋技法（至少 1 种）
-2. 质量方差（2-3 个粗糙段）
-3. 废笔配额（3 种/章）
-4. 角色失控（1+次/章）
-5. 饱和度不均（主角>NPC>路人）
-6. 留白不点破（禁止升华）
-7. 节奏断层（1+处/章）
+硬约束清单由编排器通过 skill_loader("novel-chapter-writer", "engine", "writing-constraints") 注入。Agent 不硬编码约束值——约束的唯一源是 writing-constraints.md。
 
 ### 步骤 5：打包引擎指令
 

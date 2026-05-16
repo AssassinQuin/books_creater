@@ -1,7 +1,7 @@
 ---
 name: novel-chapter-writer
 description: 逐章写作编排器，驱动 4 个独立子 Agent 协作完成章节。触发词：写第N章/继续写/写一章
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__writing_start, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__skill_loader, mcp__novel-db__character_detail, mcp__novel-db__event_checklist, mcp__novel-db__author_voice, mcp__novel-db__writing_spec, mcp__novel-db__character_get, mcp__novel-db__character_list, mcp__novel-db__relation_list, mcp__novel-db__foreshadow_list, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_query, mcp__novel-db__world_upsert, mcp__novel-db__timeline_query, mcp__novel-db__volume_get, mcp__novel-db__chapter_list, mcp__memory__memory_store, mcp__memory__memory_search
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__get_chapter_context, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__skill_loader, mcp__novel-db__character_detail, mcp__novel-db__character_update, mcp__novel-db__character_increment, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_upsert, mcp__novel-db__character_create, mcp__novel-db__relation_create, mcp__novel-db__consistency_guard, mcp__memory__memory_store, mcp__memory__memory_search
 lifecycle: core
 ---
 
@@ -100,49 +100,48 @@ query: 你是 {Agent 角色} Agent。请读取 .claude/skills/novel-chapter-writ
 N. 按 {agent-file}.md 中定义的输出格式产出结果
 ```
 
-## Step 0: 断点检测
+## Step 0: 断点检测 + 数据一致性校验
 
 检查目标章节文件 `novels/{小说名}/正文/第{NNN}章-{标题}.md` 是否已存在：
 - **文件存在且内容完整** → 提示「第 N 章已完成，是否写第 N+1 章？」
 - **文件不存在** → 进入 Step 1
 - **断点续传**：通过 Memory 搜索 `flow-state` 恢复上次中断位置
 
+**数据一致性校验（强制）**：
+```python
+# 校验 DB 与文件一致性，不一致自动同步
+consistency_guard(novel_id, auto_sync=True)
+# 返回 synced_count > 0 时，提示用户哪些数据被同步了
+```
+
 ## Step 1: 编排器采集原始数据
 
-### 1.1 加载卷级事件大纲（新增）
+### 1.1 加载卷级大纲
 
 ```python
 # 读取 novel-planner-volume 输出
-Read("novels/{小说名}/设定/章节大纲/V{卷号}-{卷名}-事件大纲.md")
+Read("novels/{小说名}/设定/大纲/V{卷号}-{卷名}.md")
 # 提取本章信息：核心事件/参与角色/微事件/伏笔操作/声音适配标记
 ```
 
-### 1.2 调用 MCP 工具
+### 1.2 调用聚合 MCP（一次调用获取全部上下文）
 
 ```
-writing_start(novel_id, chapter_number) → writing_prompt
-volume_get(volume_id) → 卷级规划
-character_detail(id) → 每个出场人物的深度信息
-relation_list(novel_id) → 人物关系
-foreshadow_list(novel_id, status="planted") → 未回收伏笔
-world_query(novel_id, category="location") → 场景地点
-world_query(novel_id, category="faction") → 势力信息
-world_query(novel_id, category="ability") → 能力/物品信息
-world_query(novel_id, category="economy") → 经济体系
-world_query(novel_id, category="daily_life") → 日常生活
-timeline_query(novel_id, from_chapter=N-3) → 时间线
+get_chapter_context(novel_id, chapter_number) → 全部写作上下文
 ```
 
-**世界观数据加载原则**：正文生成必须基于DB中的世界观数据。`world_query` 是正文生成的数据源——大纲阶段通过 `novel-planner-volume` 同步到DB的世界观数据，正文阶段通过 `world_query` 读取。如果 `world_query` 返回空，说明大纲阶段未同步，编排器应回退读取设定文件。
+**一次调用返回**：章节信息 + 卷级大纲 + 前3章摘要 + 全部角色深度信息（外观/性格/说话风格/能力/状态/关系）+ 未回收伏笔 + 活跃线索 + 世界观全分类数据 + 人物关系 + 时间线 + 质量历史 + 写作提示词（含规则+作者DNA）
 
-### 1.3 加载已注册世界元素（新增）
+**无需再单独调用**：~~writing_start~~ / ~~volume_get~~ / ~~foreshadow_list~~ / ~~character_detail~~ / ~~relation_list~~ / ~~world_query~~ / ~~timeline_query~~ — 全部已聚合。
+
+**如 world_settings 某分类为空**：说明大纲阶段未同步到DB，编排器回退读取设定文件。
+
+将所有数据保存到临时文件，传递给 Agent 1：
 
 ```python
-Read("novels/{小说名}/设定/世界元素/索引.md")
-# 提取本章涉及的世界元素定义
+# 编排器将聚合数据保存到临时文件（不注入 prompt，节省编排器上下文）
+Write("novels/{小说名}/.tmp/ch{N}-raw-data.md", raw_data)
 ```
-
-将所有数据整理为一段完整文本（raw_data），传递给 Agent 1。
 
 **raw_data 必须包含**：
 - 本章核心事件（来自卷级事件大纲）
@@ -161,8 +160,7 @@ query: 你是 Context Curator Agent。请读取 .claude/skills/novel-chapter-wri
 
 你的任务：接收以下原始数据，清洗、压缩、结构化，产出干净的上下文包。
 
-原始数据：
-{raw_data}
+原始数据文件：novels/{小说名}/.tmp/ch{N}-raw-data.md（请用 Read 工具读取）
 
 要求：
 1. 人物档案压缩到 200 字以内，只保留本章需要的信息
@@ -172,9 +170,14 @@ query: 你是 Context Curator Agent。请读取 .claude/skills/novel-chapter-wri
 5. 不创作、不添加原始数据中不存在的信息
 ```
 
-Agent 1 返回 → **上下文包**（context_package）
+Agent 1 返回 → 编排器验证必填字段 → **保存到临时文件**：
 
-如果 Agent 1 标注了缺口，编排器补充查询 MCP 后更新上下文包。
+```python
+# 编排器验证后保存，不保留全文在上下文中
+Write("novels/{小说名}/.tmp/ch{N}-context-package.md", context_package)
+```
+
+如果 Agent 1 标注了缺口，编排器补充查询 MCP 后更新临时文件。
 
 ## Step 3: 启动 Agent 2 — Creative Director
 
@@ -187,17 +190,16 @@ query: 你是 Creative Director Agent。请读取 .claude/skills/novel-chapter-w
 
 你的任务：基于上下文包，做出本章全部创意决策，产出创意蓝图。
 
-上下文包：
-{context_package}
+上下文包文件：novels/{小说名}/.tmp/ch{N}-context-package.md（请用 Read 工具读取）
 
 阶段指令（已加载）：
 {phase_instruction}
 
-引擎指令（按需加载）：
-- 环境设计: skill_loader("novel-chapter-writer", "engine", "environment")
-- 对话设计: skill_loader("novel-chapter-writer", "engine", "dialogue")
-- 动作设计: skill_loader("novel-chapter-writer", "engine", "action")
-- 因果链: skill_loader("novel-chapter-writer", "engine", "causality")
+引擎指令（编排器已通过 skill_loader 预加载并注入你的上下文）：
+- 环境设计: engines/environment.md
+- 对话设计: engines/dialogue.md
+- 动作设计: engines/action.md
+- 因果链: engines/causality.md
 
 要求：
 1. 确认事件因果链完整性
@@ -211,7 +213,7 @@ query: 你是 Creative Director Agent。请读取 .claude/skills/novel-chapter-w
 9. 按 creative-director.md 中定义的输出格式产出创意蓝图（含已创建实体 ID）
 ```
 
-Agent 2 返回 → **创意蓝图**（creative_blueprint）
+Agent 2 返回 → 编排器验证必填字段 → **创意蓝图已由 Agent 2 保存到文件**，编排器只提取元数据（已创建实体ID、伏笔操作摘要）用于 Step 6。
 
 ## Step 4: 启动 Agent 3 — Engine Coordinator
 
@@ -224,14 +226,14 @@ query: 你是 Engine Coordinator Agent。请读取 .claude/skills/novel-chapter-
 
 你的任务：基于创意蓝图，判断场面类型，加载对应引擎文件，产出引擎指令包。
 
-创意蓝图：
-{creative_blueprint}
+创意蓝图文件：novels/{小说名}/创意决策/Ch{N}-创意蓝图.md（请用 Read 工具读取）
 
 你需要读取的文件（使用 Read 工具）：
-- SENTENCE-PATTERNS.md（项目根目录）
-- .claude/skills/writing-constraints.md
-- .claude/skills/novel-writer/references/writing-style.md
+- .claude/skills/engines/anti-ai-quickref.md（反AI指纹速查卡，替代全量SENTENCE-PATTERNS.md）
+- .claude/skills/engines/writing-style.md
 - 根据场面类型，按 engine-coordinator.md 的步骤 2 加载对应引擎文件
+
+注意：writing-constraints.md 的规则已由编排器通过 get_chapter_context 注入，无需重复读取。
 
 要求：
 1. 判定每个场面的主导类型
@@ -242,7 +244,11 @@ query: 你是 Engine Coordinator Agent。请读取 .claude/skills/novel-chapter-
 6. 按 engine-coordinator.md 中定义的输出格式产出引擎指令包
 ```
 
-Agent 3 返回 → **引擎指令包**（engine_package）
+Agent 3 返回 → 编排器验证必填字段 → **保存到临时文件**：
+
+```python
+Write("novels/{小说名}/.tmp/ch{N}-engine-package.md", engine_package)
+```
 
 ## Step 5: 启动 Agent 4 — Text Generator
 
@@ -255,11 +261,8 @@ query: 你是 Text Generator Agent。请读取 .claude/skills/novel-chapter-writ
 
 你的任务：基于创意蓝图和引擎指令包，逐场面生成章节正文。
 
-创意蓝图：
-{creative_blueprint}
-
-引擎指令包：
-{engine_package}
+创意蓝图文件：novels/{小说名}/创意决策/Ch{N}-创意蓝图.md（请用 Read 工具读取）
+引擎指令包文件：novels/{小说名}/.tmp/ch{N}-engine-package.md（请用 Read 工具读取）
 
 要求：
 1. 写前确认所有信息就绪（角色矩阵/感官分配/反AI指令/硬约束/微事件/伏笔）
@@ -293,13 +296,72 @@ writing_finish(
 
 > 注意：此处 `self_check` 是 Agent 4 的自检报告，不是 novel-qa 的独立审计。
 
+### 6.1.1 更新角色状态快照（强制）
+
+每章写完后，必须用 `character_increment` 增量更新出场角色的状态：
+
+```python
+for character in involved_characters:
+    character_increment(
+        novel_id=novel_id,
+        character_name=character.name,
+        snapshot_update=json.dumps({
+            "identity": character.new_identity,
+            "ability": character.new_ability_state,
+            "goal": character.new_goal,
+            "knows": character.new_knowledge,
+            "doesnt_know": character.new_unknowns,
+            "relationships": character.relationship_changes
+        }),
+        growth_add=json.dumps({
+            "volume": current_volume,
+            "chapter": chapter_number,
+            "changes": character.changes_this_chapter,
+            "trigger": character.trigger_event
+        })
+    )
+```
+
 ### 6.2 存盘
 
 正文写入 `novels/{小说名}/正文/第{NNN}章-{标题}.md`。
 
 **正文纯净化**：正文文件禁止包含注释、统计、审计备注等非正文内容。只写入 Agent 4 输出的正文部分（分隔线 `---` 之前的内容）。
 
-### 6.3 移交审计（新增）
+### 6.3 新实体同步到设定文件（强制 — 数据一致性铁律）
+
+Agent 2 在创意决策中可能通过 MCP 创建了新实体（DB 已有），编排器**必须**将这些新实体同步写入对应的设定文件：
+
+```python
+# 从创意蓝图的"已创建的实体"部分提取
+for character in blueprint.new_characters:
+    # 追加到 角色总览.md
+    append_to("novels/{小说名}/设定/角色总览.md", character_summary)
+
+for location in blueprint.new_locations:
+    # 追加到 地图.md
+    append_to("novels/{小说名}/设定/地图.md", location_summary)
+
+for item in blueprint.new_items:
+    # 追加到 物品.md
+    append_to("novels/{小说名}/设定/物品.md", item_summary)
+
+for faction in blueprint.new_factions:
+    # 追加到 世界观.md
+    append_to("novels/{小说名}/设定/世界观.md", faction_summary)
+```
+
+**禁止跳过此步骤**：如果 DB 有新实体但设定文件没有，下游 skill 读取文件时会缺失数据。
+
+### 6.4 清理临时文件
+
+```python
+# 删除本章临时文件（保留创意蓝图在 创意决策/ 目录）
+import shutil
+shutil.rmtree("novels/{小说名}/.tmp/", ignore_errors=True)
+```
+
+### 6.5 移交审计
 
 生成完成后，提示用户：
 ```

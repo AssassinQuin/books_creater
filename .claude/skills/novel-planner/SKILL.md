@@ -45,14 +45,14 @@ character_list(novel_id)     # 角色列表（含主角/反派/关键配角）
 volume_list(novel_id)        # 已有卷信息（如有）
 foreshadow_list(novel_id)    # 全局伏笔（如有）
 
-# 引擎加载（按步骤按需加载，编排器在启动对应Agent时传入）
+# 引擎加载（按步骤按需加载，编排器在启动对应Agent时通过 skill_loader 传入）
 # Step 1/2 需要：
-skill_loader("novel-planner", "engine", "causality")        # 因果逻辑大纲法 — Agent 1/2 必须用因果链约束全书
-skill_loader("novel-planner", "engine", "three-perspective") # 三视角框架 — Agent 2 用读者视角的爽点节奏标准
+skill_loader("novel-planner", "engine", "causality")
+skill_loader("novel-planner", "engine", "three-perspective")
 # Step 5 需要：
 skill_loader("novel-planner", "engine", "reader-perspective-agent")
 skill_loader("novel-planner", "engine", "author-perspective-agent")
-skill_parser("novel-planner", "engine", "character-perspective-agent")
+skill_loader("novel-planner", "engine", "character-perspective-agent")
 ```
 
 **强制原则**：以上引擎内容编排器在启动Agent时打包传入，Agent**必须使用**。因果逻辑法约束全书因果链，三视角框架约束爽点节奏。

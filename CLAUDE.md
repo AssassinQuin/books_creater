@@ -23,6 +23,69 @@ Three-layer data architecture:
 - **Memory MCP** (16 tools): Unstructured creative data — inspiration, writing experience, cross-project materials, anti-AI pattern blacklist. **必须先加载 memory skill 再调用任何 memory_memory_* 工具**。详见 [Memory Skill](#memory-integration)
 - **Git files**: Human-readable content — novel text, setting docs, review reports in `novels/{小说名}/`
 
+#### 数据一致性铁律：DB优先，文件为副本
+
+**核心原则**：同一数据在 DB 和文件中可能同时存在，但权威源只有一个。所有读取必须从权威源获取。
+
+| 数据类型 | 权威源 | 文件角色 | 写入规则 | 读取规则 |
+|---------|--------|---------|---------|---------|
+| 世界观/地点/物品/能力 | **DB** (`world_query`) | 人可读副本 (`设定/世界观.md` / `地图.md` / `物品.md`) | 先写 DB，再写文件 | `world_query()` 优先；返回空时回退读文件 |
+| 角色档案/关系 | **DB** (`character_detail` / `relation_list`) | 人可读副本 (`设定/人物/{名}.md` / `角色总览.md`) | 先写 DB，再写文件 | `character_detail()` 优先 |
+| 伏笔 | **DB** (`foreshadow_list`) | 人可读副本 (`设定/大纲/` 中伏笔清单) | 先写 DB，再写文件 | `foreshadow_list()` 优先 |
+| 卷级大纲（叙事内容） | **文件** (`设定/大纲/V{N}-{卷名}.md`) | 权威源 | 先写文件，再写 DB 摘要 | `Read()` 文件获取完整大纲；`volume_get()` 获取摘要 |
+| 章节规划（逐章大纲） | **文件** (`设定/大纲/V{N}-{卷名}.md`) | 权威源 | 先写文件，再写 DB 摘要 | `Read()` 文件获取完整大纲；`chapter_list()` 获取摘要 |
+| 章节正文 | **文件** (`正文/第{NNN}章-{标题}.md`) | 权威源 | 先写文件，再调 `writing_finish` 写 DB 元数据 | `Read()` 文件获取正文 |
+| 审计报告 | **文件** (`审阅报告/`) | 唯一源 | 只写文件 | 只读文件 |
+| 创意蓝图 | **文件** (`创意决策/Ch{N}-创意蓝图.md`) | 唯一源 | 只写文件（新实体 ID 记录在蓝图中） | 只读文件 |
+
+**双写执行顺序**：
+1. **DB 权威的数据**：`world_upsert` / `character_create` / `foreshadow_plant` → 确认成功 → 写文件
+2. **文件权威的数据**：`Write()` 文件 → 确认成功 → `volume_update` / `chapter_plan` / `writing_finish` 写 DB 摘要
+
+**禁止**：
+- 只写文件不写 DB（下游 skill 读 DB 会读到旧数据）
+- 只写 DB 不写文件（人无法审阅、git 无法追踪）
+- 修改一方后不同步另一方（数据漂移）
+
+**新增实体同步规则**（novel-chapter-writer Agent 2 创建的新实体）：
+- Agent 2 通过 MCP 直接创建新实体（character_create / world_upsert / foreshadow_plant）→ DB 已有
+- 编排器在 Step 6 存盘时，**必须将 Agent 2 创建的新实体同步写入设定文件**（`世界观.md` / `地图.md` / `物品.md` / `角色总览.md`）
+- 当前 SKILL.md Step 6 缺少此同步步骤，需补充
+
+**修订同步规则**（novel-reviser 修改正文后）：
+- 修订只改文件（Edit），不直接改 DB
+- 如果修订改变了角色状态/世界观/伏笔状态，编排器**必须**调 `character_update` / `world_upsert` / `foreshadow_recall` 同步 DB
+- 当前 novel-reviser SKILL.md 缺少 DB 同步步骤，需补充
+
+**自动一致性守卫**（`consistency_guard` MCP 工具）：
+- 每次写入 DB 时（`world_upsert` / `character_create` / `character_update` / `foreshadow_plant` / `foreshadow_recall`），自动计算并存储 DB 记录的 hash
+- 每次启动 skill 流程时（novel-chapter-writer Step 0 / novel-planner-volume Step 0），调用 `consistency_guard(novel_id, auto_sync=True)` 校验
+- 检测到 DB hash 变更 → 自动同步到文件（DB 权威数据）
+- 检测到文件 hash 变更 → 自动同步到 DB（文件权威数据）
+- 无需消耗 token 做手动同步，MCP 自动执行
+
+#### 文件结构规范：MD 标题 = DB 字段映射
+
+所有设定文件必须按标准结构书写，**二级标题对应 DB 字段**，`consistency_guard` 解析标题即可批量更新，无需理解内容。
+
+**模板权威源**：`.claude/skills/templates/` 目录，每个实体类型一个模板文件。所有 skill 创建/修改实体时必须遵守对应模板。
+
+| 实体类型 | 模板文件 | DB 表 | 权威源 |
+|---------|---------|-------|--------|
+| 人物 | `templates/character.md` | `characters` | DB |
+| 世界观 | `templates/world-setting.md` | `world_settings` | DB |
+| 人物关系 | `templates/relation.md` | `character_relations` | DB |
+| 伏笔 | `templates/foreshadow.md` | `foreshadows` | DB |
+| 卷级大纲 | `templates/volume.md` | `volumes` | 文件 |
+| 章节 | `templates/chapter.md` | `chapters` | 文件 |
+
+**规则**：
+- 文件中的 `## category: name` 格式对应 DB 的 `world_settings(category, name)`
+- 文件中的 `- **field**: value` 格式对应 DB 表的字段
+- `consistency_guard` 解析标题行即可定位 DB 记录，无需全文解析
+- 新增数据必须同时满足文件结构和 DB schema
+- 新增维度时：先在模板文件中追加定义 → DB 加列 → MCP 工具加参数 → skill 更新
+
 ### Chapter Writing: Multi-Agent Pipeline
 
 章节写作采用 **4 子 Agent 流水线**，每个 Agent 上下文干净、职责单一：
@@ -154,11 +217,13 @@ Priority on conflict: C3 > B2 > others.
 | 因果链 | `causality.md` | 因果逻辑校验 |
 | 快照 | `snapshot.md` | 场景/事件/人物快照 |
 | 加载协议 | `loading.md` | 三级上下文加载协议 |
-| 反AI | `anti-ai.md` / `anti-ai-patterns.md` | 反AI指纹消除 |
+| 反AI | `anti-ai.md` / `anti-ai-patterns.md` / `anti-ai-quickref.md` | 反AI指纹消除（quickref为写作时速查卡，替代全量SENTENCE-PATTERNS.md） |
 | 作者声音 | `author-voice.md` + 5个变体 | 作者声音三层架构（情感/日常/战斗/悬疑/视角） |
 | 三视角审查 | `three-perspective.md` + 3个agent文件 | 读者/作者/人物三视角剧情审查 |
 | 写作风格 | `writing-style.md` / `corpus-style.md` | 文体规范+语料风格 |
 | 世界观 | `worldbuilding.md` / `world-element-registry.md` | 世界观构建+元素注册 |
+
+> 所有引擎文件统一存放于 `.claude/skills/engines/`。references/ 目录仅保留非引擎参考材料（模板/示例/词库）。
 
 ### 作者声音系统
 

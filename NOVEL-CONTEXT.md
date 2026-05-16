@@ -89,7 +89,7 @@
 5. **item**: 物品全生命周期 + 一致性校验
 6. **snapshot**: 场景/事件/人物状态快照 + 增量更新
 
-**关系**: 引擎参考文档位于 `novel-writer/references/engine-*.md`，由 chapter-writer 在 Step 1-2 中按需加载。
+**关系**: 引擎参考文档统一位于 `engines/*.md`，由编排器通过 skill_loader 按需注入 Agent。
 
 ---
 

@@ -54,6 +54,14 @@ Step 3: 保存 → git commit
 
 ## Step 0: 增量检测与数据采集
 
+### 0.0 数据一致性校验（强制）
+
+```python
+# 校验 DB 与文件一致性，不一致自动同步
+consistency_guard(novel_id, auto_sync=True)
+# 返回 synced_count > 0 时，提示用户哪些数据被同步了
+```
+
 ### 0.1 增量检测（核心优化）
 
 ```python
@@ -103,13 +111,28 @@ Read("novels/{小说名}/设定/大纲/V{N}-{卷名}.md")
 character_list(novel_id)
 foreshadow_list(novel_id, status='planted')
 
-# 世界观（完整加载，不只是索引）
-Read("novels/{小说名}/设定/世界观.md")            # 完整世界观
-Read("novels/{小说名}/设定/地图.md")              # 地理信息（如有）
-Read("novels/{小说名}/设定/物品.md")              # 物品体系（如有）
-world_query(novel_id)                             # DB中的世界观条目
+# 世界观（DB权威源，一次调用获取全部）
+world_query(novel_id)
 
-# 引擎按步骤加载（编排器根据步骤标识调用 skill_loader，见各Step头部）
+# 引擎按步骤加载（编排器在启动对应Agent时通过 skill_loader 传入）
+# Step 1 需要：
+skill_loader("novel-planner-volume", "engine", "causality")
+skill_loader("novel-planner-volume", "engine", "relationship")
+# Step 2 需要：
+skill_loader("novel-planner-volume", "engine", "scene-type")
+skill_loader("novel-planner-volume", "engine", "scene-composition")
+skill_loader("novel-planner-volume", "engine", "author-voice")
+skill_loader("novel-planner-volume", "engine", "author-voice-emotion")
+skill_loader("novel-planner-volume", "engine", "author-voice-daily")
+skill_loader("novel-planner-volume", "engine", "author-voice-battle")
+skill_loader("novel-planner-volume", "engine", "author-voice-mystery")
+skill_loader("novel-planner-volume", "engine", "anti-ai-quickref")
+# Step 3 需要：
+skill_loader("novel-planner-volume", "engine", "reader-perspective-agent")
+skill_loader("novel-planner-volume", "engine", "author-perspective-agent")
+skill_loader("novel-planner-volume", "engine", "character-perspective-agent")
+# 共享约束（Step 1/2 都需要）：
+skill_loader("novel-planner-volume", "agent", "shared-constraints")
 ```
 
 **世界观加载原则**：大纲设计必须基于已有世界观。世界观是创作的边界，不是建议。
@@ -559,20 +582,32 @@ for foreshadow in foreshadows:
 
 # 4. 同步世界观（新增——确保正文生成时DB有完整数据）
 for location in new_locations:
-    world_upsert(novel_id, category='location', name=location.name, data={...})
+    world_upsert(novel_id, category='location', name=location.name, data={...},
+        keys=location.keys, tags=location.tags, volume_range=location.volume_range,
+        writing_guide=location.writing_guide)
 
 for item in new_items:
-    world_upsert(novel_id, category='ability', name=item.name, data={...})
+    world_upsert(novel_id, category='ability', name=item.name, data={...},
+        keys=item.keys, tags=item.tags, volume_range=item.volume_range)
 
 for character in new_characters:
-    character_create(novel_id, name=character.name, ...)
+    character_create(novel_id, name=character.name, ...,
+        appearance_detail=character.appearance_detail,
+        decision_engine=character.decision_engine,
+        voice_fingerprint=character.voice_fingerprint,
+        behavior_pattern=character.behavior_pattern,
+        current_snapshot=character.current_snapshot)
 
 for faction in new_factions:
-    world_upsert(novel_id, category='faction', name=faction.name, data={...})
+    world_upsert(novel_id, category='faction', name=faction.name, data={...},
+        keys=faction.keys, tags=faction.tags, volume_range=faction.volume_range,
+        writing_guide=faction.writing_guide)
 
 # 5. 更新已有角色状态（如有变化）
 for character in changed_characters:
-    character_update(character_id, status=character.new_status, ...)
+    character_update(character_id, status=character.new_status, ...,
+        current_snapshot=character.current_snapshot,
+        growth_trajectory=character.growth_trajectory)
 
 # 6. 创建人物关系（如有新关系）
 for relation in new_relations:
@@ -606,7 +641,7 @@ B1: V{N}《{卷名}》卷级大纲{变更描述}
 | 完整对话撰写 | 大纲只留全书级核心句（≤3句），其余对话留给正文 | novel-chapter-writer (Agent 4 Text Generator) | `engines/dialogue.md` 对话系统 |
 | 反AI指纹检测 | 正文生成后通过 validate_chapter 做硬约束校验 | novel-chapter-writer + `SENTENCE-PATTERNS.md` | `engines/anti-ai.md` + `engines/anti-ai-patterns.md` |
 
-**本层新增职责**（V2优化后）：
+**本层扩展职责**：
 | 新增职责 | 原因 | 参考引擎 |
 |---------|------|---------|
 | 费笔配额设计 | 费笔事件需要在因果链中有位置，不能正文时临时塞。大纲阶段规划"谁在哪里做了什么日常" | — |

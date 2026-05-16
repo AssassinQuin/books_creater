@@ -10,6 +10,19 @@
 
 编排器会传递 Agent 1 产出的**上下文包**（格式见 context-curator.md 输出格式）。
 
+### 强制加载引擎（编排器已通过 skill_loader 预加载并注入）
+
+| 引擎 | 用途 | 在输出中体现为 |
+|------|------|--------------|
+| `engines/causality.md` | 因果链确认——每个事件必须有前因→后果→逼出选择 | 因果链确认部分逐事件验证 |
+| `engines/environment.md` | 环境设计——场面时间/地点/感官基线 | 场面设计中的地点/环境要素 |
+| `engines/dialogue.md` | 对话设计——说话人档案/弦外之音/微表情 | 场面中的对话指令 |
+| `engines/action.md` | 动作设计——动作链5拍 | 场面中的动作指令 |
+| `engines/scene-composition.md` | 场面密度分级+角色矩阵 | 场面密度+角色矩阵设计 |
+| `engines/author-voice.md` | 作者声音指纹 | 声音适配（由编排器按场面类型注入变体） |
+
+**编排器已将以上引擎内容预加载。直接使用，不得忽略。**
+
 ## 处理步骤
 
 ### 步骤 1：事件因果链确认
@@ -47,15 +60,10 @@
 - 预计字数: {字数范围}
 ```
 
-**场面密度约束**（来自写作约束系统）：
-| 密度 | 人物 | 字数 | 章内占比 |
-|------|------|------|---------|
-| 轻量 | 1-2人 | 500-800 | 15-20% |
-| 中量 | 2-3人 | 800-1500 | 30-40% |
-| 重量 | 3-5人 | 1500-2500 | 30-40% |
-| 大场面 | 5+人 | 2500-3500 | 可占整章 |
+**场面密度约束**（来自 engines/scene-composition.md，编排器已注入）：
+按轻量/中量/重量/大场面分级，具体数值见 scene-composition.md 密度表。
 
-**硬约束**：每章至少 1 个中量以上场面。连续 2 个轻量后必须接中量或重量。
+**硬约束**：遵守编排器注入的 shared-constraints.md 规则。
 
 ### 步骤 3：叙事节奏设计
 
@@ -98,7 +106,12 @@ mcp__novel-db__character_create(
   goals={当前目标},
   weaknesses={弱点/缺陷},
   catchphrase={口头禅，没有则留空},
-  first_appearance_chapter={N}
+  first_appearance_chapter={N},
+  appearance_detail={JSON: gender/body/face/hair/skin/clothing_daily/clothing_battle/signature_features},
+  decision_engine={JSON: core_conflict/rules/scene_decisions},
+  voice_fingerprint={JSON: tone/pace/habits/relation_adjustments/micro_expressions},
+  behavior_pattern={JSON: core_drive/how_to_write/emotion_writing/wont_say},
+  current_snapshot={JSON: identity/ability/goal/knows/doesnt_know}
 )
 ```
 
@@ -129,7 +142,11 @@ mcp__novel-db__world_upsert(
     所属势力: {faction 名称或"中立"},
     功能: {聚居点/交易站/废墟/灵站/野外/秘境...},
     特色: {1-2 个令人印象深刻的特征}
-  }
+  },
+  keys=["{关键词1}", "{关键词2}"],
+  tags=["location", "{标签}"],
+  volume_range="V{N}-V{M}",
+  writing_guide="{写作时如何描写这个地点}"
 )
 ```
 
@@ -148,7 +165,10 @@ mcp__novel-db__world_upsert(
     使用限制: {次数限制/副作用/使用条件},
     归属: {属于谁},
     首次出场: Ch{N}
-  }
+  },
+  keys=["{关键词1}"],
+  tags=["ability", "{标签}"],
+  volume_range="V{N}-V{M}"
 )
 ```
 
@@ -165,7 +185,11 @@ mcp__novel-db__world_upsert(
     与主角关系: {敌对/友好/中立/雇佣/交易},
     标志特征: {视觉标志/行为特征/口号},
     首次出场: Ch{N}
-  }
+  },
+  keys=["{关键词1}", "{关键词2}"],
+  tags=["faction", "{标签}"],
+  volume_range="V{N}-V{M}",
+  writing_guide="{写作时如何展现这个势力}"
 )
 ```
 
