@@ -37,3 +37,4 @@ timestamp	commit	skill	old_score	new_score	status	dimension	note	eval_mode
 2026-05-16T16:00:00+08:00	dc59fee	engines(全局)	-	-	keep	质量+职责明确	three-perspective合并(-65行)+anti-ai交叉引用+scene/review边界+补丁写法消除	dry_run
 2026-05-16T18:32:12+0800	b5bfac1d60c488ffcd2812a47934685739a9082a	novel-character	82.3	87.6	keep	探索性重写(Phase2.5): 全维度	修复7步列表矛盾+统一结构+添加新建人物检查点+边界条件完善+核心/NPC分级	dry_run
 2026-05-16T18:33:29+0800	862002d16b9253a4deff7c4c695edc8e6e023ce8	engines(character-design)	-	-	keep	资源整合度	废弃旧4步蒸馏法→7步统一	full_test
+2026-05-16T20:53:22+0800	6e48afb	abilitycraft	37.5	77.7	keep	探索性重写(Phase2.5): 全维度	六步法+三视角命名+4根隐喻+七势力命名母体+🔒检查点×5+边界条件×8+质量检查×11+命名速查卡+案例库	full_test

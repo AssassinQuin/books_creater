@@ -24,7 +24,7 @@
 ### 1. 人物能力设定方案.md → novel-character skill
 
 **迁移内容**: 能力体系设计规范、七阶等级、能力类型、代价设计原则
-**迁移到**: `.claude/skills/novel-character/references/ability-system.md`
+**迁移到**: `.claude/skills/abilitycraft/SKILL.md`（能力设计） + `.claude/skills/engines/ability.md`（能力描写）
 **原因**: 能力设计是人物系统的核心环节，应在skill中统一规范
 **原文件状态**: 保留作为项目历史参考，但不再主动维护
 **加载方式**: 写作时通过动态加载协议 Tier 3 自动引用
@@ -82,7 +82,7 @@
 **答案**: `角色深化.md` → `## 态度追踪与能力弧线`
 
 ### 我要查能力体系规则 → 看哪里？
-**答案**: `.claude/skills/novel-character/references/ability-system.md`
+**答案**: `.claude/skills/abilitycraft/SKILL.md`（能力设计方法论） + `.claude/skills/engines/ability.md`（能力描写规范）
 
 ### 我要查受伤恢复规则 → 看哪里？
 **答案**: `.claude/skills/novel-chapter-writer/references/engine-status.md`
