@@ -250,7 +250,7 @@
 
 ### 动态状态（Dynamic State）
 
-用 `character_update(_status_json=...)` 维护 JSON 状态，结构如下：
+用 `character_update_by_name(novel_name="这次不一样了", character_name={character_name}, _status_json=...)` 维护 JSON 状态，结构如下：
 
 ```json
 {
@@ -475,8 +475,8 @@ A3 人物设计
 │
 ├── 3. 写入 novel-db
 │   ├── character_create(novel_name="这次不一样了", name, role, personality, speech_style, ...)
-│   ├── character_update(_status_json={动态状态JSON})
-│   └── relation_create(novel_name="这次不一样了", from, to, type, intensity, description)
+│   ├── character_update_by_name(novel_name="这次不一样了", character_name={character_name}, _status_json={动态状态JSON})
+│   └── relation_create_by_name(novel_name="这次不一样了", from_name={from}, to_name={to}, relation_type={type}, intensity={intensity}, description={description})
 │
 ├── 4. 质量验证
 │   ├── 质量检查清单（8条）

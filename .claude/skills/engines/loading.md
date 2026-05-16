@@ -14,7 +14,7 @@
 
 ```yaml
 1. 卷级大纲:
-   工具: volume_get({volume_id})
+   工具: volume_get_by_number(novel_name="这次不一样了", number={volume_number})
    提取: 卷标题 + main_plotlines + notes
    目的: 知道当前卷在写什么
 
@@ -24,7 +24,7 @@
    目的: 核心上下文，一次性获取
 
 3. 活跃人物档案:
-   工具: character_get({id}) 对每个出场人物
+   工具: character_get_by_name(novel_name="这次不一样了", character_name={name}) 对每个出场人物
    提取字段:
      - name, gender, appearance, personality
      - speech_style, catchphrase

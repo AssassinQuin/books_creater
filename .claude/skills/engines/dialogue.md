@@ -23,7 +23,7 @@
 写对话前，对每个开口的角色执行：
 
 ```
-1. character_get({character_id}) → 提取:
+1. character_get_by_name(novel_name="这次不一样了", character_name={character_name}) → 提取:
    - speech_style: 句式节奏(短句/长句/碎句/正式)
    - catchphrase: 口头禅
    - personality: 核心性格（影响语气）

@@ -191,7 +191,7 @@ Priority on conflict: C3 > B2 > others.
 | ~~`character_detail(id)`~~ | ~~已废弃~~被 `get_chapter_context` 替代 | 不再单独调用 |
 | `validate_chapter(chapter_text)` | 写后硬约束校验（标点密度/否定句式/字数/创作原则） | 编排器 Step 6 强制 |
 | `writing_finish(chapter_id, ...)` | 写作后状态更新（摘要+事件+伏笔+时间线+维度） | 编排器 Step 6 强制，不可跳过 |
-| `health_check(novel_id)` | 健康诊断（伏笔积压/配角活跃/升级节奏/日常密度/暗线推进/卷完成度） | C2 诊断时 |
+| `health_check(novel_name="这次不一样了")` | 健康诊断（伏笔积压/配角活跃/升级节奏/日常密度/暗线推进/卷完成度） | C2 诊断时 |
 
 ### Multi-Agent Pipeline 子 Agent 指令
 

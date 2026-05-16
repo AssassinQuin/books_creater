@@ -226,7 +226,7 @@ novels/{小说名}/设定/大纲/
 ```python
 # 卷级目标 → volume_update
 for card in volume_target_cards:
-    volume_update(card.volume_id, main_plotlines=card.targets)
+    volume_update_by_number(novel_name="这次不一样了", number=card.volume_id, main_plotlines=card.targets)
 
 # 伏笔 → foreshadow_plant
 for f in cross_volume_foreshadows:

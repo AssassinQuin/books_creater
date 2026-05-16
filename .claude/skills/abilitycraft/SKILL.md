@@ -128,7 +128,7 @@ Step 1: 经历回溯 → 输出一句"他的能力来自______"
 Step 2: 来源+机制 → 输出能力卡片（来源+机制+3条约束+成长线+定位）
 Step 3: 🔒 代价设计 → 代价必须5项检查全通过（无抽象词）
 Step 4: 🔒 命名+多样性 → 自述名+登记名+外号，6项多样性检查
-Step 5: 写入DB → character_update(ability_system=JSON)，同步写文件
+Step 5: 写入DB → character_update_by_name(novel_name="这次不一样了", character_name={character_name}, ability_system=JSON)，同步写文件
 Step 6: 🔒 质量检查 → 11项清单全通过
 ```
 

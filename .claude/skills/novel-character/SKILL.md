@@ -11,7 +11,7 @@ lifecycle: core
 
 **DB优先**：人物数据权威源在 DB（`characters` 表）。文件为可读副本。
 - 新建：先 `character_create` 写入 DB，再写文件
-- 修改：先 `character_detail(id)` 读取 DB 完整数据，再改文件，再 `character_update` + `consistency_guard` 同步
+- 修改：先 `character_detail_by_name(novel_name="这次不一样了", character_name={name})` 读取 DB 完整数据，再改文件，再 `character_update` + `consistency_guard` 同步
 
 **禁止补丁式说明**：直接写"是什么"，不写"不是什么"。
 
@@ -24,7 +24,7 @@ lifecycle: core
 ```
 Phase 1: 数据采集（DB优先）
   world_query(novel, category='race') + character_list → 避免重名
-  如有参照角色 → character_detail(id) 获取完整档案
+  如有参照角色 → character_detail_by_name(novel_name="这次不一样了", character_name={name}) 获取完整档案
   ↓
 Phase 2: 角色蒸馏7步
   萃取→深度(含弧线+原型)→洋葱→矛盾注入→共情细节→定标→锻造
@@ -42,7 +42,7 @@ Phase 4: 写入DB + 文件同步
 
 ```
 Phase 1: 数据采集（DB优先）
-  character_detail(id) + world_query(novel) + relation_list(novel)
+  character_detail_by_name(novel_name="这次不一样了", character_name={name}) + world_query(novel) + relation_list(novel)
   Read 相关卷大纲/章节 → 了解出场场景
   如有伏笔 → foreshadow_list(character_id=id)
   ↓
@@ -58,7 +58,7 @@ Phase 4: 用户确认修改结果
   展示改了什么+为什么+影响范围
   ↓
 Phase 5: 同步DB
-  character_update(id, 变更字段...) → relation_update → consistency_guard(auto_sync)
+  character_update_by_name(novel_name="这次不一样了", character_name={name}, 变更字段...) → relation_update → consistency_guard(auto_sync)
 ```
 
 </what-to-do>

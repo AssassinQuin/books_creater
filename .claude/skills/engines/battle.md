@@ -15,7 +15,7 @@ Step 1 战斗设计 → Step 2 分镜脚本 → Step 3 写正文 → Step 4 审�
 
 ## Step 1: 战斗设计
 
-- **角色读取**: `character_get(id)` 获取POV状态/能力
+- **角色读取**: `character_get_by_name(novel_name="这次不一样了", character_name={name})` 获取POV状态/能力
 - **战场环境**: 位置+元素+5感
 - **异兽行为**: 每种≥1独特行为+弱点+攻击方式
 - **燃点**: 绝地反击/团队配合/能力觉醒/代价高光/环境杀。每场≥1个，绑定角色情感
@@ -50,7 +50,7 @@ Step 1 战斗设计 → Step 2 分镜脚本 → Step 3 写正文 → Step 4 审�
 - 实时代价（受伤/消耗/环境破坏实时体现）
 - 20%细节法则（80%常规动作略写，20%关键击详写）
 
-战后同步：`character_update(status)` + `world_upsert`
+战后同步：`character_update_by_name(novel_name="这次不一样了", character_name={name}, status=...)` + `world_upsert`
 
 ## Step 4: 八维度审计
 

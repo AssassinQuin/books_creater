@@ -577,7 +577,7 @@ novels/{小说名}/审阅报告/V{N}-卷级审计.md          # 审计结果持�
 ### DB保存（强制——为正文生成提供数据支撑）
 ```python
 # 1. 更新卷级信息
-volume_update(volume_id, main_plotlines=[...], notes="...")
+volume_update_by_number(novel_name="这次不一样了", number={volume_number}, main_plotlines=[...], notes="...")
 
 # 2. 规划章节（每章一条）
 for chapter in chapters:
@@ -612,13 +612,13 @@ for faction in new_factions:
 
 # 5. 更新已有角色状态（如有变化）
 for character in changed_characters:
-    character_update(character_id, status=character.new_status, ...,
+    character_update_by_name(novel_name="这次不一样了", character_name={character_name}, status=character.new_status, ...,
         current_snapshot=character.current_snapshot,
         growth_trajectory=character.growth_trajectory)
 
 # 6. 创建人物关系（如有新关系）
 for relation in new_relations:
-    relation_create(novel_name="这次不一样了", from_character_id, to_character_id, relation_type, ...)
+    relation_create_by_name(novel_name="这次不一样了", from_name={from_name}, to_name={to_name}, relation_type=..., ...)
 
 # 7. 注册暗线/支线（新增——确保 get_chapter_context 能读到活跃线索）
 for thread in volume_threads:

@@ -74,7 +74,7 @@
   能力状态: {能力进展/副作用/新发现}
 ```
 
-**存储**: 通过 `character_update(_status_json={JSON字符串})` 写入DB。下游skill用 `character_get` 读取。
+**存储**: 通过 `character_update_by_name(novel_name="这次不一样了", character_name={character_name}, _status_json={JSON字符串})` 写入DB。下游skill用 `character_get_by_name` 读取。
 
 ---
 

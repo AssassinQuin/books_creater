@@ -149,8 +149,9 @@
 
 ```python
 # 受伤同步
-character_update(
-    character_id=id,
+character_update_by_name(
+    novel_name="这次不一样了",
+    character_name={character_name},
     status={
         "injuries": [...],  # 完整数组，包含新旧伤
         "inventory": "...",  # 更新后的物品清单

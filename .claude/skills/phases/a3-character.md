@@ -54,8 +54,8 @@
 
 ```python
 character_create(novel_name="这次不一样了", name, role, appearance, speech_style, ...)
-character_update(id, ability_level, status, ...)
-relation_create(novel_name="这次不一样了", from_id, to_id, relation_type, ...)
+character_update_by_name(novel_name="这次不一样了", character_name={name}, ability_level=..., status=...)
+relation_create_by_name(novel_name="这次不一样了", from_name={from_name}, to_name={to_name}, relation_type={relation_type}, ...)
 ```
 
 ## 输出

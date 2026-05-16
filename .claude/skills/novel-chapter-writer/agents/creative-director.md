@@ -95,7 +95,7 @@
 
 ```
 mcp__novel-db__character_create(
-  novel_id={novel_id},
+  novel_name="这次不一样了",
   name={姓名},
   role={protagonist/ally/antagonist/mentor/rival/love_interest/npc},
   appearance={外貌——必须包含 身高/体型/发色/眼色/标志性特征/衣着风格},
@@ -115,13 +115,13 @@ mcp__novel-db__character_create(
 )
 ```
 
-创建成功后，记录返回的 `character_id`。如果有与现有角色的关系，立即调用 `relation_create`：
+创建成功后，记录返回的 `character_id`。如果有与现有角色的关系，立即调用 `relation_create_by_name`：
 
 ```
-mcp__novel-db__relation_create(
-  novel_id={novel_id},
-  from_character_id={新人物ID},
-  to_character_id={现有角色ID},
+mcp__novel-db__relation_create_by_name(
+  novel_name="这次不一样了",
+  from_name={新人物名},
+  to_name={现有角色名},
   relation_type={ally/enemy/mentor/lover/family/rival/subordinate},
   description={关系描述},
   chapter_established={N}
@@ -132,7 +132,7 @@ mcp__novel-db__relation_create(
 
 ```
 mcp__novel-db__world_upsert(
-  novel_id={novel_id},
+  novel_name="这次不一样了",
   category="location",
   name={地点名},
   data={
@@ -154,7 +154,7 @@ mcp__novel-db__world_upsert(
 
 ```
 mcp__novel-db__world_upsert(
-  novel_id={novel_id},
+  novel_name="这次不一样了",
   category="ability",  # 或 "economy"
   name={物品名},
   data={
@@ -176,7 +176,7 @@ mcp__novel-db__world_upsert(
 
 ```
 mcp__novel-db__world_upsert(
-  novel_id={novel_id},
+  novel_name="这次不一样了",
   category="faction",
   name={势力名},
   data={
@@ -197,7 +197,7 @@ mcp__novel-db__world_upsert(
 
 ```
 mcp__novel-db__foreshadow_plant(
-  novel_id={novel_id},
+  novel_name="这次不一样了",
   description={具体描述},
   importance={high/medium/low},
   planted_chapter_id={当前章节ID},
