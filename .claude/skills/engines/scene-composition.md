@@ -1,10 +1,9 @@
 # 场面生成引擎 — 复杂场面写作策略
 
-> **定位**：填补 scene-type-guide.md（单一场景类型）和 battle-writer（战斗分镜）之间的空白。
+> **定位**：场面密度分级（轻/中/重/大场面）+ 多人场景动力学 + 注意力分配规则。
 > 解决的核心问题：多人物同场、多事件并发、对话/日常/心理场景的镜头语言、有机场景流。
+> **配合文件**: 场景类型基础 →见 [scene-type.md](./scene-type.md)；场景深化 →见 [scene-deepening.md](./scene-deepening.md)
 > 通用写作风格标准 →见 [writing-style.md](./writing-style.md)
-> 场景类型基础 →见 [scene-type-guide.md](./scene-type-guide.md)
-> 完整模板示例 →见 `reference-scene-templates.md`
 
 ---
 

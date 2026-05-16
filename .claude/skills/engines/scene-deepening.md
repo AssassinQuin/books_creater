@@ -1,6 +1,7 @@
 # 场景深化指南（反注水）
 
-> 核心原则：扩写≠加字数。扩写=给已有内容加更多层次和意义（deepening），不是停留在表面重复（padding）。
+> **定位**：场景写完后怎么丰富不注水——给层次+意义+深度，不是加字。
+> **配合文件**: 先定类型 → `scene-type.md`；再定密度 → `scene-composition.md`；最后深化 → 本文件。三步递进。
 > 具体案例见 `reference-deepening-examples.md`
 
 ---
