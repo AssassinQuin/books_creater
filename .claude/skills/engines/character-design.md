@@ -496,9 +496,9 @@ A3 人物设计
 │   └── 锻造：语音画像 + 示例对话
 │
 ├── 3. 写入 novel-db
-│   ├── character_create(name, role, personality, speech_style, ...)
+│   ├── character_create(novel_name="这次不一样了", name, role, personality, speech_style, ...)
 │   ├── character_update(_status_json={动态状态JSON})
-│   └── relation_create(from, to, type, intensity, description)
+│   └── relation_create(novel_name="这次不一样了", from, to, type, intensity, description)
 │
 ├── 4. 质量验证
 │   ├── 质量检查清单（8条）

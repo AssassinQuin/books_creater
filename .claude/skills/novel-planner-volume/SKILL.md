@@ -58,7 +58,7 @@ Step 3: 保存 → git commit
 
 ```python
 # 校验 DB 与文件一致性，不一致自动同步
-consistency_guard(novel_id, auto_sync=True)
+consistency_guard(novel_name="这次不一样了", auto_sync=True)
 # 返回 synced_count > 0 时，提示用户哪些数据被同步了
 ```
 
@@ -108,11 +108,11 @@ Read("novels/{小说名}/设定/大纲/跨卷因果链.md")    # 跨卷因果
 Read("novels/{小说名}/设定/大纲/V{N}-{卷名}.md")
 
 # 角色与伏笔（轻量）
-character_list(novel_id)
-foreshadow_list(novel_id, status='planted')
+character_list(novel_name="这次不一样了")
+foreshadow_list(novel_name="这次不一样了", status='planted')
 
 # 世界观（DB权威源，一次调用获取全部）
-world_query(novel_id)
+world_query(novel_name="这次不一样了")
 
 # 引擎按步骤加载（编排器在启动对应Agent时通过 skill_loader 传入）
 # Step 1 需要：
@@ -221,11 +221,11 @@ Agent 核心方法论见 `agents/event-architect.md`（已集成 causality.md �
 如果事件架构师在设计中引入了**世界观中不存在的新实体**（新物品、新地点、新NPC、新能力、新概念等），编排器必须：
 
 1. **列出所有新实体**：名称+类型+用途+为什么需要新增（参考 world-element-registry.md 的元素分类框架）
-2. **查重**：对照 `world_query(novel_id)` 和已有设定文件确认不重复
+2. **查重**：对照 `world_query(novel_name="这次不一样了")` 和已有设定文件确认不重复
 3. **暂停等用户确认**：用户说"OK"才继续，否则修改或删除
 4. **确认后保存**：
    - 文件：追加到 `novels/{小说名}/设定/世界观.md` / `物品.md` / `地图.md` 等对应文件
-   - DB：调用 `world_upsert(novel_id, category, name, data)` 或 `character_create(novel_id, name, ...)`
+   - DB：调用 `world_upsert(novel_name="这次不一样了", category, name, data)` 或 `character_create(novel_name="这次不一样了", name, ...)`
 
 **新实体类型与保存位置**：
 
@@ -574,24 +574,24 @@ volume_update(volume_id, main_plotlines=[...], notes="...")
 
 # 2. 规划章节（每章一条）
 for chapter in chapters:
-    chapter_plan(novel_id, number, title, outline, chapter_type, volume_id)
+    chapter_plan(novel_name="这次不一样了", number, title, outline, chapter_type, volume_id)
 
 # 3. 埋设伏笔
 for foreshadow in foreshadows:
-    foreshadow_plant(novel_id, description, planned_recall_chapter, importance, tags)
+    foreshadow_plant(novel_name="这次不一样了", description, planned_recall_chapter, importance, tags)
 
 # 4. 同步世界观（新增——确保正文生成时DB有完整数据）
 for location in new_locations:
-    world_upsert(novel_id, category='location', name=location.name, data={...},
+    world_upsert(novel_name="这次不一样了", category='location', name=location.name, data={...},
         keys=location.keys, tags=location.tags, volume_range=location.volume_range,
         writing_guide=location.writing_guide)
 
 for item in new_items:
-    world_upsert(novel_id, category='ability', name=item.name, data={...},
+    world_upsert(novel_name="这次不一样了", category='ability', name=item.name, data={...},
         keys=item.keys, tags=item.tags, volume_range=item.volume_range)
 
 for character in new_characters:
-    character_create(novel_id, name=character.name, ...,
+    character_create(novel_name="这次不一样了", name=character.name, ...,
         appearance_detail=character.appearance_detail,
         decision_engine=character.decision_engine,
         voice_fingerprint=character.voice_fingerprint,
@@ -599,7 +599,7 @@ for character in new_characters:
         current_snapshot=character.current_snapshot)
 
 for faction in new_factions:
-    world_upsert(novel_id, category='faction', name=faction.name, data={...},
+    world_upsert(novel_name="这次不一样了", category='faction', name=faction.name, data={...},
         keys=faction.keys, tags=faction.tags, volume_range=faction.volume_range,
         writing_guide=faction.writing_guide)
 
@@ -611,10 +611,10 @@ for character in changed_characters:
 
 # 6. 创建人物关系（如有新关系）
 for relation in new_relations:
-    relation_create(novel_id, from_character_id, to_character_id, relation_type, ...)
+    relation_create(novel_name="这次不一样了", from_character_id, to_character_id, relation_type, ...)
 ```
 
-**DB同步原则**：大纲阶段产出的所有结构化数据（地点/物品/人物/势力/伏笔/章节）必须同步到DB，确保正文生成阶段（novel-chapter-writer）通过 `world_query` / `character_detail` / `foreshadow_list` 等MCP调用能获取到完整信息。
+**DB同步原则**：大纲阶段产出的所有结构化数据（地点/物品/人物/势力/伏笔/章节）必须同步到DB，确保正文生成阶段（novel-chapter-writer）通过 `get_chapter_context` 聚合调用能获取到完整信息。
 
 ### git commit
 ```

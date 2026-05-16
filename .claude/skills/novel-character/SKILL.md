@@ -35,7 +35,7 @@ lifecycle: core
 ## 强制外观模板
 ```
 appearance: 具体描写≥30字（体型/面部/发/服饰/标志特征/肤色体态）
-race: world_query(category="race")
+race: world_query(novel_name="这次不一样了", category="race")
 ```
 appearance禁止形容词堆砌，必须具体视觉细节。标志特征1-2个贯穿全文。
 
@@ -45,7 +45,7 @@ appearance禁止形容词堆砌，必须具体视觉细节。标志特征1-2个�
 关系调节表覆盖 ≥3 种关系。
 
 ## 写入DB
-- `character_create(novel_id, name, role, appearance, speech_style, ...)` → 获取 id
+- `character_create(novel_name="这次不一样了", name, role, appearance, speech_style, ...)` → 获取 id
   - **必须传入的丰富字段**（人物蒸馏7步产出）：
     - `appearance_detail`: JSON — 外观描写库（gender/body/face/hair/skin/clothing_daily/clothing_battle/clothing_logic/signature_features/appearance_changes）
     - `decision_engine`: JSON — 决策引擎（core_conflict/daily_state/trigger_state/escalation_state/rules/dialogue_generation/action_generation/scene_decisions）
@@ -55,7 +55,7 @@ appearance禁止形容词堆砌，必须具体视觉细节。标志特征1-2个�
     - `current_snapshot`: JSON — 当前快照（identity/ability/goal/knows/doesnt_know/relationships）
     - `growth_trajectory`: JSON数组 — 成长轨迹（[{volume,changes,trigger}]）
 - `character_update(id, ability_level, status, ...)` → 补充信息（同上字段均可增量更新）
-- `relation_create(novel_id, from_id, to_id, relation_type, ...)` → 关系
+- `relation_create(novel_name="这次不一样了", from_id, to_id, relation_type, ...)` → 关系
   - **关系增强字段**：
     - `dialogue_adjustment`: JSON — 对话调节表（对特定人的语气/句式/用词变化）
     - `micro_expressions`: JSON数组 — 微表情词典（[{context,action,meaning}]）
@@ -68,7 +68,7 @@ appearance禁止形容词堆砌，必须具体视觉细节。标志特征1-2个�
 ```
 character_get(id) → 评估修改范围 → 执行修改 → character_update
     ↓
-relation_list(novel_id) → 筛选受影响关系 → 同步更新或添加关系变化记录
+relation_list(novel_name="这次不一样了") → 筛选受影响关系 → 同步更新或添加关系变化记录
     ↓
 git commit（修改摘要 + 影响范围）
 ```

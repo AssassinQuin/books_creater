@@ -31,7 +31,7 @@ Step 1 诊断 → Step 2 规划修改 → 🔒确认 → Step 3 批量执行 →
 ## Step 1: 诊断
 
 - **模式去重**: `grep -c '{pattern}' novels/{小说名}/正文/*.md` 统计重复次数 → 标记情感高点(保留) → 其余替换 → 验证计数
-- **连续性**: `character_get(id)` + `world_query(novel_id)` 交叉验证 → 矛盾点
+- **连续性**: `character_get(id)` + `world_query(novel_name="这次不一样了")` 交叉验证 → 矛盾点
 - **风格**: `validate_chapter(text)` 硬约束检测
 
 ## Step 2-4: 执行
@@ -44,9 +44,11 @@ Step 1 诊断 → Step 2 规划修改 → 🔒确认 → Step 3 批量执行 →
    - `validate_chapter(text)` 硬约束仍达标
 4. **DB 同步（强制 — 数据一致性铁律）**：
    - 修订只改文件（Edit），但修改可能影响 DB 中的数据
-   - 如果修订改变了**角色状态** → `character_update` 同步 DB
-   - 如果修订改变了**世界观/地点/物品** → `world_upsert` 同步 DB
-   - 如果修订**回收了伏笔** → `foreshadow_recall` 同步 DB
+   - **首先**调 `consistency_guard(novel_name="这次不一样了", auto_sync=True)` 自动同步文件权威数据（大纲/章节摘要）→ DB
+   - 如果修订改变了**文件 authoritative 类型的数据**（如角色状态/世界观/伏笔），还需额外调对应 MCP 工具同步 DB：
+     - **角色状态** → `character_update` 同步 DB
+     - **世界观/地点/物品** → `world_upsert` 同步 DB
+     - **回收了伏笔** → `foreshadow_recall` 同步 DB
    - 如果修订改变了**章节摘要/事件/伏笔操作** → `writing_finish` 重新提交更新后的元数据
    - **禁止**：修订文件后不同步 DB，导致下游 skill 读到旧数据
 

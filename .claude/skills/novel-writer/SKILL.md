@@ -44,10 +44,10 @@ lifecycle: core
 ## 状态查询
 
 ```
-volume_list(novel_id) → 卷完成度
-chapter_list(novel_id) → 章节状态统计
-foreshadow_list(novel_id) → 伏笔回收率
-health_check(novel_id) → 健康指标
+volume_list(novel_name="这次不一样了") → 卷完成度
+chapter_list(novel_name="这次不一样了") → 章节状态统计
+foreshadow_list(novel_name="这次不一样了") → 伏笔回收率
+health_check(novel_name="这次不一样了") → 健康指标
 ```
 
 ## 素材入库
@@ -74,6 +74,6 @@ memory_store(content, tags=["project:books_creater", "material"])
 
 ## 当前项目
 
-《这次不一样了》— novel_id: 1, 14卷+尾声, 玄幻网文
+《这次不一样了》— novel_name: "这次不一样了", 14卷+尾声, 玄幻网文
 
 </supporting-info>

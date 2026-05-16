@@ -49,17 +49,17 @@ Three-layer data architecture:
 
 **新增实体同步规则**（novel-chapter-writer Agent 2 创建的新实体）：
 - Agent 2 通过 MCP 直接创建新实体（character_create / world_upsert / foreshadow_plant）→ DB 已有
-- 编排器在 Step 6 存盘时，**必须将 Agent 2 创建的新实体同步写入设定文件**（`世界观.md` / `地图.md` / `物品.md` / `角色总览.md`）
-- 当前 SKILL.md Step 6 缺少此同步步骤，需补充
+- 编排器在 Step 6 存盘时，调用 `consistency_guard(novel_name="这次不一样了", auto_sync=True)` 自动检测 DB hash 变更 → 同步到文件
+- 无需手动遍历实体类型逐个写入——MCP 自动处理所有 DB-authoritative 数据同步
 
 **修订同步规则**（novel-reviser 修改正文后）：
 - 修订只改文件（Edit），不直接改 DB
-- 如果修订改变了角色状态/世界观/伏笔状态，编排器**必须**调 `character_update` / `world_upsert` / `foreshadow_recall` 同步 DB
-- 当前 novel-reviser SKILL.md 缺少 DB 同步步骤，需补充
+- 存盘后调用 `consistency_guard(novel_name="这次不一样了", auto_sync=True)` 自动检测文件 hash 变更 → 同步到 DB（文件权威数据）
+- 如果修订改变了角色状态/世界观/伏笔状态，且文件 authoritative 类型变更，还需额外调 `character_update` / `world_upsert` / `foreshadow_recall` 同步 DB
 
 **自动一致性守卫**（`consistency_guard` MCP 工具）：
 - 每次写入 DB 时（`world_upsert` / `character_create` / `character_update` / `foreshadow_plant` / `foreshadow_recall`），自动计算并存储 DB 记录的 hash
-- 每次启动 skill 流程时（novel-chapter-writer Step 0 / novel-planner-volume Step 0），调用 `consistency_guard(novel_id, auto_sync=True)` 校验
+- 每次启动 skill 流程时（novel-chapter-writer Step 0 / novel-planner-volume Step 0），调用 `consistency_guard(novel_name="这次不一样了", auto_sync=True)` 校验
 - 检测到 DB hash 变更 → 自动同步到文件（DB 权威数据）
 - 检测到文件 hash 变更 → 自动同步到 DB（文件权威数据）
 - 无需消耗 token 做手动同步，MCP 自动执行
@@ -185,8 +185,8 @@ Priority on conflict: C3 > B2 > others.
 
 | 工具 | 用途 | 调用时机 |
 |------|------|----------|
-| `writing_start(novel_id, chapter_number)` | 写作前上下文注入（章节信息+前3章摘要+活跃人物+未回收伏笔+世界观+当前卷规划） | 编排器 Step 1 必调 |
-| `character_detail(id)` | 单个角色深度信息（外观+性格+说话风格+能力+状态+关系+物品） | 编排器 Step 1 批量收集 |
+| `get_chapter_context(novel_name, chapter_number)` | 聚合上下文注入（章节信息+卷级大纲+前3章摘要+角色深度信息+未回收伏笔+世界观+人物关系+时间线+质量历史+写作提示词） | 编排器 Step 1 必调 |
+| ~~`character_detail(id)`~~ | ~~已废弃~~被 `get_chapter_context` 替代 | 不再单独调用 |
 | `validate_chapter(chapter_text)` | 写后硬约束校验（标点密度/否定句式/字数/创作原则） | 编排器 Step 6 强制 |
 | `writing_finish(chapter_id, ...)` | 写作后状态更新（摘要+事件+伏笔+时间线+维度） | 编排器 Step 6 强制，不可跳过 |
 | `health_check(novel_id)` | 健康诊断（伏笔积压/配角活跃/升级节奏/日常密度/暗线推进/卷完成度） | C2 诊断时 |
@@ -328,7 +328,7 @@ L3 加事件（>50%）     → 361考核 + 强制从大纲找事件或加微事�
 - V1 Ch001-009深度审计完成, 存于 `审阅报告/V1Ch001-009深度审计/`
 - 多轮审阅完成: 冲突检测、锁定设定校验、因果逻辑审计、三视角审查
 - 正文碎片V01-V14已完成(卷级碎片, 存于 `正文碎片/`)
-- novel-db当前未同步数据，正文生成前需先 `sync_lorebook`
+- novel-db数据已通过 `consistency_guard` 自动同步（每次启动 skill 流程时校验），无需手动 `sync_lorebook`
 - 架构变更: novel-battle迁入engines、新增novel-planner-volume skill、作者声音系统、三视角审查、阶段指令文件(phases/)
 - 下一步: 正文生成(B2), 从V1开始
 

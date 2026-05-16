@@ -19,8 +19,8 @@
    目的: 知道当前卷在写什么
 
 2. 章节大纲:
-   工具: writing_start(novel_id, chapter_number)
-   自动注入: 前3章摘要 + 活跃人物 + 未回收伏笔 + 当前卷规划
+   工具: get_chapter_context(novel_name="这次不一样了", chapter_number)
+   一次返回: 章节信息 + 卷级大纲 + 前3章摘要 + 角色深度信息 + 未回收伏笔 + 世界观 + 人物关系 + 时间线 + 质量历史 + 写作提示词
    目的: 核心上下文，一次性获取
 
 3. 活跃人物档案:
@@ -33,7 +33,7 @@
    目的: 对话/动作/描写一致性
 
 4. 人物关系:
-   工具: relation_list({novel_id})
+   工具: relation_list(novel_name="这次不一样了")
    提取: 出场人物之间的关系类型+强度
    目的: 对话语气差异化
 ```
@@ -42,22 +42,22 @@
 
 ```yaml
 5. 环境快照:
-   工具: world_query(category="location", name="{本章地点}")
+   工具: world_query(novel_name="这次不一样了", category="location", name="{本章地点}")
    提取: 空间结构 + 灵能维度 + 感官基线
    目的: 环境一致性
 
 6. 物品档案:
-   工具: world_query(category="ability"/category="economy", name="{物品名}")
+   工具: world_query(novel_name="这次不一样了", category="ability"/category="economy", name="{物品名}")
    提取: 外观+触感+功能+当前状态
    目的: 物品使用一致性
 
 7. 历史层:
-   工具: world_query(category="history", name="{相关历史}")
+   工具: world_query(novel_name="这次不一样了", category="history", name="{相关历史}")
    提取: 遗留规则+失传规则+自洽性锚点
    目的: 设定经得起推敲
 
 8. 未回收伏笔:
-   工具: foreshadow_list(novel_id, status="planted")
+   工具: foreshadow_list(novel_name="这次不一样了", status="planted")
    提取: description + planned_recall_chapter + tags
    目的: 本章是否该推进某条暗线
 ```
@@ -66,12 +66,12 @@
 
 ```yaml
 9. 时间线:
-   工具: timeline_query(novel_id, from_chapter=N-3, to_chapter=N)
+   工具: timeline_query(novel_name="这次不一样了", from_chapter=N-3, to_chapter=N)
    提取: 近期事件序列
    目的: 防止时空矛盾
 
 10. 维度变化:
-    工具: dimension_query(novel_id, from_chapter=N-3)
+    工具: dimension_query(novel_name="这次不一样了", from_chapter=N-3)
     提取: 近期能力/空间/经济/状态变化
     目的: 连续性追踪
 ```

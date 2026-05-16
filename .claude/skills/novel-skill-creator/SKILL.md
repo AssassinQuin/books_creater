@@ -27,7 +27,7 @@ lifecycle: meta
 ---
 name: {技能名}
 description: {一句话能力描述}。触发词：{词1}/{词2}/{词3}
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__writing_start, ...
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__get_chapter_context, ...
 lifecycle: core | quality | experimental | deprecated
 ---
 
@@ -42,7 +42,7 @@ lifecycle: core | quality | experimental | deprecated
 
 规则由 MCP 管理，通过工具调用注入。SKILL.md 只描述流程和工具调用方式。
 
-- 规则参考: `writing_start` 返回 `rules` 字段（硬约束/推荐/创作原则）
+- 规则参考: `get_chapter_context` 返回 `rules` 字段（硬约束/推荐/创作原则）
 - 引擎参考: `skill_loader('type')`
 - 详情钻取: `rule_detail('{key}')`
 - 强制校验: `validate_chapter(text)` / `writing_finish(chapter_id, chapter_text, ...)`

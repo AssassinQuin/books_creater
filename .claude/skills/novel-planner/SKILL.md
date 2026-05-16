@@ -39,11 +39,11 @@ Step 7: 🔒用户确认 → git commit
 
 ```python
 # 基础数据
-novel_get(novel_id)          # 小说基本信息
-world_query(novel_id)        # 世界观全部数据
-character_list(novel_id)     # 角色列表（含主角/反派/关键配角）
-volume_list(novel_id)        # 已有卷信息（如有）
-foreshadow_list(novel_id)    # 全局伏笔（如有）
+novel_get(novel_name="这次不一样了")          # 小说基本信息
+world_query(novel_name="这次不一样了")        # 世界观全部数据
+character_list(novel_name="这次不一样了")     # 角色列表（含主角/反派/关键配角）
+volume_list(novel_name="这次不一样了")        # 已有卷信息（如有）
+foreshadow_list(novel_name="这次不一样了")    # 全局伏笔（如有）
 
 # 引擎加载（按步骤按需加载，编排器在启动对应Agent时通过 skill_loader 传入）
 # Step 1/2 需要：
@@ -230,11 +230,11 @@ for card in volume_target_cards:
 
 # 伏笔 → foreshadow_plant
 for f in cross_volume_foreshadows:
-    foreshadow_plant(novel_id, description=f.desc, planned_recall_chapter=f.recall)
+    foreshadow_plant(novel_name="这次不一样了", description=f.desc, planned_recall_chapter=f.recall)
 
 # 支线 → world_upsert
 for s in subplots:
-    world_upsert(novel_id, category='subplot', name=s.name, data={...})
+    world_upsert(novel_name="这次不一样了", category='subplot', name=s.name, data={...})
 ```
 
 ## Step 7: git commit

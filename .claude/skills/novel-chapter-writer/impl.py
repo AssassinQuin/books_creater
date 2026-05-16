@@ -47,7 +47,7 @@ def load_writing_context(novel_id: int, chapter_number: int) -> Dict[str, Any]:
     print("\n[Tier 1/4] 加载DB上下文...")
     try:
         # TODO: 实现实际的MCP调用
-        # context["tier1_db"] = mcp_call("writing_start", novel_id=novel_id, chapter_number=chapter_number)
+        # context["tier1_db"] = mcp_call("get_chapter_context", novel_name="这次不一样了", chapter_number=chapter_number)
         
         # 模拟DB数据（实际实现中替换为MCP调用）
         context["tier1_db"] = simulate_db_context(novel_id, chapter_number)
@@ -395,7 +395,7 @@ def write_chapter(chapter_num, title=""):
     
     # Step 1: 注入全量上下文（使用新的动态加载协议）
     print("\n[Step 1] 注入全量上下文...")
-    context = load_writing_context(novel_id=1, chapter_number=chapter_num)
+    context = load_writing_context(novel_name="这次不一样了", chapter_number=chapter_num)
     
     # 检查冲突
     if context["conflicts"]:

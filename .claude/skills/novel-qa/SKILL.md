@@ -48,7 +48,7 @@ Step 1: 加载上下文
   - 角色状态（`character_get` + `chapter_get_context`）
   - 卷级大纲（`novels/{小说名}/设定/大纲/V{卷号}-{卷名}.md`）
   - 全书支线总图（`novels/{小说名}/设定/大纲/支线总图.md`）
-  - 世界观数据（`world_query(novel_id)` 优先；返回空时回退读 `设定/世界观.md`）
+  - 世界观数据（`world_query(novel_name="这次不一样了")` 优先；返回空时回退读 `设定/世界观.md`）
   - 作者声音定义（`engines/author-voice.md`）
 
 Step 2: 4Agent并行扫描
@@ -85,13 +85,13 @@ AI指纹检测：`skill_loader("novel-qa", "engine", "anti-ai")`
 
 ## C2: 健康诊断（触发：诊断/卡文）
 
-`health_check(novel_id)` → 6指标：伏笔积压率/配角活跃gap/升级节奏/日常密度/暗线推进/卷完成度
+`health_check(novel_name="这次不一样了")` → 6指标：伏笔积压率/配角活跃gap/升级节奏/日常密度/暗线推进/卷完成度
 → 低于阈值项 → 破局策略（加事件/减日常/回收伏笔/激活配角）
 
 ## C3: 级联更新（触发：改设定/改人物）
 
 1. 更新数据
-2. `db_search(novel_id, 关键词)` 扫描全部影响范围
+2. `db_search(novel_name="这次不一样了", 关键词)` 扫描全部影响范围
 3. 🔒确认修改清单（影响章节/人物/伏笔/时间线）
 4. 执行修改
 5. 验证一致性

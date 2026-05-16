@@ -34,7 +34,7 @@
 - `engines/anti-ai-quickref.md` —— 反AI指纹速查卡（F1-F13+禁用词+否定替代+场景组合）。编排器已注入，Agent 无需读取完整 SENTENCE-PATTERNS.md
 - `engines/writing-style.md` —— 写作通用标准。编排器已通过 skill_loader 注入
 - **`engines/author-voice.md` —— 叙事声音指纹**
-- writing-constraints.md 规则已由编排器通过 writing_start 注入，无需重复读取
+- writing-constraints.md 规则已由编排器通过 `get_chapter_context` 注入，无需重复读取
 
 **按场面类型加载**：
 

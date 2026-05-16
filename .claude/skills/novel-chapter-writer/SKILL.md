@@ -1,7 +1,7 @@
 ---
 name: novel-chapter-writer
 description: 逐章写作编排器，驱动 4 个独立子 Agent 协作完成章节。触发词：写第N章/继续写/写一章
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__get_chapter_context, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__skill_loader, mcp__novel-db__character_detail, mcp__novel-db__character_update, mcp__novel-db__character_increment, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_upsert, mcp__novel-db__character_create, mcp__novel-db__relation_create, mcp__novel-db__consistency_guard, mcp__memory__memory_store, mcp__memory__memory_search
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__get_chapter_context, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__skill_loader, mcp__novel-db__character_update, mcp__novel-db__character_increment, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_upsert, mcp__novel-db__character_create, mcp__novel-db__relation_create, mcp__novel-db__consistency_guard, mcp__memory__memory_store, mcp__memory__memory_search
 lifecycle: core
 ---
 
@@ -110,7 +110,7 @@ N. 按 {agent-file}.md 中定义的输出格式产出结果
 **数据一致性校验（强制）**：
 ```python
 # 校验 DB 与文件一致性，不一致自动同步
-consistency_guard(novel_id, auto_sync=True)
+consistency_guard(novel_name="这次不一样了", auto_sync=True)
 # 返回 synced_count > 0 时，提示用户哪些数据被同步了
 ```
 
@@ -127,7 +127,7 @@ Read("novels/{小说名}/设定/大纲/V{卷号}-{卷名}.md")
 ### 1.2 调用聚合 MCP（一次调用获取全部上下文）
 
 ```
-get_chapter_context(novel_id, chapter_number) → 全部写作上下文
+get_chapter_context(novel_name="这次不一样了", chapter_number) → 全部写作上下文
 ```
 
 **一次调用返回**：章节信息 + 卷级大纲 + 前3章摘要 + 全部角色深度信息（外观/性格/说话风格/能力/状态/关系）+ 未回收伏笔 + 活跃线索 + 世界观全分类数据 + 人物关系 + 时间线 + 质量历史 + 写作提示词（含规则+作者DNA）
@@ -289,7 +289,8 @@ writing_finish(
   summary={Agent 4 自检报告中的摘要},
   key_events={创意蓝图中的事件清单},
   characters_involved={创意蓝图中出场角色 ID 列表},
-  foreshadow_operations={创意蓝图中的伏笔操作},
+  new_foreshadows={创意蓝图中新种的伏笔},
+  resolved_foreshadows={创意蓝图中回收的伏笔},
   self_check='passed'
 )
 ```
@@ -303,7 +304,7 @@ writing_finish(
 ```python
 for character in involved_characters:
     character_increment(
-        novel_id=novel_id,
+        novel_name="这次不一样了",
         character_name=character.name,
         snapshot_update=json.dumps({
             "identity": character.new_identity,
@@ -328,30 +329,20 @@ for character in involved_characters:
 
 **正文纯净化**：正文文件禁止包含注释、统计、审计备注等非正文内容。只写入 Agent 4 输出的正文部分（分隔线 `---` 之前的内容）。
 
-### 6.3 新实体同步到设定文件（强制 — 数据一致性铁律）
+### 6.3 自动一致性同步（MCP 级 — 替代手动文件同步）
 
-Agent 2 在创意决策中可能通过 MCP 创建了新实体（DB 已有），编排器**必须**将这些新实体同步写入对应的设定文件：
+Agent 2 在创意决策中可能通过 MCP 创建了新实体（DB 已有），编排器无需手动遍历写入文件——由 `consistency_guard` 自动完成：
 
 ```python
-# 从创意蓝图的"已创建的实体"部分提取
-for character in blueprint.new_characters:
-    # 追加到 角色总览.md
-    append_to("novels/{小说名}/设定/角色总览.md", character_summary)
-
-for location in blueprint.new_locations:
-    # 追加到 地图.md
-    append_to("novels/{小说名}/设定/地图.md", location_summary)
-
-for item in blueprint.new_items:
-    # 追加到 物品.md
-    append_to("novels/{小说名}/设定/物品.md", item_summary)
-
-for faction in blueprint.new_factions:
-    # 追加到 世界观.md
-    append_to("novels/{小说名}/设定/世界观.md", faction_summary)
+# 一致性守卫自动检测 DB hash 变更 → 同步到文件
+# DB-authoritative 数据（world/character/foreshadow）：DB 有变→自动写入文件
+# 无需手动遍历 blueprint.new_characters 等——MCP 自动处理
+consistency_guard(novel_name="这次不一样了", auto_sync=True)
 ```
 
-**禁止跳过此步骤**：如果 DB 有新实体但设定文件没有，下游 skill 读取文件时会缺失数据。
+**原理**：Agent 2 通过 `character_create` / `world_upsert` / `foreshadow_plant` 写入 DB 时，`consistency_guard` 自动计算并存储了 DB 记录的 hash。重新调用时检测到 hash 变更，按权威源规则自动同步到文件。一个调用覆盖所有实体类型，无需逐个遍历。
+
+**禁止跳过此步骤**：跳过会导致设定文件与 DB 不一致。
 
 ### 6.4 清理临时文件
 

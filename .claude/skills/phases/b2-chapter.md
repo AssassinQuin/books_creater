@@ -14,7 +14,7 @@
 
 ### Step 0: 断点检测
 
-`chapter_list` 检查已有数据 → `writing_start` 加载上下文。
+`chapter_list` 检查已有数据 → `get_chapter_context` 加载上下文。
 
 ### Step 1: 启动 Agent 1 (Context Curator)
 

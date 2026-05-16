@@ -5,14 +5,14 @@
 
 ## 输入
 
-- `health_check(novel_id)` 返回的健康指标
+- `health_check(novel_name="这次不一样了")` 返回的健康指标
 - 状态总线全部数据
 
 ## 执行步骤
 
 ### Step 1: 指标采集
 
-调用 `health_check(novel_id)` 获取：
+调用 `health_check(novel_name="这次不一样了")` 获取：
 - 伏笔积压率
 - 配角活跃度
 - 升级节奏

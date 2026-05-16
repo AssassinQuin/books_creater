@@ -37,7 +37,7 @@
   潜在冲突: {本章可能爆发的矛盾}
 ```
 
-**存储**: 关键地点用 `world_upsert(category="location", name="{地点名}", data={快照})` 保存。首次完整5要素，后续只更新变化部分。
+**存储**: 关键地点用 `world_upsert(novel_name="这次不一样了", category="location", name="{地点名}", data={快照})` 保存。首次完整5要素，后续只更新变化部分。
 
 ### 2. 事件快照
 
