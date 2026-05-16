@@ -59,8 +59,6 @@ Phase 4: 用户确认修改结果
   ↓
 Phase 5: 同步DB
   character_update(id, 变更字段...) → relation_update → consistency_guard(auto_sync)
-  ↓
-Phase 6: 达尔文优化（可选）
 ```
 
 </what-to-do>
