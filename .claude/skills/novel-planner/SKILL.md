@@ -1,14 +1,14 @@
 ---
 name: novel-planner
-description: 全书大纲设计 — 小说骨架+血管。从全局视角确定每卷目标/角色弧线/暗线规划/伏笔基础。不设计具体事件，只确定"每卷做什么"，为下层(novel-planner-volume)提供约束和指导。触发词：规划全书/设计大纲/全书框架/卷级规划
+description: 全书大纲设计 — 小说骨架+血管。从全局视角确定每卷目标/角色弧线/暗线规划/伏笔基础。不设计具体事件，只确定"每卷做什么"。输出可被 novel-planner-volume 读取作为卷级设计输入。触发词：规划全书/设计大纲/全书框架/卷级规划
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, mcp__memory__*
 lifecycle: core
 ---
 
 # 全书大纲设计
 
-> **定位**：小说骨架+血管。全局视角 → 每卷"做什么"（目标/角色弧线方向/暗线推进/伏笔基础）。下层 novel-planner-volume 据此设计"具体事件怎么做"。
-> **与下层的关系**：骨架→肌肉→皮肤/动作（novel-planner → novel-planner-volume → novel-chapter-writer）
+> **定位**：小说骨架+血管。全局视角 → 每卷"做什么"（目标/角色弧线方向/暗线推进/伏笔基础）。不设计具体事件。
+> **与 novel-planner-volume 的关系**：本 skill 输出的卷级目标卡可被 novel-planner-volume 读取作为输入约束。两者是独立 skill，各自有完整流程，输出通过文件共享。
 
 <what-to-do>
 
