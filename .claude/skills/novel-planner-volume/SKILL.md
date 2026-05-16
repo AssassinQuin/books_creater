@@ -295,6 +295,25 @@ P0→必须修复（回到对应Step）。无P0→进入保存。
 
 ## Step 4: 保存
 
+### 🔒输出确认流程（强制）
+
+**在写入任何文件之前**，编排器必须：
+
+1. **展示完整输出**：将Agent产出的完整内容展示给用户
+2. **等待用户确认**：用户说"OK"才继续，否则按修改意见修改后重新展示
+3. **修改循环**：用户修改→重新输出→再确认，直到用户说"OK"
+4. **检查点确认**：Step 1事件架构、Step 2逐章大纲、Step 3审计结果，每个都要独立确认
+
+```
+编排器展示 → 用户确认
+  ↓ OK           ↓ 修改意见
+写入文件      修改内容 → 重新展示 → 用户确认
+  ↓                                    ↓ OK
+继续下一步                            写入文件
+```
+
+**禁止**：未经用户确认直接写入文件。即使Agent输出完美，也必须展示后等确认。
+
 ### 文件落盘
 ```
 novels/{小说名}/设定/大纲/V{N}-{卷名}.md          # 卷级故事大纲
@@ -458,13 +477,42 @@ novels/{小说名}/审阅报告/V{N}-卷级审计.md          # 审计结果持�
 |------|---------|---------|---------|
 ```
 
-### DB保存（可选）
+### DB保存（强制——为正文生成提供数据支撑）
 ```python
-# 如果DB已同步，更新卷级信息
+# 1. 更新卷级信息
 volume_update(volume_id, main_plotlines=[...], notes="...")
-chapter_plan(novel_id, number, title, outline, chapter_type, volume_id)
-foreshadow_plant(novel_id, description, planned_recall_chapter, importance, tags)
+
+# 2. 规划章节（每章一条）
+for chapter in chapters:
+    chapter_plan(novel_id, number, title, outline, chapter_type, volume_id)
+
+# 3. 埋设伏笔
+for foreshadow in foreshadows:
+    foreshadow_plant(novel_id, description, planned_recall_chapter, importance, tags)
+
+# 4. 同步世界观（新增——确保正文生成时DB有完整数据）
+for location in new_locations:
+    world_upsert(novel_id, category='location', name=location.name, data={...})
+
+for item in new_items:
+    world_upsert(novel_id, category='ability', name=item.name, data={...})
+
+for character in new_characters:
+    character_create(novel_id, name=character.name, ...)
+
+for faction in new_factions:
+    world_upsert(novel_id, category='faction', name=faction.name, data={...})
+
+# 5. 更新已有角色状态（如有变化）
+for character in changed_characters:
+    character_update(character_id, status=character.new_status, ...)
+
+# 6. 创建人物关系（如有新关系）
+for relation in new_relations:
+    relation_create(novel_id, from_character_id, to_character_id, relation_type, ...)
 ```
+
+**DB同步原则**：大纲阶段产出的所有结构化数据（地点/物品/人物/势力/伏笔/章节）必须同步到DB，确保正文生成阶段（novel-chapter-writer）通过 `world_query` / `character_detail` / `foreshadow_list` 等MCP调用能获取到完整信息。
 
 ### git commit
 ```

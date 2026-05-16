@@ -127,8 +127,13 @@ relation_list(novel_id) → 人物关系
 foreshadow_list(novel_id, status="planted") → 未回收伏笔
 world_query(novel_id, category="location") → 场景地点
 world_query(novel_id, category="faction") → 势力信息
+world_query(novel_id, category="ability") → 能力/物品信息
+world_query(novel_id, category="economy") → 经济体系
+world_query(novel_id, category="daily_life") → 日常生活
 timeline_query(novel_id, from_chapter=N-3) → 时间线
 ```
+
+**世界观数据加载原则**：正文生成必须基于DB中的世界观数据。`world_query` 是正文生成的数据源——大纲阶段通过 `novel-planner-volume` 同步到DB的世界观数据，正文阶段通过 `world_query` 读取。如果 `world_query` 返回空，说明大纲阶段未同步，编排器应回退读取设定文件。
 
 ### 1.3 加载已注册世界元素（新增）
 
