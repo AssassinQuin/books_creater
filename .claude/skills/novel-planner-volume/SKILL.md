@@ -20,9 +20,9 @@ Step 0: 增量检测 → 加载框架+数据采集
   ↓
 Step 1: Agent — 事件架构师 → 因果链+人物弧光+悬念锚点
   ↓  🔒检查点A: 确认事件架构
-Step 2: Agent — 章节设计师 → 逐章大纲+伏笔节奏+声音适配
-  ↓
-Step 3: 卷级验证 → 三视角审查(读者/作者/人物)
+Step 2: Agent — 章节设计师 → 逐章大纲+伏笔节奏+声音适配（详见agent文件）
+  ↓  🔒检查点A2: 确认逐章大纲（用户修改→完善→确认）
+Step 3: 卷级验证 → 三视角审查(读者/作者/人物，3Agent并行)
   ↓  🔒检查点B: 确认验证通过(P0必须修复)
 Step 4: 保存(DB+文件+审计报告) → git commit
 ```
@@ -108,25 +108,7 @@ Read("novels/{小说名}/设定/地图.md")              # 地理信息（如有
 Read("novels/{小说名}/设定/物品.md")              # 物品体系（如有）
 world_query(novel_id)                             # DB中的世界观条目
 
-# 引擎加载（按步骤按需加载）
-# Step 1 事件架构师用：
-skill_loader("novel-planner-volume", "engine", "causality")        # 因果逻辑大纲法
-skill_loader("novel-planner-volume", "engine", "relationship")     # 人物关系追踪
-# Step 2 章节设计师用：
-skill_loader("novel-planner-volume", "engine", "scene-type")      # 场景类型写作策略
-skill_loader("novel-planner-volume", "engine", "scene-composition")# 场面密度分级+多人动力学
-skill_loader("novel-planner-volume", "engine", "author-voice")     # 作者声音三层架构
-skill_loader("novel-planner-volume", "engine", "author-voice-battle")
-skill_loader("novel-planner-volume", "engine", "author-voice-emotion")
-skill_loader("novel-planner-volume", "engine", "author-voice-daily")
-skill_loader("novel-planner-volume", "engine", "author-voice-mystery")
-# Step 3 卷级验证用：
-skill_loader("novel-planner-volume", "engine", "three-perspective")         # 三视角大纲分析框架
-skill_loader("novel-planner-volume", "engine", "reader-perspective-agent")  # 读者视角审查标准
-skill_loader("novel-planner-volume", "engine", "author-perspective-agent")  # 作者视角审查标准
-skill_loader("novel-planner-volume", "engine", "character-perspective-agent") # 人物视角审查标准
-# 新实体管理用：
-skill_loader("novel-planner-volume", "engine", "world-element-registry")    # 世界元素注册规范
+# 引擎按步骤加载（编排器根据步骤标识调用 skill_loader，见各Step头部）
 ```
 
 **世界观加载原则**：大纲设计必须基于已有世界观。世界观是创作的边界，不是建议。
@@ -141,9 +123,9 @@ if mode == "增量审计":
 ## Step 1: Agent — 事件架构师
 
 **Agent指令**: `agents/event-architect.md`
-**加载引擎**:
-- `skill_loader("novel-planner-volume", "engine", "causality")` — 因果逻辑网四步法（世界观刑具化→因果链编织→雪球效应→不可逆节点）
-- `skill_loader("novel-planner-volume", "engine", "relationship")` — 人物关系变化追踪（互动矩阵设计时参考）
+**强制加载引擎**（编排器在 Step 0.3 调用 skill_loader，内容传给 Agent）：
+- `engines/causality.md` — Agent **必须**集成因果逻辑网四步法设计事件因果链
+- `engines/relationship.md` — Agent **必须**参考关系强度量表设计人物互动矩阵
 
 ### 编排器操作
 1. 收集以下数据，打包传给 Agent：
@@ -153,28 +135,12 @@ if mode == "增量审计":
    - 未回收伏笔列表（foreshadow_list, status='planted'）
    - 上卷末角色状态（从上一卷大纲"人物弧光"表提取）
    - 卷定位（起/承/转/合）+ 全书第几卷
-   - 因果逻辑引擎（`engines/causality.md`）— Agent 参考其中的四步构建法和因果链公式
-   - 关系追踪引擎（`engines/relationship.md`）— Agent 参考关系强度量表和变化追踪
+   - `engines/causality.md` 内容
+   - `engines/relationship.md` 内容
 2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/event-architect.md`
 3. Agent 输出事件架构（因果链+起承转合+人物弧光+悬念锚点+伏笔操作）
 
-### Agent 核心方法论
-参考 `engines/causality.md` 的因果逻辑网构建法，结合自主方法论：
-
-**自主方法论**：从"卷末谁变了、变到什么状态"反推事件。不要从开头想。
-```
-卷末状态 - 卷初状态 = 需要发生的变化
-每个变化 → 触发事件 → 因果链
-```
-
-**因果逻辑网补充**（从 causality.md 集成）：
-```
-事件N = f(事件N-1的 consequences, 角色 choices, 世界观 rules)
-不是"第N天主角去了X地方"——而是"因为事件N-1导致Z后果，主角被迫做出A选择"
-四步法：世界观刑具化→因果链编织→雪球效应→不可逆节点
-```
-
-Agent 输出的事件因果链必须通过"可替换性测试"和"可删减性测试"（来自 causality.md 的验证标准）。
+Agent 核心方法论见 `agents/event-architect.md`（已集成 causality.md 的因果逻辑网四步法）。
 
 ### Agent 硬约束
 - 每章至少3个可辨识事件
@@ -299,51 +265,45 @@ Ch018: 沈野在荒原第一夜转了转残片，手感告诉他——这不是�
 ## Step 2: Agent — 章节设计师
 
 **Agent指令**: `agents/chapter-designer.md`
-**加载引擎**:
-- `skill_loader("novel-planner-volume", "engine", "scene-type")` — 6种场景类型写作策略（对话/动作/氛围/心理/日常/混合，影响每章场景结构选择）
-- `skill_loader("novel-planner-volume", "engine", "scene-composition")` — 场面密度分级（轻量/中量/重量/大场面）+ 多人场景动力学 + 注意力分配规则
-- `skill_loader("novel-planner-volume", "engine", "author-voice")` — 作者声音三层架构（影响场景的声音层标注）
+**强制加载引擎**（编排器在 Step 0.3 调用 skill_loader，内容传给 Agent）：
+- `engines/scene-type.md` — Agent **必须**按6种场景类型（对话/动作/氛围/心理/日常/混合）选择每章场景结构
+- `engines/scene-composition.md` — Agent **必须**按场面密度分级（轻/中/重/大场面）+多人动力学设计场景
+- `engines/author-voice.md` + 变体 — Agent **必须**标注每个场景的声音层
 
 ### 编排器操作
-1. 将 Step 1 确认后的事件架构 + 角色蒸馏卡 + 世界观索引打包传给 Agent
-2. 将场景引擎（`engines/scene-type.md`, `engines/scene-composition.md`）和作者声音引擎（`engines/author-voice.md` + 对应变体）作为附加参考传入
-3. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/chapter-designer.md`
-4. Agent 输出逐章大纲（每章场景序列+场景类型标注+伏笔场景化+人物互动矩阵+声音适配+场面密度分配）
+1. 将 Step 1 确认后的事件架构 + 角色蒸馏卡 + 世界观索引 + 引擎内容打包传给 Agent
+2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/chapter-designer.md`
+3. Agent 输出逐章大纲
 
-### Agent 核心方法论
-每章是微型故事：开场钩子→主体事件（2-4场景）→章末钩子。
-每章至少：1个推进主线的场景 + 1个人物互动场景 + 1个费笔/世界呼吸。
+Agent 方法论/硬约束/铁律详见 `agents/chapter-designer.md`（已集成 scene-type/scene-composition/author-voice 强制规则）。
 
-### Agent 硬约束
-- 起段/合段每章3-5场景，承段4-6场景，转段5-7场景
-- 相邻章场景结构不同（入场/主体/收尾类型轮换，防AI指纹F3）
-- 每个伏笔操作有具体场景+执行方式（禁止"在Ch{N}提到"）
-- 每章至少2组独立人物互动
-- 每卷至少1个"罕见组合"互动（如沈念↔老陈、方岩↔汐）
-- 配角有独立于主角的场景——他们有自己的生活
-- 声音层标注到场景级
-- 新埋伏笔每章≤1个，每卷未回收伏笔≤12个
+### 🔒检查点A2：确认逐章大纲
 
-### POV时间线铁律（同Step 1，章节设计师必须遵守）
+编排器展示 Agent 2 输出的逐章大纲（含每章场景序列+伏笔操作+声音适配），等待用户审查：
 
-1. **主角时间线锚定**：每章场景必须按主角时间线排列。场景序列 = 主角的一天/几天。
-2. **非主角场景 = 暗面**：沈念独场、方岩独场等，必须标注"此时沈野在做什么"。读者看到的是"主角不知道的暗面"。
-3. **时间线连续性**：相邻章的时间线必须连续或可推算。不能Ch001是D1，Ch003跳到D5，中间D2-D4主角在做什么？
-4. **场景时间标注**：每个场景必须写明"D{N}{时段}"，时段可选：凌晨/上午/中午/下午/傍晚/夜晚。
+```
+【V{N}《{卷名}》逐章大纲】（共{N}章）
 
-### 内容密度规则（同Step 1，章节设计师必须遵守）
+Ch{1}: {标题} | {场景数}个场景 | {核心事件}
+  - 场景类型: {对话/动作/氛围/心理/日常/混合} | 声音层: {类型}
+  - 伏笔: {埋设/深化/回收}{N}条 | 费笔: {N}个
+Ch{2}: ...
+...
+Ch{末}: {标题} | {场景数}个场景 | {章末钩子}
+  - 下卷接口: {如何衔接V{N+1}}
 
-1. **每章≥4个可辨识主线事件**（每个事件支撑800-1000字正文）。
-2. **每章3-5个微事件**（每个支撑200-400字），穿插在主线场景中。微事件类型：日常仪式、角色特点变化、角色成长信号、支线伏笔、因果微链、世界呼吸真实感、配角专场。
-3. **世界观展开**：每章至少1个场景通过角色行动展开世界观。方式：拾荒流程展示碎渣经济、灵站排队展示制度、市集换物展示物价、修灯展示壁盾遗产。**禁止设定旁白**。
-4. **主角戏份保底**：主角在场场景≥60%。主角缺席的场景必须有叙事功能（揭示主角不知道的信息）。
-5. **伏笔因果**：每个伏笔操作必须回答"为什么是这个角色在这个场景接触到这个信息"。
+【硬约束自检】
+- 事件密度: ≥4/章 ✅/❌
+- 费笔配额: ≥总章数×1.0 ✅/❌
+- 罕见组合: ≥1个/卷 ✅/❌
+- 伏笔场景化: 全部有具体场景 ✅/❌
+- 主角在场: ≥60% ✅/❌
+- 时间线连续: 无跳跃 ✅/❌
 
-### 增量模式
-如果增量检测发现只改了部分：
-- 只重新设计变更影响的主线/支线段落
-- 标注受影响的邻卷接口
-- 未变更部分保持原样
+输入"OK"进入验证，或提修改意见（可指定某章修改）。
+```
+
+**修改循环**：用户提修改意见 → 编排器局部修改指定章节 → 重新展示 → 用户确认OK → 进入验证。
 
 ## Step 3: 卷级验证（三视角审查）
 
