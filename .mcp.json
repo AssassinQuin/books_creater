@@ -4,10 +4,11 @@
       "type": "stdio",
       "command": "/Users/ganjie/miniconda3/bin/python3",
       "args": [
-        "/Users/ganjie/skills/novel-db-mcp/server.py"
+        "/Users/ganjie/code/personal/bywork/books_creater/novel-db-mcp/server.py"
       ],
       "env": {
-        "DATABASE_URL": "postgresql://ganjie@localhost:5432/fcli"
+        "DATABASE_URL": "postgresql://ganjie@localhost:5432/fcli",
+        "NOVEL_PROJECT_ROOT": "/Users/ganjie/code/personal/bywork/books_creater"
       }
     }
   }

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 百万字网文创作引擎 — AI-powered Chinese web novel writing system. Uses Claude Code skills + MCP (Model Context Protocol) for structured, long-form novel creation with anti-AI-writing patterns, ensemble casts, and dual-track plotting.
 
-Current project: **《这次不一样了》** — 14卷+尾声, 百万字级玄幻网文. Novel DB id: 1.
+Current project: **《这次不一样了》** — 14卷+尾声, 百万字级玄幻网文. Novel DB id: 12.
 
 ## Domain Vocabulary
 
@@ -25,50 +25,48 @@ Three-layer data architecture:
 - **Memory MCP** (16 tools): Unstructured creative data — inspiration, writing experience, cross-project materials, anti-AI pattern blacklist. **必须先加载 memory skill 再调用任何 memory_memory_* 工具**。详见 [Memory Skill](#memory-integration)
 - **Git files**: Human-readable content — novel text, setting docs, review reports in `novels/{小说名}/`
 
-#### 数据一致性铁律：DB优先，文件为副本
+#### 数据架构：DB为中心，文件为可选副本
 
-**核心原则**：同一数据在 DB 和文件中可能同时存在，但权威源只有一个。所有读取必须从权威源获取。
+**核心原则**：DB是唯一权威源，所有skill操作直接对DB进行。文件是人可读副本，用户主动选择同步。
+
+**数据流**：
+```
+skill操作 → DB（直接写入）
+用户触发  → sync_db_to_files() → 文件（可选同步）
+启动时    → sync_startup() → 检测差异 → 用户确认
+```
 
 | 数据类型 | 权威源 | 文件角色 | 写入规则 | 读取规则 |
 |---------|--------|---------|---------|---------|
-| 世界观/地点/物品/能力 | **DB** (`world_query`) | 人可读副本 (`设定/世界观.md` / `地图.md` / `物品.md`) | 先写 DB，再写文件 | `world_query()` 优先；返回空时回退读文件 |
-| 角色档案/关系 | **DB** (`character_detail` / `relation_list`) | 人可读副本 (`设定/人物/{名}.md`) | 先写 DB，再写文件 | `character_detail()` 优先 |
-| 伏笔 | **DB** (`foreshadow_list`) | 人可读副本 (`设定/大纲/` 中伏笔清单) | 先写 DB，再写文件 | `foreshadow_list()` 优先 |
-| 卷级大纲（叙事内容） | **文件** (`设定/大纲/V{N}-{卷名}.md`) | 权威源 | 先写文件，再写 DB 摘要 | `Read()` 文件获取完整大纲；`volume_get()` 获取摘要 |
-| 章节规划（逐章大纲） | **文件** (`设定/大纲/V{N}-{卷名}.md`) | 权威源 | 先写文件，再写 DB 摘要 | `Read()` 文件获取完整大纲；`chapter_list()` 获取摘要 |
-| 章节正文 | **文件** (`正文/第{NNN}章-{标题}.md`) | 权威源 | 先写文件，再调 `writing_finish` 写 DB 元数据 | `Read()` 文件获取正文 |
-| 审计报告 | **文件** (`审阅报告/`) | 唯一源 | 只写文件 | 只读文件 |
-| 创意蓝图 | **文件** (`创意决策/Ch{N}-创意蓝图.md`) | 唯一源 | 只写文件（新实体 ID 记录在蓝图中） | 只读文件 |
+| 世界观/地点/物品/能力 | **DB** (`world_query`) | 人可读副本 | 只写DB | `world_query()` 优先；返回空时回退读文件 |
+| 角色档案/关系 | **DB** (`character_detail` / `relation_list`) | 人可读副本 | 只写DB | `character_detail()` 优先 |
+| 伏笔 | **DB** (`foreshadow_list`) | 人可读副本 | 只写DB | `foreshadow_list()` 优先 |
+| 卷级大纲 | **DB** + 文件 | 人可读+git追踪 | DB为主，文件同步 | `volume_get()` 获取摘要；`Read()` 文件获取完整大纲 |
+| 章节正文 | **文件** | 权威源 | 先写文件，再调 `writing_finish` 写DB元数据 | `Read()` 文件获取正文 |
+| 审计报告 | **文件** | 唯一源 | 只写文件 | 只读文件 |
+| 创意蓝图 | **文件** | 唯一源 | 只写文件 | 只读文件 |
 
-**双写执行顺序**：
-1. **DB 权威的数据**：`world_upsert` / `character_create` / `foreshadow_plant` → 确认成功 → 写文件
-2. **文件权威的数据**：`Write()` 文件 → 确认成功 → `volume_update` / `chapter_plan` / `writing_finish` 写 DB 摘要
+**启动同步流程**（每次开始工作时）：
+1. 调用 `sync_startup(novel_name="这次不一样了")` 对比DB与文件状态
+2. 返回差异报告：`db_only`(DB有文件无)、`file_only`(文件有DB无)、`conflict`(两端不同)
+3. 冲突默认以DB为准，用户确认后执行同步
+
+**用户主动同步**（需要更新文件时）：
+- `sync_db_to_files(novel_name="这次不一样了")` — 同步全部有差异的
+- `sync_db_to_files(novel_name="这次不一样了", data_type="world")` — 只同步世界观
+- `sync_db_to_files(novel_name="这次不一样了", overwrite=True)` — 强制全量覆盖
 
 **禁止**：
-- 只写文件不写 DB（下游 skill 读 DB 会读到旧数据）
-- 只写 DB 不写文件（人无法审阅、git 无法追踪）
-- 修改一方后不同步另一方（数据漂移）
-
-**新增实体同步规则**（novel-chapter-writer Agent 2 创建的新实体）：
-- Agent 2 通过 MCP 直接创建新实体（character_create / world_upsert / foreshadow_plant）→ DB 已有
-- 编排器在 Step 6 存盘时，调用 `consistency_guard(novel_name="这次不一样了", auto_sync=True)` 自动检测 DB hash 变更 → 同步到文件
-- 无需手动遍历实体类型逐个写入——MCP 自动处理所有 DB-authoritative 数据同步
+- skill中直接写文件来更新DB数据（绕过DB直接改文件=数据漂移）
+- 修改DB后不同步文件（人无法审阅、git无法追踪）
 
 **修订同步规则**（novel-reviser 修改正文后）：
 - 修订只改文件（Edit），不直接改 DB
-- 存盘后调用 `consistency_guard(novel_name="这次不一样了", auto_sync=True)` 自动检测文件 hash 变更 → 同步到 DB（文件权威数据）
-- 如果修订改变了角色状态/世界观/伏笔状态，且文件 authoritative 类型变更，还需额外调 `character_update` / `world_upsert` / `foreshadow_recall` 同步 DB
-
-**自动一致性守卫**（`consistency_guard` MCP 工具）：
-- 每次写入 DB 时（`world_upsert` / `character_create` / `character_update` / `foreshadow_plant` / `foreshadow_recall`），自动计算并存储 DB 记录的 hash
-- 每次启动 skill 流程时（novel-chapter-writer Step 0 / novel-planner-volume Step 0），调用 `consistency_guard(novel_name="这次不一样了", auto_sync=True)` 校验
-- 检测到 DB hash 变更 → 自动同步到文件（DB 权威数据）
-- 检测到文件 hash 变更 → 自动同步到 DB（文件权威数据）
-- 无需消耗 token 做手动同步，MCP 自动执行
+- 如果修订改变了角色状态/世界观/伏笔状态，需调 `character_update` / `world_upsert` / `foreshadow_recall` 同步 DB
 
 #### 文件结构规范：MD 标题 = DB 字段映射
 
-所有设定文件必须按标准结构书写，**二级标题对应 DB 字段**，`consistency_guard` 解析标题即可批量更新，无需理解内容。
+所有设定文件必须按标准结构书写，**二级标题对应 DB 字段**，`sync_db_to_files` 解析标题即可批量更新，无需理解内容。
 
 **模板权威源**：`.claude/skills/templates/` 目录，每个实体类型一个模板文件。所有 skill 创建/修改实体时必须遵守对应模板。
 
@@ -78,13 +76,13 @@ Three-layer data architecture:
 | 世界观 | `templates/world-setting.md` | `world_settings` | DB |
 | 人物关系 | `templates/relation.md` | `character_relations` | DB |
 | 伏笔 | `templates/foreshadow.md` | `foreshadows` | DB |
-| 卷级大纲 | `templates/volume.md` | `volumes` | 文件 |
+| 卷级大纲 | `templates/volume.md` | `volumes` | DB+文件 |
 | 章节 | `templates/chapter.md` | `chapters` | 文件 |
 
 **规则**：
 - 文件中的 `## category: name` 格式对应 DB 的 `world_settings(category, name)`
 - 文件中的 `- **field**: value` 格式对应 DB 表的字段
-- `consistency_guard` 解析标题行即可定位 DB 记录，无需全文解析
+- `sync_db_to_files` 解析标题行即可定位 DB 记录，无需全文解析
 - 新增数据必须同时满足文件结构和 DB schema
 - 新增维度时：先在模板文件中追加定义 → DB 加列 → MCP 工具加参数 → skill 更新
 
@@ -187,11 +185,12 @@ Priority on conflict: C3 > B2 > others.
 
 | 工具 | 用途 | 调用时机 |
 |------|------|----------|
+| `sync_startup(novel_name)` | 启动时对比DB与文件差异，返回冲突报告 | 每次开始工作时 |
+| `sync_db_to_files(novel_name)` | DB→文件同步（用户主动触发） | 用户需要更新文件时 |
 | `get_chapter_context(novel_name, chapter_number)` | 聚合上下文注入（章节信息+卷级大纲+前3章摘要+角色深度信息+未回收伏笔+世界观+人物关系+时间线+质量历史+写作提示词） | 编排器 Step 1 必调 |
-| ~~`character_detail(id)`~~ | ~~已废弃~~被 `get_chapter_context` 替代 | 不再单独调用 |
 | `validate_chapter(chapter_text)` | 写后硬约束校验（标点密度/否定句式/字数/创作原则） | 编排器 Step 6 强制 |
-| `writing_finish(chapter_id, ...)` | 写作后状态更新（摘要+事件+伏笔+时间线+维度） | 编排器 Step 6 强制，不可跳过 |
-| `health_check(novel_name="这次不一样了")` | 健康诊断（伏笔积压/配角活跃/升级节奏/日常密度/暗线推进/卷完成度） | C2 诊断时 |
+| `writing_finish(novel_name, chapter_number, ...)` | 写作后状态更新（摘要+事件+伏笔+时间线+维度） | 编排器 Step 6 强制，不可跳过 |
+| `health_check(novel_name="这次不一样了")` | 健康诊断（伏笔积压/配角活跃/进阶节奏/日常密度/暗线推进/卷完成度） | C2 诊断时 |
 
 ### Multi-Agent Pipeline 子 Agent 指令
 
@@ -365,7 +364,7 @@ Novel text goes to `novels/{小说名}/正文/第{NNN}章-{标题}.md`.
 
 ## MCP Configuration
 
-Configured in `.mcp.json`. The `novel-db` MCP server is a Python process that must have PostgreSQL running locally on port 5432 with database `fcli`.
+Configured in `.mcp.json`. The `novel-db` MCP server is located at `novel-db-mcp/server.py` within the project directory, connects to `postgresql://localhost:5432/fcli`. All MCP tools use name-based operations (no ID required).
 
 ## Memory Integration
 
