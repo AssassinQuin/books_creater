@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS world_settings (
     lorebook_id TEXT DEFAULT '',
     priority INTEGER DEFAULT 30,
     is_constant INTEGER DEFAULT 0,  -- BOOLEAN as INTEGER
+    status TEXT DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(novel_id, category, name)
