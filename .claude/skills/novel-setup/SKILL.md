@@ -3,6 +3,7 @@ name: novel-setup
 description: 小说项目基建。触发词：头脑风暴/建世界观/设定/加物品
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__*
 lifecycle: core
+depends_on: ["novel-db"]
 ---
 
 # 小说项目基建
@@ -35,11 +36,18 @@ A2: world_query(已有) → world_upsert(逐维度) → 🔒交叉验证 → git
 
 ## A2: 世界观建模（触发：建世界观 | 前置：项目已创建）
 
-1. `world_query(novel_name="这次不一样了")` 查已有维度
+1. `world_query(novel_name=NOVEL_NAME)` 查已有维度
 2. 引导模式（默认）：双锚点（危机锚+变量锚）→ 核心稀缺资源 → 刑具化 → 涟漪效应 → 逐维度展开
+   - **刑具化**：找出世界观中最稀缺的资源，让获取它需要付出不可逆的代价
+   - **涟漪效应**：每个设定变更必须推演至少3层连锁反应（直接影响→间接影响→远期影响）
 3. 快速模式：基于品类模板一次生成8维度
 4. 每维度完成 → `world_upsert` → 🔒确认
-5. 🔒交叉验证：锚点稳固/稀缺真实/涟漪完整/价值一致性/跨维度检查
+5. 🔒交叉验证：
+   - **锚点稳固**：如果更换任一锚点（如灵能来源、核心稀缺资源），主线故事是否仍然成立
+   - **稀缺真实**：该稀缺资源是否有明确的来源、流通机制和争夺逻辑
+   - **涟漪完整**：变更后是否推演了至少3层连锁反应（直接影响→间接影响→远期影响）
+   - **价值一致**：世界观规则是否与核心主题一致（如灵能=活的力量，则不能有机械化灵能）
+   - **跨维度检查**：地理/经济/政治/文化维度之间是否有矛盾
 
 加载：`skill_loader("novel-setup", "engine", "causality")` / `skill_loader("novel-setup", "engine", "worldbuilding")`
 

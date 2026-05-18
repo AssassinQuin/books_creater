@@ -6,6 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 百万字网文创作引擎 — AI-powered Chinese web novel writing system. Uses Claude Code skills + MCP (Model Context Protocol) for structured, long-form novel creation with anti-AI-writing patterns, ensemble casts, and dual-track plotting.
 
+### Project Variables（项目变量）
+
+> **所有 Skill 必须使用以下变量，禁止硬编码小说名。**
+
+| 变量 | 当前值 | 解析逻辑 |
+|------|--------|---------|
+| `NOVEL_NAME` | `这次不一样了` | 优先从 CLAUDE.md 读取；若多项目则从用户输入/上下文确定 |
+| `NOVEL_DB_ID` | `12` | DB 中 novels 表的主键 |
+| `NOVEL_TOTAL_VOLUMES` | `15` | 含尾声 |
+
+**Skill 中的使用规范**：
+```python
+# ✅ 正确：使用变量
+character_detail_by_name(novel_name=NOVEL_NAME, character_name="沈野")
+
+# ❌ 错误：硬编码
+character_detail_by_name(novel_name="这次不一样了", character_name="沈野")
+```
+
+**多项目支持**：当 `novels/` 下有多个目录时，novel-writer Step 0 自动检测并让用户选择。选定后，所有 Skill 在当前会话中使用相同的 NOVEL_NAME。
+
 Current project: **《这次不一样了》** — 14卷+尾声, 百万字级玄幻网文. Novel DB id: 12.
 
 ## Domain Vocabulary
@@ -52,14 +73,14 @@ skill操作 → DB（直接写入）→ sync_db_to_files() → 文件（模板�
 - `_sync_volume_to_file()`: 已有卷文件不覆盖（保留丰富手动内容），新卷从 DB 生成初稿
 
 **启动同步流程**（每次开始工作时）：
-1. 调用 `sync_startup(novel_name="这次不一样了")` 对比DB与文件状态
+1. 调用 `sync_startup(novel_name=NOVEL_NAME)` 对比DB与文件状态
 2. 返回差异报告：`db_only`(DB有文件无)、`file_only`(文件有DB无)、`conflict`(两端不同)
 3. 冲突默认以DB为准，用户确认后执行同步
 
 **用户主动同步**（需要更新文件时）：
-- `sync_db_to_files(novel_name="这次不一样了")` — 同步全部有差异的
-- `sync_db_to_files(novel_name="这次不一样了", data_type="world")` — 只同步世界观
-- `sync_db_to_files(novel_name="这次不一样了", overwrite=True)` — 强制全量覆盖
+- `sync_db_to_files(novel_name=NOVEL_NAME)` — 同步全部有差异的
+- `sync_db_to_files(novel_name=NOVEL_NAME, data_type="world")` — 只同步世界观
+- `sync_db_to_files(novel_name=NOVEL_NAME, overwrite=True)` — 强制全量覆盖
 
 **数据操作规范**：
 - Skill 需要通过 MCP 工具操作 DB（`character_create` / `world_upsert` / `foreshadow_plant` 等），操作完调 `sync_db_to_files()` 同步到文件
@@ -194,7 +215,7 @@ Priority on conflict: C3 > B2 > others.
 | `get_chapter_context(novel_name, chapter_number)` | 聚合上下文注入（章节信息+卷级大纲+前3章摘要+角色深度信息+未回收伏笔+世界观+人物关系+时间线+质量历史+写作提示词） | 编排器 Step 1 必调 |
 | `validate_chapter(chapter_text)` | 写后硬约束校验（标点密度/否定句式/字数/创作原则） | 编排器 Step 6 强制 |
 | `writing_finish(novel_name, chapter_number, ...)` | 写作后状态更新（摘要+事件+伏笔+时间线+维度） | 编排器 Step 6 强制，不可跳过 |
-| `health_check(novel_name="这次不一样了")` | 健康诊断（伏笔积压/配角活跃/进阶节奏/日常密度/暗线推进/卷完成度） | C2 诊断时 |
+| `health_check(novel_name=NOVEL_NAME)` | 健康诊断（伏笔积压/配角活跃/进阶节奏/日常密度/暗线推进/卷完成度） | C2 诊断时 |
 
 ### 数据 CRUD（2026-05-18 新增）
 

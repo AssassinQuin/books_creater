@@ -11,11 +11,19 @@ lifecycle: meta
 
 <what-to-do>
 
-## 创建流程（3步）
+## 创建流程（4步）
 
 1. **需求收集**: 确定技能名/触发词/核心功能/所用 MCP 工具
-2. **草稿编写**: 按新模板（MCP 驱动架构）
-3. **审查发布**: 通过审查清单后放入对应桶目录
+2. **冲突检测**: 检查与现有技能的重叠（见下方冲突检测清单）
+3. **草稿编写**: 按新模板（MCP 驱动架构）
+4. **审查发布**: 通过审查清单后放入对应桶目录
+
+### 冲突检测清单（新技能创建前必检）
+
+- [ ] 触发词是否与已有 skill 重叠？（检查 `.claude/skills/*/SKILL.md` 的 `description` 字段）
+- [ ] 核心功能是否与已有 skill 重复？（比对 what-to-do 的主要步骤）
+- [ ] 如果重叠度 >50%：建议扩展现有 skill 而非创建新 skill
+- [ ] 如果互补但有关联：添加 `depends_on` 声明
 
 </what-to-do>
 
@@ -75,5 +83,20 @@ lifecycle: core | quality | experimental | deprecated
 - 参考文档保留在 `references/` 目录（按需读）
 - 所有规则在 `server.py` 的 `ALL_RULES` 中
 - 引擎内容在 `server.py` 的 `ENGINE_CONTENT` 或 `world_settings(category='engine_reference')`
+
+## 失败处理
+
+- **创建失败**（SKILL.md 写入错误）：删除已创建的文件和 agents/ 目录
+- **审查不通过**：保留 SKILL.md 草稿，标注问题清单，用户确认后修复
+- **技能废弃**：将 lifecycle 改为 `deprecated`，添加迁移说明指向替代技能（参考 novel-ability-designer 废弃格式）
+- **冲突发现**：创建冲突检测报告，建议合并或重命名
+
+## 示例：创建 novel-battle skill（历史参考）
+
+1. **需求收集**："需要一个专门设计战斗场景的 skill"
+2. **冲突检测**：novel-chapter-writer 的 engines/battle.md 已覆盖战斗描写，但缺少独立战斗设计流程 → 可创建
+3. **草稿编写**：按模板填写 SKILL.md（触发词：战斗设计/打斗/对战）
+4. **审查发布**：frontmatter 完整 ✓ / 流程清晰 ✓ / 边界条件 ✗（缺少多角色战斗的边界） → 补充后发布
+5. **集成**：在 novel-writer 路由表添加 "战斗设计" → novel-battle
 
 </supporting-info>

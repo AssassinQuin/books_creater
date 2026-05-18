@@ -11,7 +11,7 @@ lifecycle: core
 
 **DB优先**：人物数据权威源在 DB（`characters` 表）。文件为可读副本。
 - 新建：先 `character_create` 写入 DB，再写文件
-- 修改：先 `character_detail_by_name(novel_name="这次不一样了", character_name={name})` 读取 DB 完整数据，再改文件，再 `character_update` + `consistency_guard` 同步
+- 修改：先 `character_detail_by_name(novel_name="NOVEL_NAME", character_name={name})` 读取 DB 完整数据，再改文件，再 `character_update` + `consistency_guard` 同步
 
 **正向定义原则**：直接写"是什么"，避免用否定句式描述（如"不是什么"）。否定式定义会稀释特征浓度，让读者记住的是模糊轮廓而非鲜明形象。
 
@@ -24,7 +24,7 @@ lifecycle: core
 ```
 Phase 1: 数据采集（DB优先）
   world_query(novel, category='race') + character_list → 避免重名
-  如有参照角色 → character_detail_by_name(novel_name="这次不一样了", character_name={name}) 获取完整档案
+  如有参照角色 → character_detail_by_name(novel_name="NOVEL_NAME", character_name={name}) 获取完整档案
   ↓
 Phase 2: 角色蒸馏7步
   萃取→深度(含弧线+原型)→洋葱→矛盾注入→共情细节→定标→锻造
@@ -42,15 +42,15 @@ Phase 4: 写入DB + 文件同步
 
 ```
 Phase 1: 数据采集（DB优先）
-  character_detail_by_name(novel_name="这次不一样了", character_name={name}) + world_query(novel) + relation_list(novel)
-  volume_get(novel_name="这次不一样了", volume_number={N}) → 了解出场场景
+  character_detail_by_name(novel_name="NOVEL_NAME", character_name={name}) + world_query(novel) + relation_list(novel)
+  volume_get(novel_name="NOVEL_NAME", volume_number={N}) → 了解出场场景
   如有伏笔 → foreshadow_list(character_id=id)
   ↓
 Phase 2: 评估修改范围 → 用户确认
   列出影响项：关系/能力/伏笔/已写章节/其他设定文件
   ↓
 Phase 3: 执行修改（写入DB，不直接写文件）
-  character_update_by_name(novel_name="这次不一样了", character_name={name}, 变更字段...)
+  character_update_by_name(novel_name="NOVEL_NAME", character_name={name}, 变更字段...)
   sync_db_to_files(data_type='character')
   ⚠️ 正向定义原则：用"是什么"直接描述，避免"不是什么"的否定式补丁
   ↓

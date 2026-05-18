@@ -71,7 +71,7 @@ Step 3: 保存 → git commit
 
 ```python
 # 校验 DB 与文件一致性，不一致自动同步
-consistency_guard(novel_name="这次不一样了", auto_sync=True)
+consistency_guard(novel_name="NOVEL_NAME", auto_sync=True)
 # 返回 synced_count > 0 时，提示用户哪些数据被同步了
 ```
 
@@ -121,11 +121,11 @@ Read("novels/{小说名}/设定/大纲/跨卷因果链.md")    # 跨卷因果
 Read("novels/{小说名}/设定/大纲/V{N}-{卷名}.md")
 
 # 角色与伏笔（轻量）
-character_list(novel_name="这次不一样了")
-foreshadow_list(novel_name="这次不一样了", status='planted')
+character_list(novel_name="NOVEL_NAME")
+foreshadow_list(novel_name="NOVEL_NAME", status='planted')
 
 # 世界观（DB权威源，一次调用获取全部）
-world_query(novel_name="这次不一样了")
+world_query(novel_name="NOVEL_NAME")
 ```
 
 ### 0.4 引擎加载（按步骤分批）
@@ -309,12 +309,12 @@ Agent 核心方法论见 `agents/event-architect.md`（已集成 causality.md �
 如果事件架构师在设计中引入了**世界观中不存在的新实体**（新物品、新地点、新NPC、新能力、新概念等），编排器必须：
 
 1. **列出所有新实体**：名称+类型+用途+为什么需要新增（参考 world-element-registry.md 的元素分类框架）
-2. **查重**：对照 `world_query(novel_name="这次不一样了")` 和已有设定文件确认不重复
+2. **查重**：对照 `world_query(novel_name="NOVEL_NAME")` 和已有设定文件确认不重复
 3. **术语验证**：新实体命名是否使用灵能术语（非现代术语），是否有文化出处
 4. **暂停等用户确认**：用户说"OK"才继续，否则修改或删除
 5. **确认后保存**：
    - 文件：追加到 `novels/{小说名}/设定/世界观.md` / `物品.md` / `地图.md` 等对应文件
-   - DB：调用 `world_upsert(novel_name="这次不一样了", category, name, data)` 或 `character_create(novel_name="这次不一样了", name, ...)`
+   - DB：调用 `world_upsert(novel_name="NOVEL_NAME", category, name, data)` 或 `character_create(novel_name="NOVEL_NAME", name, ...)`
 
 **新实体类型与保存位置**：
 
@@ -476,33 +476,33 @@ def check_result(op_name, result):
         errors.append(f"{op_name} 失败: {result}")
 
 # 1. 更新卷级信息
-result = volume_update_by_number(novel_name="这次不一样了", number={volume_number}, main_plotlines=[...], notes="...")
+result = volume_update_by_number(novel_name="NOVEL_NAME", number={volume_number}, main_plotlines=[...], notes="...")
 check_result("volume_update", result)
 
 # 2. 规划章节（每章一条）
 for chapter in chapters:
-    result = chapter_plan(novel_name="这次不一样了", number, title, outline, chapter_type, volume_id)
+    result = chapter_plan(novel_name="NOVEL_NAME", number, title, outline, chapter_type, volume_id)
     check_result(f"chapter_plan Ch{chapter.number}", result)
 
 # 3. 埋设伏笔
 for foreshadow in foreshadows:
-    result = foreshadow_plant(novel_name="这次不一样了", description, planned_recall_chapter, importance, tags)
+    result = foreshadow_plant(novel_name="NOVEL_NAME", description, planned_recall_chapter, importance, tags)
     check_result("foreshadow_plant", result)
 
 # 4. 同步世界观（确保正文生成时DB有完整数据）
 for location in new_locations:
-    result = world_upsert(novel_name="这次不一样了", category='location', name=location.name, data={...},
+    result = world_upsert(novel_name="NOVEL_NAME", category='location', name=location.name, data={...},
         keys=location.keys, tags=location.tags, volume_range=location.volume_range,
         writing_guide=location.writing_guide)
     check_result(f"world_upsert 地点-{location.name}", result)
 
 for item in new_items:
-    result = world_upsert(novel_name="这次不一样了", category='ability', name=item.name, data={...},
+    result = world_upsert(novel_name="NOVEL_NAME", category='ability', name=item.name, data={...},
         keys=item.keys, tags=item.tags, volume_range=item.volume_range)
     check_result(f"world_upsert 物品-{item.name}", result)
 
 for character in new_characters:
-    result = character_create(novel_name="这次不一样了", name=character.name, ...,
+    result = character_create(novel_name="NOVEL_NAME", name=character.name, ...,
         appearance_detail=character.appearance_detail,
         decision_engine=character.decision_engine,
         voice_fingerprint=character.voice_fingerprint,
@@ -511,27 +511,27 @@ for character in new_characters:
     check_result(f"character_create-{character.name}", result)
 
 for faction in new_factions:
-    result = world_upsert(novel_name="这次不一样了", category='faction', name=faction.name, data={...},
+    result = world_upsert(novel_name="NOVEL_NAME", category='faction', name=faction.name, data={...},
         keys=faction.keys, tags=faction.tags, volume_range=faction.volume_range,
         writing_guide=faction.writing_guide)
     check_result(f"world_upsert 势力-{faction.name}", result)
 
 # 5. 更新已有角色状态（如有变化）
 for character in changed_characters:
-    result = character_update_by_name(novel_name="这次不一样了", character_name={character_name}, status=character.new_status, ...,
+    result = character_update_by_name(novel_name="NOVEL_NAME", character_name={character_name}, status=character.new_status, ...,
         current_snapshot=character.current_snapshot,
         growth_trajectory=character.growth_trajectory)
     check_result(f"character_update-{character_name}", result)
 
 # 6. 创建人物关系（如有新关系）
 for relation in new_relations:
-    result = relation_create_by_name(novel_name="这次不一样了", from_name={from_name}, to_name={to_name}, relation_type=..., ...)
+    result = relation_create_by_name(novel_name="NOVEL_NAME", from_name={from_name}, to_name={to_name}, relation_type=..., ...)
     check_result(f"relation_create-{from_name}↔{to_name}", result)
 
 # 7. 注册暗线/支线
 for thread in volume_threads:
     result = plot_thread_create(
-        novel_name="这次不一样了", name=thread.name, thread_type=thread.type,
+        novel_name="NOVEL_NAME", name=thread.name, thread_type=thread.type,
         description=thread.description, start_chapter_id=thread.start_chapter_id,
         volume_scope=json.dumps(thread.volume_scope),
         related_characters=json.dumps(thread.related_characters),
@@ -632,7 +632,7 @@ Agent 2 输出每章大纲时标注 `声音层: {类型}` 字段，正文写作�
 
 ## 项目专属数据
 
-《这次不一样了》的卷级数据存于：
+《NOVEL_NAME》的卷级数据存于：
 `references/novel-planner/project-context.md`
 
 Agent 设计时，编排器将此文件作为附加输入提供。

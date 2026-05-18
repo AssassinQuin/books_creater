@@ -39,12 +39,53 @@ Step 7: 🔒用户确认 → git commit
 
 ```python
 # 基础数据
-novel_get(novel_name="这次不一样了")          # 小说基本信息
-world_query(novel_name="这次不一样了")        # 世界观全部数据
-character_list(novel_name="这次不一样了")     # 角色列表（含主角/反派/关键配角）
-volume_list(novel_name="这次不一样了")        # 已有卷信息（如有）
-foreshadow_list(novel_name="这次不一样了")    # 全局伏笔（如有）
+novel_get(novel_name=NOVEL_NAME)          # 小说基本信息
+world_query(novel_name=NOVEL_NAME)        # 世界观全部数据
+character_list(novel_name=NOVEL_NAME)     # 角色列表（含主角/反派/关键配角）
+volume_list(novel_name=NOVEL_NAME)        # 已有卷信息（如有）
+foreshadow_list(novel_name=NOVEL_NAME)    # 全局伏笔（如有）
+```
 
+**🔒 上下文预算管理（防止上下文溢出）**
+
+Step 0 同时加载 9 个引擎/规范文件 + 5 项基础数据，存在上下文窗口溢出风险。编排器在加载前**必须**执行 token 预算估算：
+
+```python
+# Token 预算估算（粗略：引擎文件 ~2000 tokens/个，lorecraft 文件 ~1500 tokens/个）
+TOKEN_BUDGET_LIMIT = 80000  # 留余量给 Agent 产出 + 对话
+
+estimated_tokens = (
+    # 结构引擎（Step 1/2 + Step 5）
+    5 * 2000 +  # causality + three-perspective + 3个perspective-agent
+    # 术语规范（全程强制）
+    4 * 1500 +  # lorecraft SKILL + term-map + quickref + world-element-registry
+    # 基础数据（MCP 返回）
+    5 * 1000    # novel_get + world_query + character_list + volume_list + foreshadow_list
+)
+# estimated_tokens ≈ 23000（正常情况不会超限）
+# 但如果 novel 数据量极大（多卷+多角色+丰富世界观），需重新评估
+
+if estimated_tokens > TOKEN_BUDGET_LIMIT:
+    # 分层加载策略：
+    # Tier 1（始终加载，核心约束）：
+    #   lorecraft term-map + quickref + world-element-registry
+    # Tier 2（按步骤加载）：
+    #   Step 1/2 → causality + three-perspective
+    #   Step 5 → reader-perspective + author-perspective + character-perspective
+    # Tier 3（按需加载）：
+    #   lorecraft SKILL.md 全文（如上下文紧张，只加载前20行：原则+关键约束）
+    #   剩余引擎在对应 Step 启动时通过 skill_loader 按需加载
+    print("⚠️ 上下文预算紧张，启用分层加载策略")
+    apply_tiered_loading = True
+else:
+    apply_tiered_loading = False
+```
+
+> **引擎精简版机制**：如果上下文仍然紧张，Agent 可只加载引擎的前 20 行（原则+关键约束），跳过示例和详细说明。这不会显著影响约束效果，因为核心规则集中在文件开头。
+
+**引擎加载执行**
+
+```python
 # 引擎加载（按步骤按需加载，编排器在启动对应Agent时通过 skill_loader 传入）
 # Step 1/2 需要：
 skill_loader("novel-planner", "engine", "causality")
@@ -257,6 +298,46 @@ V{N}《{卷名}》目标卡
 
 P0→必须修复（回对应Step）。无P0→进入保存。
 
+**🔒 P0 修复循环退出机制（防止无限循环）**
+
+```python
+MAX_FIX_ROUNDS = 3
+fix_rounds = 0  # 初始化计数器
+
+while p0_issues_exist:
+    fix_rounds += 1
+
+    if fix_rounds > MAX_FIX_ROUNDS:
+        # 已修复3轮仍有P0问题 → 升级为用户决策
+        print(f"⚠️ 已完成 {MAX_FIX_ROUNDS} 轮P0修复，仍有 {len(remaining_p0s)} 个P0问题未解决：")
+        for issue in remaining_p0s:
+            print(f"  - [{issue.location}] {issue.description}")
+            print(f"    影响评估：{issue.impact_analysis}")
+        print("\n请选择处理方式：")
+        print("  ① 接受当前状态 — 标记为已知风险，继续保存")
+        print("  ② 回退到上一版本 — 放弃本轮修改，恢复修复前状态")
+        print("  ③ 手动修复 — 暂停流程，由用户手动处理剩余P0")
+        # 等待用户决策后继续
+        user_choice = await user_input()
+        if user_choice == "①":
+            print("⚠️ 用户接受当前状态，剩余P0已记录为已知风险")
+            break  # 退出循环，继续保存
+        elif user_choice == "②":
+            rollback_to_pre_fix_state()
+            return  # 中止流程
+        elif user_choice == "③":
+            print("⏸ 流程暂停，等待用户手动修复后重新验证")
+            return  # 中止流程
+
+    # 执行修复（回对应Step）
+    fix_p0_issues(p0_issues)
+    # 重跑验证
+    validation_result = run_step5_validation()
+    p0_issues = validation_result.p0_issues
+```
+
+> **注意**：`fix_rounds` 计数器在每次进入 Step 5 验证时初始化为 0。如果连续 3 轮修复后仍有 P0，说明问题可能需要更高层级的设计调整（如世界观设定矛盾），此时强制交由用户决策，避免编排器与 Agent 陷入无效循环。
+
 ## Step 6: 保存
 
 ### 文件落盘
@@ -279,19 +360,19 @@ errors = []
 
 # 卷级目标 → volume_update
 for card in volume_target_cards:
-    result = volume_update_by_number(novel_name="这次不一样了", number=card.volume_id, main_plotlines=card.targets)
+    result = volume_update_by_number(novel_name=NOVEL_NAME, number=card.volume_id, main_plotlines=card.targets)
     if '"ok": false' in result or '"error"' in result:
         errors.append(f"volume_update V{card.volume_id} 失败: {result}")
 
 # 伏笔 → foreshadow_plant
 for f in cross_volume_foreshadows:
-    result = foreshadow_plant(novel_name="这次不一样了", description=f.desc, planned_recall_chapter=f.recall)
+    result = foreshadow_plant(novel_name=NOVEL_NAME, description=f.desc, planned_recall_chapter=f.recall)
     if '"ok": false' in result or '"error"' in result:
         errors.append(f"foreshadow_plant 失败: {result}")
 
 # 支线 → world_upsert
 for s in subplots:
-    result = world_upsert(novel_name="这次不一样了", category='subplot', name=s.name, data={...})
+    result = world_upsert(novel_name=NOVEL_NAME, category='subplot', name=s.name, data={...})
     if '"ok": false' in result or '"error"' in result:
         errors.append(f"world_upsert 支线失败: {result}")
 
@@ -346,6 +427,6 @@ B1: 全书框架+脉络+卷级目标卡+支线体系+审计通过
 | agents/目录缺少文件 | 需创建后再启动对应Step |
 | Step 0 数据为空（新小说） | **阻断**，必须先完成 novel-setup（世界观≥3维度+角色≥2个）后才能进入全书大纲设计 |
 | Step 0 世界观<3维度或角色<2个 | **阻断**，提示用户补充世界观/角色后再进入 |
-| Step 5 发现P0 | 回到对应Step修复，修复后重跑验证 |
+| Step 5 发现P0 | 回到对应Step修复，修复后重跑验证（最多3轮，超出则升级为用户决策） |
 
 </supporting-info>
