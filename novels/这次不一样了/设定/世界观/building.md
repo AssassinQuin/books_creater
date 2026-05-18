@@ -7,6 +7,7 @@
 - **secondary_keys**: ["铸合矿铆钉", "霜骨木盾", "赵铁山"]
 - **tags**: ["building", "北境", "军事", "要塞", "壁盾"]
 - **related**: ["壁盾军团", "纹路法则", "霜骨木"]
+- **volume_range**: V1-V14
 - **type**: 建筑
 - **zone**: 北境
 - **materials**:
@@ -31,6 +32,7 @@
 - **secondary_keys**: ["铸合矿骨架", "灵晶钟体", "预警系统"]
 - **tags**: ["building", "中域", "内城", "预警", "军事"]
 - **related**: ["灰城", "壁盾军团", "纹路法则"]
+- **volume_range**: V1-V14
 - **priority**: 25
 - **type**: 建筑
 - **zone**: 中域/内城
@@ -56,6 +58,7 @@
 - **secondary_keys**: ["忏悔室", "裁判官", "碑文基座"]
 - **tags**: ["building", "教会", "信仰", "建筑"]
 - **related**: ["教会", "碑文", "裁判官"]
+- **volume_range**: V1-V14
 - **priority**: 25
 - **type**: 建筑
 - **zone**: 中域/各地
@@ -83,6 +86,7 @@
 - **secondary_keys**: ["移动营", "猎团", "帆布帐篷"]
 - **tags**: ["building", "外围", "猎团", "临时建筑"]
 - **related**: ["石堡式外围聚落", "纹路法则", "壁盾军团"]
+- **volume_range**: V1-V14
 - **priority**: 20
 - **type**: 建筑
 - **zone**: 外围
@@ -108,6 +112,7 @@
 - **secondary_keys**: ["铸合矿", "白塔群", "域纹全覆盖"]
 - **tags**: ["building", "内城", "白塔", "域纹", "建筑"]
 - **related**: ["灰城", "纹路法则", "枢都与内城"]
+- **volume_range**: V1-V14
 - **type**: 建筑
 - **zone**: 内城
 - **materials**:
@@ -134,6 +139,7 @@
 - **secondary_keys**: ["中域城市", "纹市", "灵能分配"]
 - **tags**: ["building", "中域", "城市", "建筑"]
 - **related**: ["石堡式外围聚落", "枢城", "纹路法则"]
+- **volume_range**: V1-V14
 - **type**: 建筑
 - **zone**: 中域
 - **materials**:
@@ -161,6 +167,7 @@
 - **secondary_keys**: ["监测阵", "公告栏", "灵枢网"]
 - **tags**: ["building", "全区域", "灵枢", "灵站"]
 - **related**: ["引渡椅", "灵契", "灵枢"]
+- **volume_range**: V1-V14
 - **type**: 建筑
 - **zone**: 全区域
 - **materials**:
@@ -189,6 +196,7 @@
 - **secondary_keys**: ["治疗级灵晶", "净化纹路"]
 - **tags**: ["building", "中域", "内城", "疗养", "纹路"]
 - **related**: ["纹路法则", "灵枢", "灵衰症机制"]
+- **volume_range**: V1-V14
 - **priority**: 25
 - **type**: 建筑
 - **zone**: 中域/内城
@@ -216,6 +224,7 @@
 - **secondary_keys**: ["灰泥", "铁木", "石屋", "预警灯"]
 - **tags**: ["building", "外围", "聚落", "石堡", "建筑"]
 - **related**: ["纹路法则", "三环结构", "废墟聚落"]
+- **volume_range**: V1-V14
 - **type**: 建筑
 - **zone**: 外围
 - **materials**:
@@ -241,6 +250,7 @@
 - **secondary_keys**: ["密封纹", "净水纹", "矿头灯"]
 - **tags**: ["building", "外围", "矿工", "建筑"]
 - **related**: ["石堡式外围聚落", "纹路法则"]
+- **volume_range**: V1-V14
 - **priority**: 25
 - **type**: 建筑
 - **zone**: 外围
@@ -268,6 +278,7 @@
 - **secondary_keys**: ["纹路师培养", "纹路拓本", "灵矿石板"]
 - **tags**: ["building", "中域", "学院", "纹路", "教育"]
 - **related**: ["纹路师职业体系", "纹路学堂", "纹路法则"]
+- **volume_range**: V1-V14
 - **priority**: 25
 - **type**: 建筑
 - **zone**: 中域
@@ -295,6 +306,7 @@
 - **secondary_keys**: ["灵矿石磨盘", "碎纹", "面粉"]
 - **tags**: ["building", "中域", "农业", "磨坊", "纹路"]
 - **related**: ["铁麦", "灰城", "纹路法则"]
+- **volume_range**: V1-V14
 - **priority**: 20
 - **type**: 建筑
 - **zone**: 中域
@@ -320,6 +332,7 @@
 - **secondary_keys**: ["供能工", "校盘", "精密刻印"]
 - **tags**: ["building", "内城", "工坊", "纹路", "制造"]
 - **related**: ["枢城", "纹路法则", "灵枢"]
+- **volume_range**: V1-V14
 - **priority**: 25
 - **type**: 建筑
 - **zone**: 内城
