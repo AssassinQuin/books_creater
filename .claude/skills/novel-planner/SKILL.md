@@ -56,7 +56,7 @@ skill_loader("novel-planner", "engine", "character-perspective-agent")
 
 # 🔒 术语规范（全程强制加载——所有Agent生成前必读、生成后必检）：
 # 以下三项在Step 0一次性加载，编排器打包传给所有Agent
-Read(".claude/skills/lorecraft/SKILL.md")                          # 文化根脉命名引擎（禁止术语+四步法+层积命名法）
+Read(".claude/skills/lorecraft/SKILL.md")                          # 文化根脉命名引擎（禁用术语+四步法+层积命名法）
 Read(".claude/skills/lorecraft/references/term-map.md")            # 现代→灵能术语映射表（~60+条）
 Read(".claude/skills/lorecraft/references/quickref.md")             # 速查卡（七势力字根+五步命名法+多样性检查）
 Read(".claude/skills/engines/world-element-registry.md")           # 世界观元素注册机制（已注册元素索引）
@@ -95,7 +95,7 @@ else:
     # 展示清单给用户确认
 ```
 
-**禁止**：引擎加载失败后仍启动 Agent。如果上下文不足，编排器应提示用户并等待调整，而非静默跳过。
+**为什么不应该在引擎加载失败后启动 Agent**：引擎是后续所有步骤的约束条件，缺失引擎意味着 Agent 将在无约束状态下运行，产出可能违反因果逻辑、术语规范或三视角标准。修复成本远高于重新加载。如果上下文不足，编排器应提示用户并等待调整，而非静默跳过。
 
 ## Step 1: Agent — 框架建筑师
 
@@ -109,10 +109,10 @@ else:
 3. Agent 输出：全书起承转合 + 每卷功能定位 + 卷间关系
 
 ### 输出验证
-- [ ] 起承转合四段比例合理（起25%/承35%/转25%/合15%）
+- [ ] 起承转合四段比例合理（起20%-30%/承30%-40%/转20%-30%/合10%-20%，总和100%）
 - [ ] 每卷功能定位唯一、不重复
 - [ ] 卷间关系有因果链（因为V{N}的后果→所以V{N+1}面对什么）
-- [ ] 🔒 术语规范：产出中无禁止术语（数据/系统/信号/参数/权限/终端/频率等），全部使用 term-map 映射的灵能术语
+- [ ] 🔒 术语规范：产出中无禁用术语（数据/系统/信号/参数/权限/终端/频率等），全部使用 term-map 映射的灵能术语
 - [ ] 🔒 术语规范：新增世界观术语遵循文化根脉四步法，有文化出处
 
 ## Step 2: Agent — 脉络设计师
@@ -132,7 +132,7 @@ else:
 - [ ] 主线因果链完整（每步"因为所以"，通过可替换性测试）
 - [ ] 暗线每卷至少推进一次，不一次揭完
 - [ ] 情绪曲线有起伏，无连续3卷无爽点
-- [ ] 🔒 术语规范：产出中无禁止术语，暗线/势力/能力相关描述使用灵能术语
+- [ ] 🔒 术语规范：产出中无禁用术语，暗线/势力/能力相关描述使用灵能术语
 - [ ] 🔒 术语规范：人物弧光描述中的世界观元素（能力/势力/地点）用词与 term-map 一致
 
 ## 🔒检查点A: 确认全书框架
@@ -334,7 +334,7 @@ B1: 全书框架+脉络+卷级目标卡+支线体系+审计通过
 | `engines/reader-perspective-agent.md` | 读者视角审查清单 | Step 5 |
 | `engines/author-perspective-agent.md` | 作者视角审查清单 | Step 5 |
 | `engines/character-perspective-agent.md` | 人物视角审查清单 | Step 5 |
-| `lorecraft/SKILL.md` | 文化根脉术语命名引擎—禁止术语+命名方法 | Step 1-5（全程） |
+| `lorecraft/SKILL.md` | 文化根脉术语命名引擎—禁用术语+命名方法 | Step 1-5（全程） |
 | `lorecraft/references/term-map.md` | 现代→灵能术语映射表（~60+条） | Step 1-5（全程） |
 | `lorecraft/references/quickref.md` | 术语速查卡（七势力字根+命名法） | Step 1-5（全程） |
 | `engines/world-element-registry.md` | 世界观元素注册机制—已注册元素索引 | Step 1-5（全程） |

@@ -527,6 +527,50 @@ def foreshadow_abandon(novel_name: str, foreshadow_id: int, reason: str = "") ->
 
 
 @mcp.tool
+def foreshadow_update(novel_name: str, foreshadow_id: int,
+                      description: str = "", importance: str = "",
+                      planned_recall_chapter: int = 0,
+                      related_characters: list = None,
+                      tags: list = None) -> str:
+    """更新伏笔（只传需要修改的字段，空值会被忽略）。可修改描述、重要性、计划回收章等。
+      novel_name: 小说名称
+      foreshadow_id: 伏笔ID
+      description: 新描述
+      importance: high/medium/low
+      planned_recall_chapter: 计划回收章节号（传0表示清除）
+      related_characters: 相关角色ID列表
+      tags: 标签列表
+    """
+    novel_id = _resolve_novel_id(novel_name)
+    fs = query("SELECT id FROM foreshadows WHERE id=%s AND novel_id=%s",
+               (foreshadow_id, novel_id), fetch="one")
+    if not fs:
+        return json.dumps({"error": f"伏笔 {foreshadow_id} 不存在"}, ensure_ascii=False)
+
+    fields = {}
+    if description:
+        fields["description"] = description
+    if importance:
+        fields["importance"] = importance
+    if planned_recall_chapter != 0:
+        fields["planned_recall_chapter"] = planned_recall_chapter
+    if related_characters is not None:
+        fields["related_characters"] = json.dumps(related_characters, ensure_ascii=False)
+    if tags is not None:
+        fields["tags"] = json.dumps(tags, ensure_ascii=False)
+    if not fields:
+        return json.dumps({"ok": False, "error": "no fields to update"}, ensure_ascii=False)
+
+    sets = [f"{k} = %s" for k in fields]
+    vals = list(fields.values()) + [foreshadow_id]
+    query(f"UPDATE foreshadows SET {', '.join(sets)}, updated_at = NOW() WHERE id = %s",
+          tuple(vals), fetch="none")
+    _record_db_hash(novel_id, "foreshadow", str(foreshadow_id), json.dumps(fields, ensure_ascii=False))
+    return json.dumps({"ok": True, "foreshadow_id": foreshadow_id, "updated_fields": list(fields.keys())},
+                      ensure_ascii=False)
+
+
+@mcp.tool
 def get_chapter_context(novel_name: str, chapter_number: int) -> str:
     """获取写某章所需的全部上下文（聚合查询，一次调用替代10+单独调用）。
     返回:

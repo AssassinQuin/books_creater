@@ -322,3 +322,90 @@ def timeline_query(novel_name: str, from_chapter: int = 0, to_chapter: int = 999
         (novel_id, from_chapter, to_chapter)
     )
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
+
+
+@mcp.tool
+def scene_update(novel_name: str, chapter_number: int, scene_number: int,
+                 location: str = "", characters_involved: list = None,
+                 conflict: str = "", emotion_type: str = "",
+                 key_beats: list = None, notes: str = "") -> str:
+    """更新场景大纲（只传需要修改的字段，空值会被忽略）
+      novel_name: 小说名称
+      chapter_number: 章节序号
+      scene_number: 场景序号
+    """
+    chapter_id = _resolve_chapter_id(novel_name, chapter_number)
+    fields = {}
+    if location:
+        fields["location"] = location
+    if characters_involved is not None:
+        fields["characters_involved"] = characters_involved
+    if conflict:
+        fields["conflict"] = conflict
+    if emotion_type:
+        fields["emotion_type"] = emotion_type
+    if key_beats is not None:
+        fields["key_beats"] = json.dumps(key_beats, ensure_ascii=False)
+    if notes:
+        fields["notes"] = notes
+    if not fields:
+        return json.dumps({"ok": False, "error": "no fields to update"}, ensure_ascii=False)
+    sets = [f"{k} = %s" for k in fields]
+    vals = list(fields.values()) + [chapter_id, scene_number]
+    query(
+        f"UPDATE scene_outlines SET {', '.join(sets)} WHERE chapter_id = %s AND scene_number = %s",
+        tuple(vals), fetch="none"
+    )
+    return json.dumps({"ok": True}, ensure_ascii=False)
+
+
+@mcp.tool
+def scene_delete(novel_name: str, chapter_number: int, scene_number: int) -> str:
+    """删除场景大纲
+      novel_name: 小说名称
+      chapter_number: 章节序号
+      scene_number: 场景序号
+    """
+    chapter_id = _resolve_chapter_id(novel_name, chapter_number)
+    query("DELETE FROM scene_outlines WHERE chapter_id = %s AND scene_number = %s",
+          (chapter_id, scene_number), fetch="none")
+    return json.dumps({"ok": True}, ensure_ascii=False)
+
+
+@mcp.tool
+def timeline_update(novel_name: str, event_id: int,
+                    event_description: str = "", event_time: str = "",
+                    characters_involved: list = None,
+                    significance: str = "") -> str:
+    """更新时间线事件（只传需要修改的字段）
+      novel_name: 小说名称
+      event_id: 时间线事件ID
+    """
+    _resolve_novel_id(novel_name)
+    fields = {}
+    if event_description:
+        fields["event_description"] = event_description
+    if event_time:
+        fields["event_time"] = event_time
+    if characters_involved is not None:
+        fields["characters_involved"] = characters_involved
+    if significance:
+        fields["significance"] = significance
+    if not fields:
+        return json.dumps({"ok": False, "error": "no fields to update"}, ensure_ascii=False)
+    sets = [f"{k} = %s" for k in fields]
+    vals = list(fields.values()) + [event_id]
+    query(f"UPDATE timeline_events SET {', '.join(sets)} WHERE id = %s",
+          tuple(vals), fetch="none")
+    return json.dumps({"ok": True}, ensure_ascii=False)
+
+
+@mcp.tool
+def timeline_delete(novel_name: str, event_id: int) -> str:
+    """删除时间线事件
+      novel_name: 小说名称
+      event_id: 时间线事件ID
+    """
+    _resolve_novel_id(novel_name)
+    query("DELETE FROM timeline_events WHERE id = %s", (event_id,), fetch="none")
+    return json.dumps({"ok": True}, ensure_ascii=False)

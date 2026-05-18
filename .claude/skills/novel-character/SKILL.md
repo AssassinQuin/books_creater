@@ -13,7 +13,7 @@ lifecycle: core
 - 新建：先 `character_create` 写入 DB，再写文件
 - 修改：先 `character_detail_by_name(novel_name="这次不一样了", character_name={name})` 读取 DB 完整数据，再改文件，再 `character_update` + `consistency_guard` 同步
 
-**禁止补丁式说明**：直接写"是什么"，不写"不是什么"。
+**正向定义原则**：直接写"是什么"，避免用否定句式描述（如"不是什么"）。否定式定义会稀释特征浓度，让读者记住的是模糊轮廓而非鲜明形象。
 
 ---
 
@@ -28,13 +28,13 @@ Phase 1: 数据采集（DB优先）
   ↓
 Phase 2: 角色蒸馏7步
   萃取→深度(含弧线+原型)→洋葱→矛盾注入→共情细节→定标→锻造
-  核心角色每步深挖；次要角色/NPC可精简但禁止跳过
+  核心角色每步深挖；次要角色/NPC可精简但不可跳过任何步骤
   ↓
 Phase 3: 外观+对话设计 → 用户确认方案
-  appearance ≥30字、race、speech_style、relation_adjustments≥3种
+  appearance 占角色档案整体篇幅的 5%-15%（核心角色取上限，NPC 取下限），race、speech_style、relation_adjustments 覆盖 ≥3 种关系类型
   ↓
 Phase 4: 写入DB + 文件同步
-  character_create(含JSONB字段) → 写 设定/人物/{名}.md
+  character_create(含JSONB字段) → sync_db_to_files(data_type='character')
   → relation_create → consistency_guard(novel, auto_sync=True)
 ```
 
@@ -43,22 +43,22 @@ Phase 4: 写入DB + 文件同步
 ```
 Phase 1: 数据采集（DB优先）
   character_detail_by_name(novel_name="这次不一样了", character_name={name}) + world_query(novel) + relation_list(novel)
-  Read 相关卷大纲/章节 → 了解出场场景
+  volume_get(novel_name="这次不一样了", volume_number={N}) → 了解出场场景
   如有伏笔 → foreshadow_list(character_id=id)
   ↓
 Phase 2: 评估修改范围 → 用户确认
   列出影响项：关系/能力/伏笔/已写章节/其他设定文件
   ↓
-Phase 3: 执行修改
-  改 设定/人物/{名}.md（遵守 character.md 模板）
-  同步更新受影响的设定文件
-  ⚠️ 禁止补丁式说明
+Phase 3: 执行修改（写入DB，不直接写文件）
+  character_update_by_name(novel_name="这次不一样了", character_name={name}, 变更字段...)
+  sync_db_to_files(data_type='character')
+  ⚠️ 正向定义原则：用"是什么"直接描述，避免"不是什么"的否定式补丁
   ↓
 Phase 4: 用户确认修改结果
   展示改了什么+为什么+影响范围
   ↓
-Phase 5: 同步DB
-  character_update_by_name(novel_name="这次不一样了", character_name={name}, 变更字段...) → relation_update → consistency_guard(auto_sync)
+Phase 5: 级联同步
+  relation_update → sync_db_to_files(data_type='character') → consistency_guard(auto_sync)
 ```
 
 </what-to-do>
@@ -103,12 +103,12 @@ Phase 5: 同步DB
 
 ## 强制约束
 
-- **appearance** ≥30字，禁止形容词堆砌，标志特征1-2个贯穿全文
+- **appearance** 占角色档案整体篇幅的 5%-15%，核心角色取上限，NPC 取下限；避免形容词堆砌（如"美丽的""高大的"），用具体可感知的特征让读者自行形成印象；标志特征控制在 1-2 个并贯穿全文，过多则分散记忆点
 - **race** 从 DB 取值：`world_query(novel, category='race')`
-- **speech_style** 不可为空，relation_adjustments 覆盖 ≥3 种关系
+- **speech_style** 不可为空，relation_adjustments 覆盖 ≥3 种关系类型
 - **觉醒者角色** 必须回答能力7问：`engines/ability.md`
 - **对话设计** 参考 `engines/dialogue.md`
-- **角色蒸馏7步**：核心角色每步深挖，次要角色/NPC 精简但禁止跳过任意步骤
+- **角色蒸馏7步**：核心角色每步深挖，次要角色/NPC 精简但不可跳过任意步骤
 - **🔒 术语规范**：角色设计中的能力名称、势力归属、世界观相关描述必须遵守 `lorecraft/references/term-map.md` 禁止术语规则（如能力描述中出现"数据/系统/频率"等现代术语须替换为灵能术语）；角色口头禅和说话风格中涉及世界观概念时须使用口语层术语（参考 term-map「角色口语」列）
 
 ## 边界条件
@@ -116,7 +116,7 @@ Phase 5: 同步DB
 | 场景 | 处理 |
 |------|------|
 | 角色名重复 | character_list 检查 → 提示覆盖/新建 |
-| appearance < 30字 | 拒绝存盘，要求补充 |
+| appearance 篇幅不足角色档案 5% | 拒绝存盘，要求补充具体可感知的特征描写 |
 | speech_style 为空 | 强制补充后再存 |
 | relation_create 失败 | 检查 from/to ID 是否有效 |
 | DB 读取失败 | 回退读本地文件 |
