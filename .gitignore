@@ -13,3 +13,16 @@ Thumbs.db
 # 环境文件
 .env
 .env.local
+.mcp.json
+
+# 本地配置（含绝对路径的权限白名单）
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 临时测试脚本
+test_*.py

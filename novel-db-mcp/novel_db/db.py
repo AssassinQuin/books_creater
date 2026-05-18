@@ -7,7 +7,7 @@ from fastmcp import FastMCP
 
 PROJECT_ROOT = os.environ.get(
     "NOVEL_PROJECT_ROOT",
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
 DATABASE_URL = os.environ.get(

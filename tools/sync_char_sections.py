@@ -6,7 +6,8 @@ No JSON extraction needed - we read from DB and format directly.
 
 import json, os, re
 
-CHAR_DIR = "/Users/ganjie/code/personal/bywork/books_creater/novels/这次不一样了/设定/人物"
+CHAR_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "novels/这次不一样了/设定/人物")
 DB_FILE = "/tmp/characters_db.json"
 
 # Load DB

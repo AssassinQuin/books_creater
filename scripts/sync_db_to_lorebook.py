@@ -11,7 +11,7 @@ from pathlib import Path
 from datetime import datetime
 
 # 项目路径
-PROJECT_ROOT = Path("/Users/ganjie/code/personal/bywork/books_creater")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 NOVEL_DIR = PROJECT_ROOT / "novels/这次不一样了"
 LOREBOOK_DIR = NOVEL_DIR / "设定/lorebook/entries"
 SYNC_STATUS_FILE = NOVEL_DIR / "设定/.sync_status.json"

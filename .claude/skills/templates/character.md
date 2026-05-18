@@ -185,33 +185,13 @@
 }
 ```
 
-### 当前快照 (`current_snapshot`)
-
-```json
-{
-  "identity": "当前身份",
-  "ability": "当前能力状态",
-  "goal": "当前目标",
-  "knows": "当前已知信息",
-  "doesnt_know": "当前未知信息",
-  "relationships": "当前关键关系"
-}
-```
-
-### 成长轨迹 (`growth_trajectory`)
-
-```json
-[
-  {
-    "volume": "V1",
-    "chapter": 1,
-    "changes": "本章变化描述",
-    "trigger": "触发事件"
-  }
-]
-```
-
-> `growth_trajectory` 为追加式数组，每章写完后通过 `character_increment(growth_add=...)` 追加，不覆盖。
+> **动态内容已分离**：`current_snapshot`（当前快照）和 `growth_trajectory`（成长轨迹）为动态演化数据，不在静态档案中维护。
+>
+> 动态追踪见：
+> - `character_state_snapshots` — 每章状态快照（位置、情绪、身体、能力、物品、知识）
+> - `character_distillation_evolution` — 蒸馏模型演化（决策变化、信息获取、信念转变、关系演变、声音变化、能力变化、弧线推进、关键抉择）
+>
+> 查询工具：`character_get_latest` / `distillation_get` / `distillation_timeline` / `distillation_compare`
 
 ---
 
@@ -257,11 +237,13 @@
 ## 行为模式
 - **behavior_pattern**: {JSON}
 
-## 当前快照
-- **current_snapshot**: {JSON}
+## 动态追踪（不在此文件维护）
 
-## 成长轨迹
-- **growth_trajectory**: {JSON数组}
+> 人物动态状态见 DB：
+> - `character_state_snapshots` — 每章状态快照
+> - `character_distillation_evolution` — 蒸馏模型演化记录
+>
+> 文件只保留静态档案，动态内容通过 MCP 工具查询。
 
 ## 扩展维度
 <!-- 预留：未来新增维度在此追加，格式为 ## {维度名} + - **{field}**: {JSON/TEXT} -->

@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-from .db import mcp, query
+from .db import mcp, query, PROJECT_ROOT
 from .resolvers import _resolve_novel_id
 from .sync import (
     _ensure_data_hashes_table, _compute_hash, _record_db_hash, _record_file_hash,
@@ -112,7 +112,7 @@ def health_check(novel_name: str) -> str:
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
-_SKILL_BASE_PATH = "/Users/ganjie/code/personal/bywork/books_creater/.claude/skills"
+_SKILL_BASE_PATH = os.path.join(PROJECT_ROOT, ".claude", "skills")
 
 _SKILL_LOADER_CACHE: dict = {}
 

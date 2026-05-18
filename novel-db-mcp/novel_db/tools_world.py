@@ -4,9 +4,7 @@ import re
 
 from .db import mcp, query
 from .resolvers import _resolve_novel_id
-from .sync import _record_db_hash
-
-_SYNC_LOREBOOK_BASE = "/Users/ganjie/code/personal/bywork/books_creater/novels"
+from .sync import _record_db_hash, _NOVELS_BASE
 
 
 @mcp.tool
@@ -149,7 +147,7 @@ def sync_lorebook(novel_name: str) -> str:
     """从 设定/世界观/ 目录下的 MD 文件同步数据到 DB。
     解析 ## category: name 格式，upsert 到 world_settings 表。
     每次写作前调一次，确保 DB 与文件一致。"""
-    novel_dir = os.path.join(_SYNC_LOREBOOK_BASE, novel_name, "设定", "世界观")
+    novel_dir = os.path.join(_NOVELS_BASE, novel_name, "设定", "世界观")
     if not os.path.isdir(novel_dir):
         return json.dumps({"error": f"novel dir not found: {novel_dir}"}, ensure_ascii=False)
 

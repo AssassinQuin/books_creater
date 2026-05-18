@@ -14,37 +14,42 @@ Current project: **《这次不一样了》** — 14卷+尾声, 百万字级玄�
 
 **`SENTENCE-PATTERNS.md`**（项目根目录）定义了反AI句式系统——标点多样性引擎、信息投放节奏、场景结构随机组合、否定句式管理、意象梯度系统、环境音效轮换库。所有章节写作必须遵守其中的反AI指纹消除规则。
 
-**`.claude/skills/lorecraft/references/term-map.md`**（项目根目录 `.claude/skills/lorecraft/references/term-map.md`）定义了灵能玄幻世界观的术语映射规范——禁止现代科技/行政/计算机术语（数据/系统/信号/参数/权限/终端等），替换为有文化根脉的灵能术语。**卷级大纲/章节正文/设定文件生成前必须加载，写后必须逐条检查禁止术语残留。** 详见 `.claude/skills/lorecraft/SKILL.md`。
+**`.claude/skills/lorecraft/references/term-map.md`**（项目根目录 `.claude/skills/lorecraft/references/term-map.md`）定义了灵能玄幻世界观的术语映射规范——需要使用有文化根脉的灵能术语替代现代科技/行政/计算机术语（数据→讯息/系统→阵法/信号→灵波/参数→阵眼/权限→令牌/终端→枢纽等）。**卷级大纲/章节正文/设定文件生成前需要加载术语映射，写后需要逐条检查术语合规。** 详见 `.claude/skills/lorecraft/SKILL.md`。
 
 ## Architecture
 
 ### Data Architecture
 
 Three-layer data architecture:
-- **novel-db MCP** (PostgreSQL): Structured data — world-building, characters, chapters, foreshadowing, timelines, dimensions. Server at `/Users/ganjie/skills/novel-db-mcp/server.py`, connects to `postgresql://localhost:5432/fcli`
-- **Memory MCP** (16 tools): Unstructured creative data — inspiration, writing experience, cross-project materials, anti-AI pattern blacklist. **必须先加载 memory skill 再调用任何 memory_memory_* 工具**。详见 [Memory Skill](#memory-integration)
+- **novel-db MCP** (PostgreSQL): Structured data — world-building, characters, chapters, foreshadowing, timelines, dimensions. Server at `novel-db-mcp/server.py` (project-relative), connects to `DATABASE_URL` env var (default: `postgresql:///fcli`)
+- **Memory MCP** (16 tools): Unstructured creative data — inspiration, writing experience, cross-project materials, anti-AI pattern blacklist. **需要先加载 memory skill 再调用任何 memory_memory_* 工具**。详见 [Memory Skill](#memory-integration)
 - **Git files**: Human-readable content — novel text, setting docs, review reports in `novels/{小说名}/`
 
 #### 数据架构：DB为中心，文件为可选副本
 
-**核心原则**：DB是唯一权威源，所有skill操作直接对DB进行。文件是人可读副本，用户主动选择同步。
+**核心原则**：DB是唯一权威源，所有skill操作直接对DB进行。文件是人可读副本，由 `sync_db_to_files()` 模板驱动生成。
 
 **数据流**：
 ```
-skill操作 → DB（直接写入）
-用户触发  → sync_db_to_files() → 文件（可选同步）
+skill操作 → DB（直接写入）→ sync_db_to_files() → 文件（模板格式化生成）
 启动时    → sync_startup() → 检测差异 → 用户确认
 ```
 
 | 数据类型 | 权威源 | 文件角色 | 写入规则 | 读取规则 |
 |---------|--------|---------|---------|---------|
-| 世界观/地点/物品/能力 | **DB** (`world_query`) | 人可读副本 | 只写DB | `world_query()` 优先；返回空时回退读文件 |
-| 角色档案/关系 | **DB** (`character_detail` / `relation_list`) | 人可读副本 | 只写DB | `character_detail()` 优先 |
-| 伏笔 | **DB** (`foreshadow_list`) | 人可读副本 | 只写DB | `foreshadow_list()` 优先 |
-| 卷级大纲 | **DB** + 文件 | 人可读+git追踪 | DB为主，文件同步 | `volume_get()` 获取摘要；`Read()` 文件获取完整大纲 |
+| 世界观/地点/物品/能力 | **DB** (`world_query`) | 人可读副本 | 只写DB，完事后 `sync_db_to_files()` | `world_query()` 优先；返回空时回退读文件 |
+| 角色档案/关系 | **DB** (`character_detail` / `relation_list`) | 人可读副本 | 只写DB，完事后 `sync_db_to_files()` | `character_detail()` 优先 |
+| 伏笔 | **DB** (`foreshadow_list`) | 人可读副本 | 只写DB，完事后 `sync_db_to_files()` | `foreshadow_list()` 优先 |
+| 卷级大纲 | **DB** + 文件 | 人可读+git追踪 | DB为主，文件同步 | `volume_get()` 获取摘要；返回空时回退读文件 |
 | 章节正文 | **文件** | 权威源 | 先写文件，再调 `writing_finish` 写DB元数据 | `Read()` 文件获取正文 |
 | 审计报告 | **文件** | 唯一源 | 只写文件 | 只读文件 |
 | 创意蓝图 | **文件** | 唯一源 | 只写文件 | 只读文件 |
+
+**同步机制**（`sync.py` 模板驱动）：
+- `_sync_world_to_file()`: 读取 DB 全部列（keys/tags/related/writing_guide 等），按 `templates/world-setting.md` 模板格式生成文件，JSONB 字段递归转为可读嵌套 markdown
+- `_sync_character_to_file()`: 生成完整模板格式文件（基本信息→外观→背景→弧线→外观描写库→决策引擎→当前状态→关系），含 `character_relations` 表数据
+- `_sync_foreshadow_to_file()`: 生成 `## foreshadow: {id}` 模板格式，含全部字段
+- `_sync_volume_to_file()`: 已有卷文件不覆盖（保留丰富手动内容），新卷从 DB 生成初稿
 
 **启动同步流程**（每次开始工作时）：
 1. 调用 `sync_startup(novel_name="这次不一样了")` 对比DB与文件状态
@@ -56,13 +61,10 @@ skill操作 → DB（直接写入）
 - `sync_db_to_files(novel_name="这次不一样了", data_type="world")` — 只同步世界观
 - `sync_db_to_files(novel_name="这次不一样了", overwrite=True)` — 强制全量覆盖
 
-**禁止**：
-- skill中直接写文件来更新DB数据（绕过DB直接改文件=数据漂移）
-- 修改DB后不同步文件（人无法审阅、git无法追踪）
-
-**修订同步规则**（novel-reviser 修改正文后）：
-- 修订只改文件（Edit），不直接改 DB
-- 如果修订改变了角色状态/世界观/伏笔状态，需调 `character_update` / `world_upsert` / `foreshadow_recall` 同步 DB
+**数据操作规范**：
+- Skill 需要通过 MCP 工具操作 DB（`character_create` / `world_upsert` / `foreshadow_plant` 等），操作完调 `sync_db_to_files()` 同步到文件
+- Skill 需要通过 MCP 读取设定数据，MCP 返回空时回退读文件
+- `novel-reviser` 修改正文后：修订改文件（Edit），如涉及角色状态/世界观/伏笔状态需调 `character_update` / `world_upsert` / `foreshadow_recall` 同步 DB
 
 #### 文件结构规范：MD 标题 = DB 字段映射
 
@@ -183,14 +185,27 @@ Priority on conflict: C3 > B2 > others.
 
 ## Key Orchestration Tools
 
+### 同步与校验
+
 | 工具 | 用途 | 调用时机 |
 |------|------|----------|
 | `sync_startup(novel_name)` | 启动时对比DB与文件差异，返回冲突报告 | 每次开始工作时 |
-| `sync_db_to_files(novel_name)` | DB→文件同步（用户主动触发） | 用户需要更新文件时 |
+| `sync_db_to_files(novel_name)` | DB→文件模板驱动同步（用户主动触发） | DB变更后需要更新文件时 |
 | `get_chapter_context(novel_name, chapter_number)` | 聚合上下文注入（章节信息+卷级大纲+前3章摘要+角色深度信息+未回收伏笔+世界观+人物关系+时间线+质量历史+写作提示词） | 编排器 Step 1 必调 |
 | `validate_chapter(chapter_text)` | 写后硬约束校验（标点密度/否定句式/字数/创作原则） | 编排器 Step 6 强制 |
 | `writing_finish(novel_name, chapter_number, ...)` | 写作后状态更新（摘要+事件+伏笔+时间线+维度） | 编排器 Step 6 强制，不可跳过 |
 | `health_check(novel_name="这次不一样了")` | 健康诊断（伏笔积压/配角活跃/进阶节奏/日常密度/暗线推进/卷完成度） | C2 诊断时 |
+
+### 数据 CRUD（2026-05-18 新增）
+
+| 工具 | 用途 | 调用时机 |
+|------|------|----------|
+| `foreshadow_update(novel_name, foreshadow_id, ...)` | 伏笔部分更新（描述/重要性/计划回收章/关联角色/标签） | 伏笔属性变更时 |
+| `character_batch_detail(novel_name, character_names)` | 批量获取角色详情（含关系解析，SQL IN 查询） | 需要同时查询多个角色时 |
+| `scene_update(novel_name, chapter_number, scene_number, ...)` | 场景部分更新（空值跳过） | 场景属性变更时 |
+| `scene_delete(novel_name, chapter_number, scene_number)` | 删除场景 | 场景撤销时 |
+| `timeline_update(novel_name, event_id, ...)` | 时间线事件部分更新 | 时间线修正时 |
+| `timeline_delete(novel_name, event_id)` | 删除时间线事件 | 事件撤销时 |
 
 ### Multi-Agent Pipeline 子 Agent 指令
 
@@ -259,7 +274,7 @@ Priority on conflict: C3 > B2 > others.
 > 所有小说创作 skill 共用，见 `.claude/skills/novel-writer/references/shared-conventions.md`
 
 1. **人物群像** — NPC有自己的生活，反派有自己的逻辑，配角有自己的故事线，不全围着主角转
-2. **去AI味** — 禁止：不禁/缓缓/淡淡/微微/代价/反噬/寿命折损/精神崩溃。对话像真人，描写有画面
+2. **去AI味** — 需要用通感/升格/环境衬托/荒诞笑点+温暖+暴力+快乐来写。避免不禁/缓缓/淡淡/微微/代价/反噬/寿命折损/精神崩溃等AI味词。对话像真人，描写有画面
 3. **日常即世界观** — 用摊贩大爷的闲聊、告示栏的排名、酒馆的物价展示世界，不空洞堆设定
 4. **百万字是马拉松** — 卷级规划、配角轮换、伏笔回收节奏、升级衰减后的替代爽点，从第一天就设计
 5. **明暗双线** — 每卷有明线（主角推进）和暗线（隐藏真相），暗线不一次揭完，分卷递进
@@ -283,15 +298,15 @@ Priority on conflict: C3 > B2 > others.
 
 - `writing-constraints.md` 中所有约束（硬约束百分比、硬约束绝对值、创作原则）**全部强制**
 - 不再有"推荐遵守"或"写中自觉"——全部是"**硬约束，不通过拒绝存盘**"
-- MCP `validate_chapter` 将所有约束作为 violations 返回，`writing_finish` 检测到 violations 拒绝存盘
-- "7条核心—写中强制检查"和"4条补充—必须执行"**必须逐条执行，不可跳过**
+- MCP `validate_chapter` 将所有约束作为 violations 返回，`writing_finish` 检测到 violations 时需要修复后才能存盘
+- "7条核心—写中强制检查"和"4条补充—必须执行"**需要逐条执行**
 
 ### 规则 2: 审计强制，不可跳过
 
 - `validate_chapter()` 是写后的**强制**步骤，每章必须调用
-- `writing_finish` 的 `self_check='passed'` 是**强制**参数，不自检通过禁止存盘
-- 审阅发现的 P0 问题**必须立即修复**，阻断保存；P1 问题**必须在本轮验证结束前修复**；P2 问题**必须在下一轮迭代开始前修复**。全部强制，不存在"建议修复"或"可选"
-- C3 级联更新**必须**执行 `db_search` 扫描全部影响范围，不允许局修
+- `writing_finish` 的 `self_check='passed'` 是**强制**参数，自检通过后才能存盘
+- 审阅发现的 P0 问题**必须立即修复**，修复后才能保存；P1 问题**必须在本轮验证结束前修复**；P2 问题**必须在下一轮迭代开始前修复**。全部强制，按优先级逐级处理
+- C3 级联更新**需要**执行 `db_search` 扫描全部影响范围，全部受影响记录必须统一修复
 
 ### 规则 3: 内容充实激励引擎（字数不足时强制触发）
 
@@ -303,13 +318,13 @@ L2 场景深化（20-50%） → 灵魂拷问 + 因果链/Telling→Showing/子�
 L3 加事件（>50%）     → 361考核 + 强制从大纲找事件或加微事件
 ```
 
-**不准说**：「字数够了」「内容很紧凑了」「信息密度高不需要更多」
-**不准磨洋工**：同一段扩三遍不算干事，必须加**新内容**（动作/对话/冲突/事件）
-**不准跳过**：`writing_finish` 返回 `enrichment` 字段后必须充实到字数达标，不准原样重调
+**需要诚实评估字数**：「字数够了」「内容很紧凑了」「信息密度高不需要更多」都是逃避话术
+**需要加新内容**：同一段扩三遍不算干事，每次扩充需要引入**新内容**（动作/对话/冲突/事件）
+**需要充实到字数达标**：`writing_finish` 返回 `enrichment` 字段后需要充实到字数达标，不能原样重调
 
 每次调用 `writing_finish` 被 reject 后，AI 必须比上一次更努力：上次只用1个引擎？这次至少用2个。上次只改了一段？这次改两段。
 
-违反上述任意规则 = 流程违规，必须重做。
+违反上述任意规则 = 流程违规，需要重做。
 
 ## File Organization Rules
 
@@ -320,9 +335,9 @@ L3 加事件（>50%）     → 361考核 + 强制从大纲找事件或加微事�
 - **审阅报告 (`审阅报告/`)**: 审计发现、问题清单、修复方案
 - **决策记录 (`docs/decisions/`)**: 不可逆的创作决策（ADR格式）
 - **单源维护**: 同一内容(伏笔/线索/关系/设定)只在主文件描述完整, 其他文件用指针引用
-- **写作执行规范** (`设定/写作执行规范.md`): **最高优先级**，每章必须严格遵守字数要求、内容依据、写作规范、检查清单。违反规范必须重写。详见文件内容。
+- **写作执行规范** (`设定/写作执行规范.md`): **最高优先级**，每章需要严格遵守字数要求、内容依据、写作规范、检查清单。违反规范需要重写。详见文件内容。
 
-## Current Project Status (2026-05-15)
+## Current Project Status (2026-05-18)
 
 - 14卷+尾声大纲完成, Phase3验证通过(综合90/100)
 - 达尔文v3.2审计完成(2026-05-14), 含5层验证(L1故事逻辑~L5叙事动力)
@@ -331,6 +346,7 @@ L3 加事件（>50%）     → 361考核 + 强制从大纲找事件或加微事�
 - 正文碎片V01-V14已完成(卷级碎片, 存于 `正文碎片/`)
 - novel-db数据已通过 `consistency_guard` 自动同步（每次启动 skill 流程时校验），无需手动 `sync_lorebook`
 - 架构变更: novel-battle迁入engines、新增novel-planner-volume skill、作者声音系统、三视角审查、阶段指令文件(phases/)
+- **DB同步架构重构完成(2026-05-18)**: sync.py模板驱动重写（`_jsonb_to_md()`递归格式化）、4个SKILL.md改为MCP优先+文件回退、新增6个MCP CRUD工具、全量同步208条零错误（world:96, character:28, foreshadow:53, volume:31）
 - 下一步: 正文生成(B2), 从V1开始
 
 ## Anti-AI Writing System (Critical)
@@ -364,13 +380,13 @@ Novel text goes to `novels/{小说名}/正文/第{NNN}章-{标题}.md`.
 
 ## MCP Configuration
 
-Configured in `.mcp.json`. The `novel-db` MCP server is located at `novel-db-mcp/server.py` within the project directory, connects to `postgresql://localhost:5432/fcli`. All MCP tools use name-based operations (no ID required).
+Configured in `.mcp.json`. The `novel-db` MCP server is located at `novel-db-mcp/server.py` within the project directory, connects to `postgresql://localhost:5432/fcli`. ~56 tools across character/world/writing/chapter/misc modules. All MCP tools use name-based operations (no ID required).
 
 ## Memory Integration
 
 ### 概述
 
-Memory MCP 提供 16 个工具，用于跨会话持久化知识管理。**必须先加载 memory skill 才能调用**，禁止直接调用 `memory_memory_*` 工具。
+Memory MCP 提供 16 个工具，用于跨会话持久化知识管理。**需要先加载 memory skill 再调用**，所有 `memory_memory_*` 工具通过 memory skill 统一入口调用。
 
 ### 标签体系
 
@@ -410,4 +426,4 @@ Memory MCP 提供 16 个工具，用于跨会话持久化知识管理。**必须
 **质量管理**：`memory_health` / `memory_stats` / `memory_quality`
 **图与冲突**：`memory_conflicts` / `memory_resolve` / `memory_graph`
 
-**完整参数参考**：`/home/z/my-project/skills/memory/references/mcp-tools.md`
+**完整参数参考**：外部 skill 仓库 `skills/memory/references/mcp-tools.md`

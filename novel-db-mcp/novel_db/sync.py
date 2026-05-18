@@ -348,16 +348,26 @@ def _sync_character_to_file(novel_id: int, novel_name: str, char: dict):
         sections.append("\n## 弧线\n")
         sections.extend(sec_lines)
 
-    # -- JSONB rich sections (only if non-empty) --
+    # -- JSONB rich sections (静态档案只同步不变的基础设定) --
+    # 注意：current_snapshot / growth_trajectory 为动态演化数据
+    # 通过 character_state_snapshots / character_distillation_evolution 维护
+    # 不在静态档案文件中同步
     for heading, col in [
         ("外观描写库", "appearance_detail"),
         ("决策引擎", "decision_engine"),
+        ("对话声音指纹", "voice_fingerprint"),
+        ("能力体系", "ability_system"),
+        ("行为模式", "behavior_pattern"),
     ]:
         val = char.get(col)
         if val and not _is_empty(val):
             sections.append(f"\n## {heading}\n")
             sections.append(f"- **{col}**:")
             sections.extend(_jsonb_to_md(val, 1))
+
+    # -- 动态追踪指针 --
+    sections.append("\n## 动态追踪（不在此文件维护）\n")
+    sections.append("> 人物动态状态见 DB：`character_state_snapshots`（状态快照） / `character_distillation_evolution`（蒸馏演化）")
 
     # -- 当前状态 --
     sec_lines = []

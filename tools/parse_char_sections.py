@@ -267,7 +267,7 @@ def main():
     elif args.all:
         import psycopg2
         files = sorted([f for f in os.listdir(CHAR_DIR) if f.endswith('.md')])
-        conn = psycopg2.connect('postgresql://localhost:5432/fcli')
+        conn = psycopg2.connect(os.environ.get('DATABASE_URL', 'postgresql:///fcli'))
         cur = conn.cursor()
         
         total = 0

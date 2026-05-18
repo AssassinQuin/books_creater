@@ -615,3 +615,225 @@ def _relation_snapshot_by_id(relation_id: int, chapter_id: int,
         fetch="none"
     )
     return json.dumps({"ok": True, "relation_id": relation_id, "chapter_id": chapter_id}, ensure_ascii=False)
+
+
+@mcp.tool
+def character_batch_detail(novel_name: str, character_names: list) -> str:
+    """批量获取多个角色的完整档案。避免N次单独调用。
+      novel_name: 小说名称
+      character_names: 角色名列表，如 ["沈野", "方岩", "陆沉"]
+    """
+    novel_id = _resolve_novel_id(novel_name)
+    if not character_names:
+        return json.dumps([], ensure_ascii=False)
+
+    placeholders = ",".join(["%s"] * len(character_names))
+    rows = query(
+        f"SELECT * FROM characters WHERE novel_id = %s AND is_active = TRUE AND name IN ({placeholders})",
+        (novel_id, *character_names)
+    )
+    result = []
+    for row in rows:
+        char = dict(row)
+        # Resolve relations for each character
+        rels = query(
+            "SELECT cr.relation_type, cr.description, cr.intensity, cr.subtext_design, "
+            "c1.name as from_name, c2.name as to_name "
+            "FROM character_relations cr "
+            "JOIN characters c1 ON cr.from_character_id = c1.id "
+            "JOIN characters c2 ON cr.to_character_id = c2.id "
+            "WHERE cr.novel_id = %s AND (cr.from_character_id = %s OR cr.to_character_id = %s) "
+            "AND cr.status = 'active' ORDER BY cr.intensity DESC",
+            (novel_id, char["id"], char["id"])
+        )
+        char["relations"] = [dict(r) for r in rels]
+        result.append(char)
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+# ═══════════════════════════════════════════════════════
+# Character Distillation Evolution
+# ═══════════════════════════════════════════════════════
+
+@mcp.tool
+def distillation_evolve(novel_name: str, character_name: str, chapter_number: int,
+                        decision_delta: str = "[]", new_knowledge: str = "[]",
+                        changed_beliefs: str = "[]", relation_shifts: str = "[]",
+                        voice_changes: str = "{}", ability_changes: str = "{}",
+                        arc_transition: str = "{}", key_decision: str = "{}",
+                        notes: str = "") -> str:
+    """记录人物蒸馏模型的演化增量。每章写完后调用，追踪人物决策、认知、关系、声音的演变。
+
+    参数:
+      novel_name: 小说名称
+      character_name: 角色名
+      chapter_number: 章节序号
+      decision_delta: 决策引擎变化(JSON数组)。如 [{"trigger": "得知真相", "rule_name": "保护城镇", "before": "默默观察", "after": "主动警告"}]
+      new_knowledge: 新获取信息(JSON数组)。如 ["焱的真实目的", "教会秘密"]
+      changed_beliefs: 信念变化(JSON数组)。如 [{"belief": "人类值得保护", "before": true, "after": false, "reason": "被保护的人杀死了它"}]
+      relation_shifts: 关系变化(JSON数组)。如 [{"target": "沈野", "aspect": "信任", "before": 5, "after": 8}]
+      voice_changes: 声音指纹变化(JSON对象)。如 {"pace_change": "从沉默变急促", "new_habits": ["开始反问"]}
+      ability_changes: 能力变化(JSON对象)。如 {"unlocked": ["情绪共鸣"], "weakened": ["拟态稳定性"]}
+      arc_transition: 弧线阶段推进(JSON对象)。如 {"from": "渗透潜伏", "to": "身份暴露", "trigger": "兽潮中被迫使用真身"}
+      key_decision: 本章关键抉择(JSON对象)。如 {"situation": "是否暴露身份", "choice": "暴露", "alternatives": ["继续隐藏"], "consequence": "被人类杀死"}
+      notes: 写作备注
+    """
+    novel_id = _resolve_novel_id(novel_name)
+
+    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    if not char:
+        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+    ch = query("SELECT id FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_number), fetch="one")
+    if not ch:
+        return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
+
+    query(
+        "INSERT INTO character_distillation_evolution "
+        "(novel_id, character_id, chapter_id, decision_delta, new_knowledge, "
+        "changed_beliefs, relation_shifts, voice_changes, ability_changes, "
+        "arc_transition, key_decision, notes) "
+        "VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s) "
+        "ON CONFLICT DO NOTHING",
+        (novel_id, char["id"], ch["id"],
+         decision_delta, new_knowledge, changed_beliefs, relation_shifts,
+         voice_changes, ability_changes, arc_transition, key_decision, notes),
+        fetch="none"
+    )
+    return json.dumps({"ok": True, "character": character_name, "chapter": chapter_number}, ensure_ascii=False)
+
+
+@mcp.tool
+def distillation_get(novel_name: str, character_name: str, chapter_number: int = 0) -> str:
+    """获取人物蒸馏演化记录。可查询特定章节或全部历史。
+
+    参数:
+      novel_name: 小说名称
+      character_name: 角色名
+      chapter_number: 章节序号，0=返回全部历史
+    """
+    novel_id = _resolve_novel_id(novel_name)
+
+    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    if not char:
+        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+
+    if chapter_number > 0:
+        ch = query("SELECT id FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_number), fetch="one")
+        if not ch:
+            return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
+        rows = query(
+            "SELECT cde.*, c.number as chapter_number "
+            "FROM character_distillation_evolution cde "
+            "JOIN chapters c ON cde.chapter_id = c.id "
+            "WHERE cde.character_id = %s AND cde.chapter_id = %s "
+            "ORDER BY c.number",
+            (char["id"], ch["id"])
+        )
+    else:
+        rows = query(
+            "SELECT cde.*, c.number as chapter_number "
+            "FROM character_distillation_evolution cde "
+            "JOIN chapters c ON cde.chapter_id = c.id "
+            "WHERE cde.character_id = %s "
+            "ORDER BY c.number",
+            (char["id"],)
+        )
+
+    result = {
+        "character": character_name,
+        "chapter_filter": chapter_number if chapter_number > 0 else "all",
+        "records": [dict(r) for r in rows]
+    }
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+@mcp.tool
+def distillation_timeline(novel_name: str, character_name: str,
+                          dimension: str = "decision_delta") -> str:
+    """获取人物在某一维度的完整时间线。用于分析人物如何逐步演变。
+
+    参数:
+      novel_name: 小说名称
+      character_name: 角色名
+      dimension: 维度名。可选: decision_delta/new_knowledge/changed_beliefs/relation_shifts/voice_changes/ability_changes/arc_transition/key_decision
+    """
+    novel_id = _resolve_novel_id(novel_name)
+
+    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    if not char:
+        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+
+    valid_dims = ["decision_delta", "new_knowledge", "changed_beliefs", "relation_shifts",
+                  "voice_changes", "ability_changes", "arc_transition", "key_decision"]
+    if dimension not in valid_dims:
+        return json.dumps({"error": f"无效维度 '{dimension}'。可选: {', '.join(valid_dims)}"}, ensure_ascii=False)
+
+    rows = query(
+        f"SELECT cde.{dimension}, c.number as chapter_number, c.title as chapter_title "
+        "FROM character_distillation_evolution cde "
+        "JOIN chapters c ON cde.chapter_id = c.id "
+        "WHERE cde.character_id = %s AND cde.{dimension} IS NOT NULL "
+        "AND cde.{dimension} != '{{}}' AND cde.{dimension} != '[]' "
+        "ORDER BY c.number",
+        (char["id"],)
+    )
+
+    result = {
+        "character": character_name,
+        "dimension": dimension,
+        "timeline": [dict(r) for r in rows]
+    }
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+@mcp.tool
+def distillation_compare(novel_name: str, character_name: str,
+                         chapter_a: int, chapter_b: int) -> str:
+    """对比人物在两个章节之间的蒸馏模型变化。用于检验人物一致性/演变合理性。
+
+    参数:
+      novel_name: 小说名称
+      character_name: 角色名
+      chapter_a: 较早章节号
+      chapter_b: 较晚章节号
+    """
+    novel_id = _resolve_novel_id(novel_name)
+
+    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    if not char:
+        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+
+    ch_a = query("SELECT id, number FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_a), fetch="one")
+    ch_b = query("SELECT id, number FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_b), fetch="one")
+    if not ch_a or not ch_b:
+        missing = []
+        if not ch_a: missing.append(chapter_a)
+        if not ch_b: missing.append(chapter_b)
+        return json.dumps({"error": f"章节不存在: {missing}"}, ensure_ascii=False)
+
+    snap_a = query(
+        "SELECT * FROM character_state_snapshots WHERE character_id=%s AND chapter_id=%s",
+        (char["id"], ch_a["id"]), fetch="one"
+    )
+    snap_b = query(
+        "SELECT * FROM character_state_snapshots WHERE character_id=%s AND chapter_id=%s",
+        (char["id"], ch_b["id"]), fetch="one"
+    )
+
+    evolutions = query(
+        "SELECT cde.*, c.number as chapter_number "
+        "FROM character_distillation_evolution cde "
+        "JOIN chapters c ON cde.chapter_id = c.id "
+        "WHERE cde.character_id = %s AND c.number > %s AND c.number <= %s "
+        "ORDER BY c.number",
+        (char["id"], chapter_a, chapter_b)
+    )
+
+    result = {
+        "character": character_name,
+        "range": f"Ch{chapter_a} → Ch{chapter_b}",
+        "snapshot_a": dict(snap_a) if snap_a else None,
+        "snapshot_b": dict(snap_b) if snap_b else None,
+        "evolutions_between": [dict(r) for r in evolutions]
+    }
+    return json.dumps(result, ensure_ascii=False, default=str)
