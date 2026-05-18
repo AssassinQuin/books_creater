@@ -54,3 +54,27 @@ Stage Summary:
 - novel-setup: +novel-writer
 - abilitycraft: +novel-planner-volume, +novel-chapter-writer
 - 推送成功：c054701..a6f9582
+---
+Task ID: 1
+Agent: main
+Task: 渐进式引入审计 + 指令遵循修复
+
+Work Log:
+- 拉取最新代码（commit d336955）
+- 读取全部12个SKILL.md文件，分析progressive disclosure和指令遵循
+- 识别P0问题：lorecraft全量SKILL.md(232行)被所有核心skill强制加载导致上下文过载
+- 识别P0问题：novel-ability-designer frontmatter格式损坏（缺少闭合---）
+- 识别P1问题：novel-qa what-to-do 205行超标、novel-writer/novel-skill-creator版本滞后
+- 创建 lorecraft/references/core-principles.md (61行精简版，含核心原则+禁止术语+四步法精简)
+- 更新 novel-planner: Step1/2/4/5强制加载改用core-principles.md，更新引擎验证表和引用资源表
+- 更新 novel-planner-volume: 引擎加载清单和验证表改用core-principles.md
+- 更新 novel-setup: A2数据采集改用core-principles.md
+- 精简 novel-qa what-to-do: 205行→132行，详细内容移入supporting-info
+- 版本同步：lorecraft/planner/planner-volume/setup/qa→1.3.0, writer→1.3.0, skill-creator→1.2.0
+- 修复 novel-ability-designer frontmatter格式
+- 提交推送 commit 769fec3
+
+Stage Summary:
+- 上下文节省估算：每个消费skill省去~170行lorecraft加载（232→62行），乘以4-5个skill = 总计节省~700-850行
+- 全部12个skill现在版本对齐在1.2.0-1.3.0
+- novel-qa what-to-do从205行降到132行，符合≤200行规范
