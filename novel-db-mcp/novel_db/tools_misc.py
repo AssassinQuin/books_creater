@@ -7,7 +7,7 @@ from .resolvers import _resolve_novel_id
 from .sync import (
     _ensure_data_hashes_table, _compute_hash, _record_db_hash, _record_file_hash,
     _db_row_to_hashable, _sync_world_to_file, _sync_character_to_file,
-    _sync_foreshadow_to_file, _NOVELS_BASE,
+    _sync_foreshadow_to_file, _sync_volume_to_file, _NOVELS_BASE,
 )
 
 
@@ -271,7 +271,7 @@ def sync_startup(novel_name: str, data_type: str = "") -> str:
 
     if "world" in types_to_check:
         db_rows = query(
-            "SELECT category, name, data, updated_at FROM world_settings WHERE novel_id = %s",
+            "SELECT * FROM world_settings WHERE novel_id = %s",
             (novel_id,)
         )
         db_map = {}
@@ -309,9 +309,7 @@ def sync_startup(novel_name: str, data_type: str = "") -> str:
 
     if "character" in types_to_check:
         db_rows = query(
-            "SELECT id, name, role, race, ability_level, appearance, personality, "
-            "speech_style, background, goals, weaknesses, catchphrase, arc_notes, status, updated_at "
-            "FROM characters WHERE novel_id = %s AND is_active = TRUE",
+            "SELECT * FROM characters WHERE novel_id = %s AND is_active = TRUE",
             (novel_id,)
         )
         for row in db_rows:
@@ -410,22 +408,20 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
 
     if "world" in types_to_sync:
         rows = query(
-            "SELECT category, name, data FROM world_settings WHERE novel_id = %s",
+            "SELECT * FROM world_settings WHERE novel_id = %s",
             (novel_id,)
         )
         for row in rows:
             key = f"{row['category']}:{row['name']}"
             try:
-                _sync_world_to_file(novel_id, novel_name, row["category"], row["name"], row["data"])
+                _sync_world_to_file(novel_id, novel_name, dict(row))
                 results["synced"].append({"type": "world", "key": key, "direction": "DB→file"})
             except Exception as e:
                 results["errors"].append({"type": "world", "key": key, "error": str(e)})
 
     if "character" in types_to_sync:
         rows = query(
-            "SELECT id, name, role, race, ability_level, appearance, personality, "
-            "speech_style, background, goals, weaknesses, catchphrase, arc_notes, status "
-            "FROM characters WHERE novel_id = %s AND is_active = TRUE",
+            "SELECT * FROM characters WHERE novel_id = %s AND is_active = TRUE",
             (novel_id,)
         )
         for row in rows:
@@ -437,7 +433,7 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
 
     if "foreshadow" in types_to_sync:
         rows = query(
-            "SELECT id, description, status, importance, planned_recall_chapter FROM foreshadows WHERE novel_id = %s",
+            "SELECT * FROM foreshadows WHERE novel_id = %s",
             (novel_id,)
         )
         for row in rows:
@@ -448,6 +444,21 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
                 results["errors"].append({"type": "foreshadow", "key": str(row["id"]), "error": str(e)})
 
     if "volume" in types_to_sync:
+        # DB → file: generate files for volumes that don't have them yet
+        vol_rows = query(
+            "SELECT * FROM volumes WHERE novel_id = %s ORDER BY number",
+            (novel_id,)
+        )
+        for vol in vol_rows:
+            key = f"V{vol['number']}"
+            try:
+                created = _sync_volume_to_file(novel_id, novel_name, dict(vol))
+                direction = "DB→file (新建)" if created else "file已存在,跳过"
+                results["synced"].append({"type": "volume", "key": key, "direction": direction})
+            except Exception as e:
+                results["errors"].append({"type": "volume", "key": key, "error": str(e)})
+
+        # file → DB: for existing volume files, sync notes to DB
         outline_dir = os.path.join(_NOVELS_BASE, novel_name, "设定", "大纲")
         if os.path.isdir(outline_dir):
             for fname in sorted(os.listdir(outline_dir)):
