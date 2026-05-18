@@ -4,7 +4,7 @@ description: 全书大纲设计 — 小说骨架+血管。从全局视角确定�
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, mcp__memory__*
 lifecycle: core
 depends_on: novel-setup, lorecraft, engines/causality, engines/three-perspective
-version: "1.2.0"
+version: "1.3.0"
 ---
 
 # 全书大纲设计
@@ -60,7 +60,7 @@ foreshadow_list(novel_name=NOVEL_NAME)    # 全局伏笔（如有）
 
 **Agent指令**: `agents/framework-architect.md`
 **强制加载引擎**: `engines/causality.md`（因果逻辑法约束卷间关系必须基于因果而非时间顺序）
-**强制加载规范**: `lorecraft/SKILL.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束卷级定位和骨架描述中的世界观用词）
+**强制加载规范**: `lorecraft/references/core-principles.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束卷级定位和骨架描述中的世界观用词）
 
 编排器操作与输出验证详见 supporting-info §Step1框架建筑师。
 
@@ -70,7 +70,7 @@ foreshadow_list(novel_name=NOVEL_NAME)    # 全局伏笔（如有）
 **强制加载引擎**:
 - `engines/causality.md` — 主线因果链（每节点必须回答"因为什么→所以什么→逼出什么"）
 - `engines/three-perspective.md` — 读者视角爽点节奏标准（每2-3卷小爽点/4-5卷大爽点）
-**强制加载规范**: `lorecraft/SKILL.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束暗线描述、人物弧光、情绪曲线中的世界观用词）
+**强制加载规范**: `lorecraft/references/core-principles.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束暗线描述、人物弧光、情绪曲线中的世界观用词）
 
 编排器操作与输出验证详见 supporting-info §Step2脉络设计师。
 
@@ -87,7 +87,7 @@ foreshadow_list(novel_name=NOVEL_NAME)    # 全局伏笔（如有）
 ## Step 4: Agent — 支线规划师
 
 **Agent指令**: `agents/subplot-planner.md`
-**强制加载规范**: `lorecraft/SKILL.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束支线中涉及的势力/地点/能力/世界观元素用词）
+**强制加载规范**: `lorecraft/references/core-principles.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束支线中涉及的势力/地点/能力/世界观元素用词）
 
 编排器操作与输出验证详见 supporting-info §Step4支线规划师。
 
@@ -99,7 +99,7 @@ foreshadow_list(novel_name=NOVEL_NAME)    # 全局伏笔（如有）
 
 **Agent指令**: `agents/framework-validator.md`
 **强制加载引擎**: `engines/reader-perspective-agent.md`, `engines/author-perspective-agent.md`, `engines/character-perspective-agent.md`
-**强制加载规范**: `lorecraft/SKILL.md` + `lorecraft/references/term-map.md`（术语规范作为第13项检查标准）
+**强制加载规范**: `lorecraft/references/core-principles.md` + `lorecraft/references/term-map.md`（术语规范作为第13项检查标准）
 
 编排器内部启动3个审查Agent并行（读者/作者/人物），汇总三视角结果+交叉检查+术语规范扫描。核心原则：人物 > 读者 > 作者。编排器操作、交叉检查、问题分级详见 supporting-info §Step5框架验证器。
 
@@ -153,7 +153,7 @@ B1: 全书框架+脉络+卷级目标卡+支线体系+审计通过
 | `engines/reader-perspective-agent.md` | 读者视角审查清单 | Step 5 |
 | `engines/author-perspective-agent.md` | 作者视角审查清单 | Step 5 |
 | `engines/character-perspective-agent.md` | 人物视角审查清单 | Step 5 |
-| `lorecraft/SKILL.md` | 文化根脉术语命名引擎—禁用术语+命名方法 | Step 1-5（全程） |
+| `lorecraft/references/core-principles.md` | 文化根脉术语核心原则—禁止术语+四步法精简版 | Step 1-5（全程，替代全量SKILL.md） |
 | `lorecraft/references/term-map.md` | 现代→灵能术语映射表（~60+条） | Step 1-5（全程） |
 | `lorecraft/references/quickref.md` | 术语速查卡（七势力字根+命名法） | Step 1-5（全程） |
 | `engines/world-element-registry.md` | 世界观元素注册机制—已注册元素索引 | Step 1-5（全程） |
@@ -216,7 +216,7 @@ skill_loader("novel-planner", "engine", "character-perspective-agent")
 
 # 🔒 术语规范（全程强制加载——所有Agent生成前必读、生成后必检）：
 # 以下三项在Step 0一次性加载，编排器打包传给所有Agent
-Read(".claude/skills/lorecraft/SKILL.md")                          # 文化根脉命名引擎（禁用术语+四步法+层积命名法）
+Read(".claude/skills/lorecraft/references/core-principles.md")     # 文化根脉命名引擎精简版（核心原则+禁止术语+四步法精简）— 替代全量SKILL.md节省上下文
 Read(".claude/skills/lorecraft/references/term-map.md")            # 现代→灵能术语映射表（~60+条）
 Read(".claude/skills/lorecraft/references/quickref.md")             # 速查卡（七势力字根+五步命名法+多样性检查）
 Read(".claude/skills/engines/world-element-registry.md")           # 世界观元素注册机制（已注册元素索引）
@@ -234,7 +234,7 @@ loaded_engines = {
     "Step5-作者视角(author-perspective)": author_loaded,
     "Step5-人物视角(character-perspective)": character_loaded,
     # 🔒 术语规范（全程强制——不可跳过）
-    "术语规范(lorecraft)": lorecraft_loaded,
+    "术语核心原则(lorecraft-core)": lorecraft_loaded,
     "术语映射(term-map)": term_map_loaded,
     "术语速查(quickref)": quickref_loaded,
     "世界元素注册表(world-element-registry)": world_element_registry_loaded,

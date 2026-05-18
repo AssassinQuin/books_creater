@@ -4,7 +4,7 @@ description: 卷级大纲设计。把握小说脉络——事件架构+因果链
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*
 depends_on: novel-planner, lorecraft, engines/causality, engines/relationship, engines/scene-type, engines/scene-composition
 lifecycle: core
-version: "1.2.0"
+version: "1.3.0"
 ---
 
 # 卷级大纲设计
@@ -79,7 +79,7 @@ world_query(novel_name="NOVEL_NAME")
 - **Step 2** (章节设计师)：scene-type, scene-composition, author-voice(+4变体), anti-ai-quickref
 - **Step 3** (三视角审查)：reader/author/character-perspective-agent
 - **共享** (Step 1/2)：shared-constraints
-- **🔒全程强制**：术语规范四件套(lorecraft-SKILL + term-map + quickref) + 世界元素索引
+- **🔒全程强制**：术语规范四件套(lorecraft-core-principles + term-map + quickref) + 世界元素索引
 
 完整清单详见 supporting-info §引擎加载清单。
 
@@ -316,9 +316,9 @@ Step 3 (三视角审查) 需要：
   skill_loader("novel-planner-volume", "agent", "shared-constraints")
 
 🔒 术语规范（全程强制——所有 Agent 写前必读、写后自检）：
-  Read(".claude/skills/lorecraft/SKILL.md")
-  Read(".claude/skills/lorecraft/references/term-map.md")
-  Read(".claude/skills/lorecraft/references/quickref.md")
+  Read(".claude/skills/lorecraft/references/core-principles.md")    # 核心原则+禁止术语+四步法精简
+  Read(".claude/skills/lorecraft/references/term-map.md")          # 现代→灵能术语映射表
+  Read(".claude/skills/lorecraft/references/quickref.md")           # 速查卡
 
 🔒 世界元素索引（全程强制——Agent 1/2 输入必须包含）：
   Read(".claude/skills/engines/world-element-registry.md")
@@ -350,7 +350,7 @@ loaded_resources = {
     # 共享
     "共享约束(shared-constraints)": shared_loaded,
     # 🔒 术语规范四件套（强制）
-    "术语引擎(lorecraft-SKILL)": lorecraft_loaded,
+    "术语核心原则(lorecraft-core)": lorecraft_loaded,
     "术语映射(term-map)": term_map_loaded,
     "术语速查(quickref)": quickref_loaded,
     "世界元素索引(world-element-registry)": world_element_registry_loaded,

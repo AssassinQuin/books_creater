@@ -2,9 +2,9 @@
 name: lorecraft
 description: 世界观术语命名引擎——文化根脉提取法。为网文/小说世界观生成有文化深度、无AI味的术语体系。触发词：命名/术语/取名/造词/世界观命名/术语设计/去AI味/频率签名/权限/终端
 allowed-tools: Read, Write, Edit, Glob, Grep, mcp__novel-db__world_upsert
-depends_on: references/term-map.md, references/quickref.md
+depends_on: references/term-map.md, references/quickref.md, references/core-principles.md
 lifecycle: core
-version: "1.2.0"
+version: "1.3.0"
 ---
 
 # Lorecraft — 文化根脉术语命名引擎

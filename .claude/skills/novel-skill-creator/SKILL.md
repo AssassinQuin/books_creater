@@ -4,7 +4,7 @@ description: 小说技能创建指南 — 创建新技能的标准化流程、�
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 lifecycle: meta
 depends_on: CLAUDE.md
-version: "1.1.0"
+version: "1.2.0"
 ---
 
 # 小说技能创建指南

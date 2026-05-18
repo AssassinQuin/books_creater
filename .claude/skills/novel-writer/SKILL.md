@@ -4,7 +4,7 @@ description: 百万字网文创作引擎总路由器。根据用户意图分发�
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, mcp__memory__*
 depends_on: novel-setup, novel-character, novel-planner, novel-planner-volume, novel-chapter-writer, novel-qa, novel-reviser, abilitycraft, lorecraft
 lifecycle: core
-version: "1.1.0"
+version: "1.3.0"
 ---
 
 # 百万字网文创作引擎

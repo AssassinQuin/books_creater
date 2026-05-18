@@ -1,7 +1,8 @@
 ---
 name: novel-ability-designer
-description: "[DEPRECATED] 已废弃。功能已完整合并入 abilitycraft。请使用 abilitycraft 替代。本文件仅保留用于过渡期兼容，将在下一版本删除。
+description: "[DEPRECATED] 已废弃。功能已完整合并入 abilitycraft。请使用 abilitycraft 替代。"
 lifecycle: deprecated
+version: "1.0.0"
 ---
 
 # ⚠️ 已废弃 — 请使用 abilitycraft

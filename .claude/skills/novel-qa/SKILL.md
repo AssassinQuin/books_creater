@@ -4,7 +4,7 @@ description: 小说全链路质量保障。支持大纲审阅、正文审阅、�
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, skill_loader
 depends_on: novel-planner, novel-chapter-writer, lorecraft, engines/outline-review, engines/causality, engines/anti-ai, engines/reader-perspective-agent, engines/author-perspective-agent, engines/character-perspective-agent
 lifecycle: quality
-version: "1.2.0"
+version: "1.3.0"
 ---
 
 # 小说质量保障
@@ -68,109 +68,36 @@ Step 6: 输出到 novels/{NOVEL_NAME}/审阅报告/大纲审计-{date}.md
 
 ### Step 2: 分组扫描（串行+并行混合）
 
-> **核心改进**：从8+ Agent同时并行改为"基础组→深度组→交叉组"三级串行。
+> 从8+ Agent同时并行改为"基础组→深度组→交叉组"三级串行。
 
-**第一组：基础检查**（串行，必须全部通过）
-- Agent-A 人物：OOC检测 / 知识矛盾 / 说话风格 / 关系合理性
-- Agent-B 逻辑：时间线连贯 / 经济一致 / 伏笔回收 / 物品逻辑
-- Agent-C 术语：术语合规扫描（加载 term-map.md，标记现代科技术语偏离）
+- **第一组（串行，必须全部通过）**：Agent-A人物(OOC/知识/风格/关系) + Agent-B逻辑(时间线/经济/伏笔/物品) + Agent-C术语(term-map合规扫描)
+- **第二组（并行，基于第一组结果）**：Agent-D质量(战斗/结构/爽点/AI指纹) + Agent-E支线(节点/交织/出场) + Agent-F三视角(3子Agent并行)
+- **第三组（编排器汇总）**：读者vs作者/读者vs人物/作者vs人物交叉检测
 
-**第二组：深度审查**（并行，基于第一组结果）
-- Agent-D 质量：战斗场面 / 章节结构 / 爽点分布 / NPC活跃度 / AI指纹
-- Agent-E 支线：支线节点执行 / 主线交织 / 角色出场合理性
-- Agent-F 三视角（3子Agent并行）：
-  - Agent-F1 读者视角（`engines/reader-perspective-agent.md`）
-  - Agent-F2 作者视角（`engines/author-perspective-agent.md`）
-  - Agent-F3 人物视角（`engines/character-perspective-agent.md`）
-
-**第三组：交叉检查**（编排器汇总后执行）
-- 读者 vs 作者 / 读者 vs 人物 / 作者 vs 人物 冲突检测
-
-> 如果第一组发现P0级问题（如OOC或因果链断裂），**中止第二组**，直接进入修复流程。
+> 第一组发现P0 → **中止第二组**，直接修复。分组详情见 supporting-info §正文审阅分组详情。
 
 ### Step 3: 硬约束复核
 
 `validate_chapter(chapter_text)` — 写时自检的补充验证。
 
-### Step 4: Smell Test
+### Step 4-6: Smell Test + 问题分级 + 输出审阅报告
 
-核心问题：**这章读起来像人写的，还是AI生成的？**
-
-常见AI写作特征（应转化为更具画面感和人物特异性的表达）：
-- 旁白式心理总结（"他知道/她明白"）→ 动作、微表情或对话潜台词
-- 高压场景角色永远从容 → 真实生理反应（颤抖、喘息、失误）
-- 连续段落长度高度一致 → 长短交错打破节奏
-- AI过渡词堆砌（"值得一提的是/不禁/缓缓"）→ 场景化过渡
-
-若判定"像AI"→ 标记为P1，要求重写关键段落。
-
-### Step 5: 问题分级
-
-| 级别 | 判定标准 |
-|------|---------|
-| P0 | 三视角冲突 / 因果链断裂 / 人物OOC / 术语违规 |
-| P1 | 单视角严重问题 / 伏笔未回收 / 节奏断层 / Smell Test失败 |
-| P2 | 单视角中等问题 / 描写冗余 / 对话平淡 |
-| P3 | 轻微问题 / 标点不均 / 用词重复 |
-
-### Step 6: 输出审阅报告
-
-评级标准：A（前20%-25%）/ B（前25%-40%）/ C（中间40%-60%）/ D（后30%-40%）
-
-报告输出到 `novels/{NOVEL_NAME}/审阅报告/正文审阅-{date}.md`
-
-报告格式：
-```markdown
-# 审阅报告 - {章节范围} - {date}
-
-## 总评：{等级}（{分数}/100）
-
-## P0 问题（必须修复）
-- [{类别}] {问题描述} | 位置：{文件}:{行号} | 建议修复：{具体方案}
-
-## P1 问题（限1轮修复）
-...
-
-## P2 问题（可延期）
-...
-
-## 三视角审查
-| 维度 | 读者 | 作者 | 人物 | 冲突 |
-|------|------|------|------|------|
-| Ch{N} | {评级} | {评级} | {评级} | {描述} |
-
-## Smell Test
-结论：{通过/不通过} | 不通过原因：{描述}
-
-## 术语合规
-违规数：{N} | 详情：{位置→替换建议}
-```
-
-> 此报告格式即为 **审阅报告数据协议**，novel-reviser 可直接解析。
+Smell Test（AI指纹检测）、问题分级标准（P0-P3）、审阅报告格式与数据协议详见 supporting-info §正文审阅补充说明。
 
 ---
 
 ## C4: 设定审查
 
 ```
-Step 1: 全量加载设定数据
-  world_query(novel_name=NOVEL_NAME) + character_list(novel_name=NOVEL_NAME)
-  + relation_list(novel_name=NOVEL_NAME) + foreshadow_list(novel_name=NOVEL_NAME)
-Step 2: 6维度深度审查
-  ① 内部自洽：同维度内不同条目是否矛盾（如两条种族描述冲突）
-  ② 人物一致：角色能力/出身/关系是否与世界观设定匹配
-  ③ 物品合理：物品功能/稀有度/获取方式是否自洽
-  ④ 历史可信：历史事件是否与当前状态逻辑一致（无未解决的遗留问题）
-  ⑤ 关系完整：所有角色关系是否双向定义、无孤立节点
-  ⑥ 伏笔可行：已埋伏笔的计划回收章是否合理、有无过期未回收
-Step 3: 术语合规扫描
-  加载 lorecraft/references/term-map.md → 全量扫描设定中的现代术语 → 标记违规
-Step 4: 🔒 输出问题清单（P0/P1/P2分级）→ 每条附修复方案
-Step 5: 执行修复 → world_upsert/character_update/foreshadow_update → 级联同步
-Step 6: 验证修复 → 重跑 Step 2 确认无新矛盾
+Step 1: 全量加载设定数据（world_query + character_list + relation_list + foreshadow_list）
+Step 2: 6维度深度审查（内部自洽/人物一致/物品合理/历史可信/关系完整/伏笔可行）
+Step 3: 术语合规扫描（lorecraft/references/term-map.md）
+Step 4: 🔒 输出问题清单（P0/P1/P2分级+修复方案）
+Step 5: 执行修复（world_upsert/character_update/foreshadow_update）→ 级联同步
+Step 6: 验证修复 → 重跑 Step 2
 ```
 
-输出到 `novels/{NOVEL_NAME}/审阅报告/设定审查-{date}.md`
+输出到 `novels/{NOVEL_NAME}/审阅报告/设定审查-{date}.md`。审查维度详情见 supporting-info §设定审查六维度。
 
 ## C2: 健康诊断
 
@@ -218,6 +145,97 @@ Step 6: 输出级联报告
 </what-to-do>
 
 <supporting-info>
+
+## 正文审阅分组详情
+
+### 第一组：基础检查（串行，必须全部通过）
+
+- **Agent-A 人物**：OOC检测 / 知识矛盾 / 说话风格 / 关系合理性
+- **Agent-B 逻辑**：时间线连贯 / 经济一致 / 伏笔回收 / 物品逻辑
+- **Agent-C 术语**：术语合规扫描（加载 term-map.md，标记现代科技术语偏离）
+
+### 第二组：深度审查（并行，基于第一组结果）
+
+- **Agent-D 质量**：战斗场面 / 章节结构 / 爽点分布 / NPC活跃度 / AI指纹
+- **Agent-E 支线**：支线节点执行 / 主线交织 / 角色出场合理性
+- **Agent-F 三视角**（3子Agent并行）：
+  - Agent-F1 读者视角（`engines/reader-perspective-agent.md`）
+  - Agent-F2 作者视角（`engines/author-perspective-agent.md`）
+  - Agent-F3 人物视角（`engines/character-perspective-agent.md`）
+
+### 第三组：交叉检查（编排器汇总后执行）
+
+- 读者 vs 作者 / 读者 vs 人物 / 作者 vs 人物 冲突检测
+
+> 如果第一组发现P0级问题（如OOC或因果链断裂），**中止第二组**，直接进入修复流程。
+
+## 正文审阅补充说明
+
+### Smell Test
+
+核心问题：**这章读起来像人写的，还是AI生成的？**
+
+常见AI写作特征（应转化为更具画面感和人物特异性的表达）：
+- 旁白式心理总结（"他知道/她明白"）→ 动作、微表情或对话潜台词
+- 高压场景角色永远从容 → 真实生理反应（颤抖、喘息、失误）
+- 连续段落长度高度一致 → 长短交错打破节奏
+- AI过渡词堆砌（"值得一提的是/不禁/缓缓"）→ 场景化过渡
+
+若判定"像AI"→ 标记为P1，要求重写关键段落。
+
+### 问题分级标准
+
+| 级别 | 判定标准 |
+|------|---------|
+| P0 | 三视角冲突 / 因果链断裂 / 人物OOC / 术语违规 |
+| P1 | 单视角严重问题 / 伏笔未回收 / 节奏断层 / Smell Test失败 |
+| P2 | 单视角中等问题 / 描写冗余 / 对话平淡 |
+| P3 | 轻微问题 / 标点不均 / 用词重复 |
+
+### 审阅报告格式（数据协议）
+
+评级标准：A（前20%-25%）/ B（前25%-40%）/ C（中间40%-60%）/ D（后30%-40%）
+
+报告输出到 `novels/{NOVEL_NAME}/审阅报告/正文审阅-{date}.md`
+
+```markdown
+# 审阅报告 - {章节范围} - {date}
+
+## 总评：{等级}（{分数}/100）
+
+## P0 问题（必须修复）
+- [{类别}] {问题描述} | 位置：{文件}:{行号} | 建议修复：{具体方案}
+
+## P1 问题（限1轮修复）
+...
+
+## P2 问题（可延期）
+...
+
+## 三视角审查
+| 维度 | 读者 | 作者 | 人物 | 冲突 |
+|------|------|------|------|------|
+| Ch{N} | {评级} | {评级} | {评级} | {描述} |
+
+## Smell Test
+结论：{通过/不通过} | 不通过原因：{描述}
+
+## 术语合规
+违规数：{N} | 详情：{位置→替换建议}
+```
+
+> 此报告格式即为 **审阅报告数据协议**，novel-reviser 可直接解析。
+
+## 设定审查六维度
+
+| # | 维度 | 审查内容 |
+|---|------|---------|
+| ① | 内部自洽 | 同维度内不同条目是否矛盾（如两条种族描述冲突） |
+| ② | 人物一致 | 角色能力/出身/关系是否与世界观设定匹配 |
+| ③ | 物品合理 | 物品功能/稀有度/获取方式是否自洽 |
+| ④ | 历史可信 | 历史事件是否与当前状态逻辑一致（无未解决的遗留问题） |
+| ⑤ | 关系完整 | 所有角色关系是否双向定义、无孤立节点 |
+| ⑥ | 伏笔可行 | 已埋伏笔的计划回收章是否合理、有无过期未回收 |
 
 ## 审计工具加载
 

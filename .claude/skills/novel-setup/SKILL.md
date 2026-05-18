@@ -4,7 +4,7 @@ description: 小说项目基建。触发词：头脑风暴/建世界观/设定/�
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__*, mcp__memory__*
 lifecycle: core
 depends_on: novel-writer, lorecraft, engines/worldbuilding, engines/causality, engines/item
-version: "1.2.0"
+version: "1.3.0"
 ---
 
 # 小说项目基建
@@ -76,7 +76,7 @@ A2: world_query(已有) → 逐维度展开 → world_upsert → 🔒确认 → 
 ### Step 1: 数据采集
 
 1. `world_query(novel_name=NOVEL_NAME)` 查已有维度
-2. 加载术语规范：`Read(".claude/skills/lorecraft/SKILL.md")` + `Read(".claude/skills/lorecraft/references/term-map.md")`
+2. 加载术语规范：`Read(".claude/skills/lorecraft/references/core-principles.md")` + `Read(".claude/skills/lorecraft/references/term-map.md")`
 3. 加载世界构建引擎：`skill_loader("novel-setup", "engine", "worldbuilding")`
 
 ### Step 2: 逐维度展开（8维度）
