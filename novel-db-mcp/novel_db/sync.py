@@ -16,14 +16,14 @@ _NOVELS_BASE = os.path.join(PROJECT_ROOT, "novels")
 def _ensure_data_hashes_table():
     query("""
         CREATE TABLE IF NOT EXISTS data_hashes (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             novel_id INTEGER NOT NULL,
             data_type TEXT NOT NULL,
             data_key TEXT NOT NULL,
             db_hash TEXT NOT NULL DEFAULT '',
             file_hash TEXT NOT NULL DEFAULT '',
-            db_updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
-            file_updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+            db_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            file_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(novel_id, data_type, data_key)
         )
     """, fetch="none")
