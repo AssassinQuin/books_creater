@@ -4,6 +4,7 @@ description: 小说全链路质量保障。支持大纲审阅、正文审阅、�
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, skill_loader
 depends_on: lorecraft, engines/outline-review, engines/causality, engines/anti-ai, engines/reader-perspective-agent, engines/author-perspective-agent, engines/character-perspective-agent
 lifecycle: quality
+version: "1.1.0"
 ---
 
 # 小说质量保障
@@ -152,11 +153,24 @@ Step 6: 输出到 novels/{NOVEL_NAME}/审阅报告/大纲审计-{date}.md
 ## C4: 设定审查
 
 ```
-Step 1: world_query + character_list + relation_list + foreshadow_list 全量加载
-Step 2: 6维度审查（内部自洽/人物一致/物品合理/历史可信/关系完整/伏笔可行）
-Step 3: 🔒 问题清单 → 修复方案
-Step 4: 执行修复 → 级联同步（受影响章节/人物/伏笔）
+Step 1: 全量加载设定数据
+  world_query(novel_name=NOVEL_NAME) + character_list(novel_name=NOVEL_NAME)
+  + relation_list(novel_name=NOVEL_NAME) + foreshadow_list(novel_name=NOVEL_NAME)
+Step 2: 6维度深度审查
+  ① 内部自洽：同维度内不同条目是否矛盾（如两条种族描述冲突）
+  ② 人物一致：角色能力/出身/关系是否与世界观设定匹配
+  ③ 物品合理：物品功能/稀有度/获取方式是否自洽
+  ④ 历史可信：历史事件是否与当前状态逻辑一致（无未解决的遗留问题）
+  ⑤ 关系完整：所有角色关系是否双向定义、无孤立节点
+  ⑥ 伏笔可行：已埋伏笔的计划回收章是否合理、有无过期未回收
+Step 3: 术语合规扫描
+  加载 lorecraft/references/term-map.md → 全量扫描设定中的现代术语 → 标记违规
+Step 4: 🔒 输出问题清单（P0/P1/P2分级）→ 每条附修复方案
+Step 5: 执行修复 → world_upsert/character_update/foreshadow_update → 级联同步
+Step 6: 验证修复 → 重跑 Step 2 确认无新矛盾
 ```
+
+输出到 `novels/{NOVEL_NAME}/审阅报告/设定审查-{date}.md`
 
 ## C2: 健康诊断
 
@@ -177,14 +191,29 @@ health_check(novel_name=NOVEL_NAME) → 6指标：
 ## C3: 级联更新
 
 ```
-Step 1: 更新数据（人物/设定/伏笔等）
-Step 2: db_search(novel_name=NOVEL_NAME, 关键词) 全量扫描影响范围
-Step 3: 🔒 确认修改清单（影响章节/人物/伏笔/时间线）
-Step 4: 执行修改
-Step 5: 验证一致性（重新检查受影响章节的硬约束）
+Step 1: 确定变更范围
+  用户指定变更内容 → character_update / world_upsert / foreshadow_update 执行
+Step 2: 全量影响扫描
+  db_search(novel_name=NOVEL_NAME, keyword={变更关键词}) → 扫描受影响的章节/人物/伏笔/时间线
+  + character_list / relation_list / foreshadow_list 检查关联数据
+Step 3: 🔒 展示修改影响清单
+  受影响文件：{章节列表}
+  受影响人物：{人物列表 + 关系变化}
+  受影响伏笔：{伏笔列表 + 状态变化}
+  受影响时间线：{事件列表 + 因果链变化}
+  → 用户确认修改清单，输入"OK"继续或调整
+Step 4: 执行级联修改
+  按影响清单逐项修改（章节正文→人物档案→伏笔状态→时间线事件）
+  修改 DB + sync_db_to_files()
+Step 5: 一致性验证
+  validate_chapter(受影响章节) + consistency_guard(novel_name=NOVEL_NAME, auto_sync=True)
+  + 重跑受影响伏笔的回收检查
+Step 6: 输出级联报告
+  变更摘要 + 影响范围 + 修改条目 + 未修复项（如有）
 ```
 
 > 局部修改在长篇中几乎不存在——改一个设定往往牵动多条人物线和时间线。db_search 让修改者看到完整"涟漪效应"。
+> C3 优先级高于 B2（写作中断）。写作中说"改设定"→ 暂停写作，先处理级联更新。
 
 </what-to-do>
 
@@ -209,5 +238,16 @@ Step 5: 验证一致性（重新检查受影响章节的硬约束）
 - 位置信息从 `位置：{文件}:{行号}` 字段提取
 - 修复建议从 `建议修复：{具体方案}` 字段提取
 - 术语替换从 `## 术语合规` 章节提取
+
+## 边界条件
+
+| 场景 | 处理 |
+|------|------|
+| 审阅文件不存在 | `Read` 失败 → 提示用户确认文件路径，或跳过该文件 |
+| validate_chapter 返回 violations | 记录为 P1 问题，纳入问题清单，novel-reviser 修复 |
+| 审阅报告解析失败 | 报告格式不匹配 → 尝试宽松解析（按 markdown 标题提取），仍失败则提示手动标注 |
+| health_check DB 空数据 | 新项目无数据 → 提示"尚无写作数据，请先完成世界观+人物设计" |
+| db_search 无结果 | 变更未影响其他数据 → 仅修改目标数据，跳过级联 |
+| Smell Test 不通过 | 标记为 P1 → 🔒展示不通过原因 → 用户确认是否接受/要求重写 |
 
 </supporting-info>

@@ -3,6 +3,8 @@ name: novel-character
 description: 小说人物设计/修改。触发词：设计人物/加人物/改人物/优化人物/人物卡。涉及新建或修改角色档案时触发。新建流程：DB采集世界观→蒸馏7步→外观→对话→同步DB+文件。修改流程：DB读完整数据→评估范围→改文件→确认→同步DB→consistency_guard→(可选)达尔文优化。
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__novel_get, mcp__novel-db__world_query, mcp__novel-db__character_create, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__character_detail, mcp__novel-db__relation_create, mcp__novel-db__relation_list, mcp__novel-db__relation_update, mcp__novel-db__skill_loader, mcp__novel-db__consistency_guard
 lifecycle: core
+depends_on: lorecraft, engines/character-design, engines/ability, engines/dialogue
+version: "1.1.0"
 ---
 
 # 小说人物设计
@@ -67,15 +69,20 @@ Phase 5: 级联同步
 
 ## 角色蒸馏7步详解
 
-| 步 | 名称 | 说明 |
-|----|------|------|
-| 1 | 萃取 | 外貌/身份/关键行为/他人评价 |
-| 2 | 深度 | Ghost→Lie + Want/Need + 弧线 + 原型 |
-| 3 | 洋葱三层 | 社会面具 + 自我认知 + 真实内核 |
-| 4 | 矛盾注入 | 主气质×矛盾特质（让人不舒服的缺陷） |
-| 5 | 共情细节 | 6技法选2-3 + 反差 + 标志习惯 |
-| 6 | 定标 | 用具体行为定义性格（非形容词） |
-| 7 | 锻造语音 | 句式节奏 + 词汇层 + 情绪偏移 |
+> **Phase 2 开始前**：`skill_loader("novel-character", "engine", "character-design")` 加载引擎。
+> 核心角色每步深挖（每步≥3句具体描述），次要角色/NPC 可精简但不可跳过。
+
+| 步 | 名称 | 执行要点 | 产出示例 |
+|----|------|---------|---------|
+| 1 | 萃取 | 提取外貌特征（≤2个标志特征）、身份标签、关键行为模式、他人评价。**不可用形容词堆砌**——用具体可感知的特征 | "左眉有旧疤/说话前先叹气/同事说他'从不回头'" |
+| 2 | 深度 | Ghost（过去创伤）→ Lie（错误信念）→ Want（表层欲望）→ Need（深层需求）→ 弧线方向 → 原型（捣蛋者/守护者/智者等） | Ghost:被师门驱逐→Lie:"力量等于安全"→Want:变强→Need:接受脆弱 |
+| 3 | 洋葱三层 | 社会面具（对外展示）→ 自我认知（自己认为）→ 真实内核（实际）。三层之间必须有裂缝 | 面具：冷酷守信 / 自我：正义执行者 / 内核：害怕被抛弃 |
+| 4 | 矛盾注入 | 主气质 × 矛盾特质 = 让人不舒服的缺陷。**🔐 检查点**：矛盾必须足够尖锐，读者初见时会"不喜欢但记住了" | 最冷静的人最冲动 / 最忠诚的人最善谎 |
+| 5 | 共情细节 | 从6技法（反差/脆弱/固执/温柔/幽默/独处）中选2-3个 + 反差场景 + 标志习惯（口头禅/小动作） | 开打前先整理袖口/紧张时反而话多 |
+| 6 | 定标 | 用**具体行为**定义性格，不用形容词。每条≤15字 | ❌"他很固执" → ✅"同一个问题被拒绝三次仍要问第四次" |
+| 7 | 锻造语音 | 句式节奏（长句/短句/省略）+ 词汇偏好 + 情绪偏移（紧张vs放松时如何变化）+ 对不同人的温差 | 对上级：短句敬语 / 对朋友：反讽长句 / 对敌人：沉默 |
+
+**🔐 检查点（Step 4 后）**：展示前4步蒸馏结果给用户，确认矛盾注入足够尖锐后再继续 Step 5-7。
 
 详细指南：`engines/character-design.md`（编排器通过 skill_loader 注入）。
 

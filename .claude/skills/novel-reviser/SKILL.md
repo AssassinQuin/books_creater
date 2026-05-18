@@ -4,6 +4,7 @@ description: 批量修订引擎。触发词：修复/去重/修文/润色
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__*, skill_loader
 depends_on: novel-qa, lorecraft, engines/author-voice, engines/writing-style, engines/anti-ai-quickref, engines/causality
 lifecycle: quality
+version: "1.1.0"
 ---
 
 # 批量修订引擎
@@ -81,6 +82,8 @@ lifecycle: quality
 ## Step 3: 执行——批量修改
 
 **3.0 安全网** — 执行前 `git stash push -m "pre-reviser-{timestamp}"`
+
+**🔒 3.0.1 执行前最终确认** — 展示修改统计（P0×N / P1×N / P2×N / P3×N，涉及×个文件，DB同步×项），确认后才开始修改。
 
 **3.1 逐条执行** — 顺序 P0→P1→P2→P3；同一文件内行号从大到小；每次 Edit 前 Read 确认当前行号。
 

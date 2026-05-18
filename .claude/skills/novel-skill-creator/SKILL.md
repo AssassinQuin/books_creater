@@ -3,6 +3,8 @@ name: novel-skill-creator
 description: 小说技能创建指南 — 创建新技能的标准化流程、模板和审查清单。触发词：创建技能/新建技能/加技能/add skill。
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 lifecycle: meta
+depends_on: CLAUDE.md
+version: "1.1.0"
 ---
 
 # 小说技能创建指南
@@ -16,7 +18,7 @@ lifecycle: meta
 1. **需求收集**: 确定技能名/触发词/核心功能/所用 MCP 工具
 2. **冲突检测**: 检查与现有技能的重叠（见下方冲突检测清单）
 3. **草稿编写**: 按新模板（MCP 驱动架构）
-4. **审查发布**: 通过审查清单后放入对应桶目录
+4. **🔒 审查确认**: 通过审查清单后展示草稿给用户确认，用户说OK后才放入对应桶目录
 
 ### 冲突检测清单（新技能创建前必检）
 
@@ -60,13 +62,13 @@ lifecycle: core | quality | experimental | deprecated
 ## 审查清单
 
 - [ ] **触发精确**: description 含 3-5 个触发词，格式"触发词：词1/词2/词3"
-- [ ] **SKILL.md ≤ 80 行**: 不拆分支撑信息
-- [ ] **what-to-do/supporting-info 分层**: 核心指令在 what-to-do
+- [ ] **what-to-do/supporting-info 分层**: 核心指令在 what-to-do，`<what-to-do>` 核心流程 ≤200 行，总文件含 supporting-info 不限
 - [ ] **强制流程有检查点**: 关键步骤有 🔒 标记
 - [ ] **引用 MCP 工具**: 不写"读 xxx.md"，写"调 `tool()`"
 - [ ] **allowed-tools** 包含所有实际调用的 MCP 工具
 - [ ] **无重复功能**: 与现有技能无重叠
 - [ ] **lifecycle 标记正确**
+- [ ] **version 字段**: 遵循 semver（如 "1.0.0"）
 
 ## 桶分级
 

@@ -4,6 +4,7 @@ description: 百万字网文创作引擎总路由器。根据用户意图分发�
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, mcp__memory__*
 depends_on: novel-setup, novel-character, novel-planner, novel-planner-volume, novel-chapter-writer, novel-qa, novel-reviser, abilitycraft, lorecraft
 lifecycle: core
+version: "1.1.0"
 ---
 
 # 百万字网文创作引擎
@@ -83,9 +84,10 @@ lifecycle: core
 
 ```
 1. 确认目标子技能存在（SKILL.md 文件存在）
-2. 将 NOVEL_NAME 和上下文信息传递给子技能
-3. 通过 Agent/Task 启动子技能执行
-4. 子技能完成后返回结果给用户
+2. 🔒 简要确认意图："确认：您要进行【{操作描述}】，即将启动 {skill-name}。输入OK继续或修改。"
+3. 将 NOVEL_NAME 和上下文信息传递给子技能
+4. 通过 Agent/Task 启动子技能执行
+5. 子技能完成后返回结果给用户
 ```
 
 ### 路由失败处理

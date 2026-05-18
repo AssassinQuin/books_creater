@@ -4,6 +4,7 @@ description: 能力世界观根植设计引擎。让角色能力从"经历+性�
 allowed-tools: mcp__novel-db__*, skill_loader, Read, Write, Agent
 depends_on: lorecraft, engines/ability.md, SENTENCE-PATTERNS.md
 lifecycle: core
+version: "1.1.0"
 ---
 
 # 能力世界观根植设计引擎

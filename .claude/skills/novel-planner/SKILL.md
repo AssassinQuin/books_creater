@@ -3,6 +3,8 @@ name: novel-planner
 description: 全书大纲设计 — 小说骨架+血管。从全局视角确定每卷目标/角色弧线/暗线规划/伏笔基础。不设计具体事件，只确定"每卷做什么"。输出可被 novel-planner-volume 读取作为卷级设计输入。触发词：规划全书/设计大纲/全书框架/卷级规划
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, mcp__memory__*
 lifecycle: core
+depends_on: novel-setup, lorecraft, engines/causality, engines/three-perspective
+version: "1.1.0"
 ---
 
 # 全书大纲设计
@@ -298,45 +300,9 @@ V{N}《{卷名}》目标卡
 
 P0→必须修复（回对应Step）。无P0→进入保存。
 
-**🔒 P0 修复循环退出机制（防止无限循环）**
+**🔒 P0 修复循环退出机制**
 
-```python
-MAX_FIX_ROUNDS = 3
-fix_rounds = 0  # 初始化计数器
-
-while p0_issues_exist:
-    fix_rounds += 1
-
-    if fix_rounds > MAX_FIX_ROUNDS:
-        # 已修复3轮仍有P0问题 → 升级为用户决策
-        print(f"⚠️ 已完成 {MAX_FIX_ROUNDS} 轮P0修复，仍有 {len(remaining_p0s)} 个P0问题未解决：")
-        for issue in remaining_p0s:
-            print(f"  - [{issue.location}] {issue.description}")
-            print(f"    影响评估：{issue.impact_analysis}")
-        print("\n请选择处理方式：")
-        print("  ① 接受当前状态 — 标记为已知风险，继续保存")
-        print("  ② 回退到上一版本 — 放弃本轮修改，恢复修复前状态")
-        print("  ③ 手动修复 — 暂停流程，由用户手动处理剩余P0")
-        # 等待用户决策后继续
-        user_choice = await user_input()
-        if user_choice == "①":
-            print("⚠️ 用户接受当前状态，剩余P0已记录为已知风险")
-            break  # 退出循环，继续保存
-        elif user_choice == "②":
-            rollback_to_pre_fix_state()
-            return  # 中止流程
-        elif user_choice == "③":
-            print("⏸ 流程暂停，等待用户手动修复后重新验证")
-            return  # 中止流程
-
-    # 执行修复（回对应Step）
-    fix_p0_issues(p0_issues)
-    # 重跑验证
-    validation_result = run_step5_validation()
-    p0_issues = validation_result.p0_issues
-```
-
-> **注意**：`fix_rounds` 计数器在每次进入 Step 5 验证时初始化为 0。如果连续 3 轮修复后仍有 P0，说明问题可能需要更高层级的设计调整（如世界观设定矛盾），此时强制交由用户决策，避免编排器与 Agent 陷入无效循环。
+P0问题→回对应Step修复。最多修复3轮，超出则升级为用户决策（①接受当前状态/②回退到上一版本/③手动修复）。详见 supporting-info。
 
 ## Step 6: 保存
 
@@ -428,5 +394,24 @@ B1: 全书框架+脉络+卷级目标卡+支线体系+审计通过
 | Step 0 数据为空（新小说） | **阻断**，必须先完成 novel-setup（世界观≥3维度+角色≥2个）后才能进入全书大纲设计 |
 | Step 0 世界观<3维度或角色<2个 | **阻断**，提示用户补充世界观/角色后再进入 |
 | Step 5 发现P0 | 回到对应Step修复，修复后重跑验证（最多3轮，超出则升级为用户决策） |
+
+## P0 修复循环详解
+
+```python
+MAX_FIX_ROUNDS = 3
+fix_rounds = 0
+
+while p0_issues_exist:
+    fix_rounds += 1
+    if fix_rounds > MAX_FIX_ROUNDS:
+        # 升级为用户决策：①接受 ②回退 ③手动修复
+        user_choice = await user_input()
+        if user_choice == "①": break  # 标记已知风险
+        elif user_choice == "②": rollback_to_pre_fix_state(); return
+        elif user_choice == "③": return  # 暂停等待手动修复
+    fix_p0_issues(p0_issues)
+    validation_result = run_step5_validation()
+    p0_issues = validation_result.p0_issues
+```
 
 </supporting-info>

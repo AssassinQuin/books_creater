@@ -2,7 +2,9 @@
 name: novel-chapter-writer
 description: 逐章写作编排器，驱动 4 个独立子 Agent 协作完成章节。触发词：写第N章/继续写/写一章
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__get_chapter_context, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__skill_loader, mcp__novel-db__character_update, mcp__novel-db__character_increment, mcp__novel-db__character_snapshot_by_name, mcp__novel-db__relation_snapshot_by_name, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_upsert, mcp__novel-db__character_create, mcp__novel-db__relation_create, mcp__novel-db__consistency_guard, mcp__memory__memory_store, mcp__memory__memory_search
+depends_on: lorecraft, engines/anti-ai-quickref, engines/author-voice, engines/causality, agents/context-curator, agents/creative-director, agents/engine-coordinator, agents/text-generator
 lifecycle: core
+version: "1.1.0"
 ---
 
 # 逐章写作编排器（Multi-Agent Pipeline）

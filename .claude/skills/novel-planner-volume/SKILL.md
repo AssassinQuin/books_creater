@@ -2,7 +2,9 @@
 name: novel-planner-volume
 description: 卷级大纲设计。把握小说脉络——事件架构+因果链+人物弧光+伏笔节奏。不做细节注册，留给正文写作阶段。触发词：设计卷/卷大纲/章节规划/事件设计
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*
+depends_on: novel-planner, lorecraft, engines/causality, engines/relationship, engines/scene-type, engines/scene-composition
 lifecycle: core
+version: "1.1.0"
 ---
 
 # 卷级大纲设计
