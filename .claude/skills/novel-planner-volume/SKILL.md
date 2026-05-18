@@ -4,7 +4,7 @@ description: 卷级大纲设计。把握小说脉络——事件架构+因果链
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*
 depends_on: novel-planner, lorecraft, engines/causality, engines/relationship, engines/scene-type, engines/scene-composition
 lifecycle: core
-version: "1.1.0"
+version: "1.2.0"
 ---
 
 # 卷级大纲设计
