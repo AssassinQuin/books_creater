@@ -2,13 +2,14 @@
   "mcpServers": {
     "novel-db": {
       "type": "stdio",
-      "command": "/home/z/.venv/bin/python3",
+      "command": "python3",
       "args": [
-        "/home/z/my-project/books_creater/novel-db-mcp/server.py"
+        "novel-db-mcp/server.py"
       ],
       "env": {
-        "DATABASE_URL": "postgresql://z@localhost:5432/fcli?host=/home/z/.local/share/postgresql/run",
-        "NOVEL_PROJECT_ROOT": "/home/z/my-project/books_creater"
+        "DB_BACKEND": "libsql",
+        "LIBSQL_DB_PATH": "data/novel.db",
+        "NOVEL_PROJECT_ROOT": "."
       }
     }
   }
