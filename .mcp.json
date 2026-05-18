@@ -11,6 +11,17 @@
         "LIBSQL_DB_PATH": "data/novel.db",
         "NOVEL_PROJECT_ROOT": "."
       }
+    },
+    "memory": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "-m",
+        "mcp_memory_service.server"
+      ],
+      "env": {
+        "MCP_MEMORY_STORAGE_BACKEND": "sqlite_vec"
+      }
     }
   }
 }
