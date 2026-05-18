@@ -31,3 +31,26 @@ Stage Summary:
 - lorecraft补全4个缺失frontmatter字段+用户确认检查点
 - novel-qa的C3/C4从压缩状态扩展为完整流程
 - novel-character蒸馏7步扩展为带执行要点的详细指南
+---
+Task ID: 1
+Agent: main
+Task: 修复 SKILL.md depends_on 引用缺失 + 推送 GitHub
+
+Work Log:
+- git pull 拉取最新代码（c054701）
+- 扫描 12 个 SKILL.md 的 depends_on 字段
+- 交叉比对每个 skill 实际依赖的核心 skill 与声明的 depends_on
+- 发现 6 个 skill 缺失对核心 skill 的引用
+- 逐个修复：novel-qa, novel-reviser, novel-chapter-writer, novel-character, novel-setup, abilitycraft
+- 全部 version 1.1.0 → 1.2.0
+- git commit + push 到 GitHub (a6f9582)
+
+Stage Summary:
+- 修复 6 个 skill 的 depends_on 引用缺失
+- novel-qa: +novel-planner, +novel-chapter-writer
+- novel-reviser: +novel-planner, +novel-chapter-writer
+- novel-chapter-writer: +novel-planner
+- novel-character: +novel-planner
+- novel-setup: +novel-writer
+- abilitycraft: +novel-planner-volume, +novel-chapter-writer
+- 推送成功：c054701..a6f9582
