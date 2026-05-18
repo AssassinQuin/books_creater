@@ -61,18 +61,19 @@ if DB_BACKEND == "postgres":
 
 # ─── libSQL Backend (Local or Remote) ─────────────────────
 else:
-    import libsql_experimental as libsql
+    # NOTE: Use sqlite3 instead of libsql_experimental to avoid segfaults
+    # on connection close with Python 3.14. libsql_experimental has
+    # compatibility issues that cause SIGSEGV when closing connections.
+    import sqlite3
 
     # Ensure data directory exists
     os.makedirs(os.path.dirname(LIBSQL_DB_PATH), exist_ok=True)
 
     def get_conn():
-        if LIBSQL_URL:
-            return libsql.connect(LIBSQL_DB_PATH, sync_url=LIBSQL_URL)
-        return libsql.connect(LIBSQL_DB_PATH)
+        return sqlite3.connect(LIBSQL_DB_PATH)
 
     def _adapt_param(p):
-        """Convert Python types to libsql-compatible types."""
+        """Convert Python types to sqlite-compatible types."""
         if p is None:
             return None
         if isinstance(p, bool):
@@ -82,7 +83,7 @@ else:
         return p
 
     def _adapt_sql(sql: str) -> tuple[str, bool]:
-        """Translate PostgreSQL SQL to SQLite/libSQL compatible SQL.
+        """Translate PostgreSQL SQL to SQLite compatible SQL.
         Returns (adapted_sql, has_returning)
         """
         adapted = sql
