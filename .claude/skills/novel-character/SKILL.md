@@ -3,8 +3,8 @@ name: novel-character
 description: 小说人物设计/修改。触发词：设计人物/加人物/改人物/优化人物/人物卡。涉及新建或修改角色档案时触发。新建流程：DB采集世界观→蒸馏7步→外观→对话→同步DB+文件。修改流程：DB读完整数据→评估范围→改文件→确认→同步DB→consistency_guard→(可选)达尔文优化。
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__novel_get, mcp__novel-db__world_query, mcp__novel-db__character_create, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__character_detail, mcp__novel-db__relation_create, mcp__novel-db__relation_list, mcp__novel-db__relation_update, mcp__novel-db__skill_loader, mcp__novel-db__consistency_guard
 lifecycle: core
-depends_on: lorecraft, engines/character-design, engines/ability, engines/dialogue
-version: "1.1.0"
+depends_on: novel-planner, lorecraft, engines/character-design, engines/ability, engines/dialogue
+version: "1.2.0"
 ---
 
 # 小说人物设计

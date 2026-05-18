@@ -2,9 +2,9 @@
 name: abilitycraft
 description: 能力世界观根植设计引擎。让角色能力从"经历+性格+势力+区域"长出来，而非从RPG类型表选。六步法：经历回溯→能力来源→机制定义→代价设计→三视角命名→多样性检查。触发词：能力设计/能力命名/能力体系/觉醒设计/灵能设计/能力成长/代价设计。使用前提：项目已创建，世界观根隐喻已确认。词汇层AI味消除由 lorecraft + SENTENCE-PATTERNS.md 覆盖，能力描写（L3）由 engines/ability.md 覆盖。
 allowed-tools: mcp__novel-db__*, skill_loader, Read, Write, Agent
-depends_on: lorecraft, engines/ability.md, SENTENCE-PATTERNS.md
+depends_on: lorecraft, engines/ability.md, SENTENCE-PATTERNS.md, novel-planner-volume, novel-chapter-writer
 lifecycle: core
-version: "1.1.0"
+version: "1.2.0"
 ---
 
 # 能力世界观根植设计引擎

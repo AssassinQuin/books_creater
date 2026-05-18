@@ -2,9 +2,9 @@
 name: novel-reviser
 description: 批量修订引擎。触发词：修复/去重/修文/润色
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__*, skill_loader
-depends_on: novel-qa, lorecraft, engines/author-voice, engines/writing-style, engines/anti-ai-quickref, engines/causality
+depends_on: novel-qa, novel-planner, novel-chapter-writer, lorecraft, engines/author-voice, engines/writing-style, engines/anti-ai-quickref, engines/causality
 lifecycle: quality
-version: "1.1.0"
+version: "1.2.0"
 ---
 
 # 批量修订引擎

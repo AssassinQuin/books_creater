@@ -3,8 +3,8 @@ name: novel-setup
 description: 小说项目基建。触发词：头脑风暴/建世界观/设定/加物品
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__*, mcp__memory__*
 lifecycle: core
-depends_on: lorecraft, engines/worldbuilding, engines/causality, engines/item
-version: "1.1.0"
+depends_on: novel-writer, lorecraft, engines/worldbuilding, engines/causality, engines/item
+version: "1.2.0"
 ---
 
 # 小说项目基建

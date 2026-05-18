@@ -2,9 +2,9 @@
 name: novel-qa
 description: 小说全链路质量保障。支持大纲审阅、正文审阅、设定审查、健康诊断、级联更新五种模式。触发词：审阅大纲/审阅正文/审设定/诊断/卡文/OOC/检查/改设定
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, skill_loader
-depends_on: lorecraft, engines/outline-review, engines/causality, engines/anti-ai, engines/reader-perspective-agent, engines/author-perspective-agent, engines/character-perspective-agent
+depends_on: novel-planner, novel-chapter-writer, lorecraft, engines/outline-review, engines/causality, engines/anti-ai, engines/reader-perspective-agent, engines/author-perspective-agent, engines/character-perspective-agent
 lifecycle: quality
-version: "1.1.0"
+version: "1.2.0"
 ---
 
 # 小说质量保障
