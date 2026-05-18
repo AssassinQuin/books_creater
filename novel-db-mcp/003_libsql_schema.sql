@@ -131,6 +131,8 @@ CREATE TABLE IF NOT EXISTS world_settings (
     tags TEXT DEFAULT '[]',
     related_ids TEXT DEFAULT '[]',
     volume_range TEXT DEFAULT '',
+    region TEXT DEFAULT '全域',
+    faction_id INTEGER DEFAULT NULL,
     writing_guide TEXT DEFAULT '',
     lorebook_id TEXT DEFAULT '',
     priority INTEGER DEFAULT 30,
@@ -256,3 +258,9 @@ CREATE INDEX IF NOT EXISTS idx_distillation_novel ON character_distillation_evol
 CREATE INDEX IF NOT EXISTS idx_distillation_character ON character_distillation_evolution(character_id);
 CREATE INDEX IF NOT EXISTS idx_distillation_chapter ON character_distillation_evolution(chapter_id);
 CREATE INDEX IF NOT EXISTS idx_char_snap_novel ON character_state_snapshots(character_id);
+-- ─── Layered Loading Indexes ──────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_world_region ON world_settings(region);
+CREATE INDEX IF NOT EXISTS idx_world_faction ON world_settings(faction_id);
+CREATE INDEX IF NOT EXISTS idx_world_volume_range ON world_settings(volume_range);
+CREATE INDEX IF NOT EXISTS idx_world_category_region ON world_settings(category, region);
+CREATE INDEX IF NOT EXISTS idx_world_status ON world_settings(status);

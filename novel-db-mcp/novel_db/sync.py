@@ -219,7 +219,9 @@ def _sync_world_to_file(novel_id: int, novel_name: str, row: dict):
         ("secondary_keys", row.get("secondary_keys")),
         ("tags", row.get("tags")),
         ("related", row.get("related_ids")),
+        ("region", row.get("region")),
         ("volume_range", row.get("volume_range")),
+        ("faction_id", row.get("faction_id")),
         ("writing_guide", row.get("writing_guide")),
     ]
     for key, val in meta_items:

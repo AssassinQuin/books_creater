@@ -6,7 +6,8 @@ from novel_db.tools_novel import (  # noqa: F401
     novel_create, novel_list, novel_get, novel_update,
 )
 from novel_db.tools_world import (  # noqa: F401
-    world_upsert, world_query, world_delete, world_deactivate,
+    world_upsert, world_query, world_load_context, world_batch_update_meta,
+    world_delete, world_deactivate,
     sync_lorebook, seed_engine_data, engine_detail,
     author_voice, writing_spec,
 )

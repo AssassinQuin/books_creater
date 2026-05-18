@@ -85,9 +85,25 @@ def chapter_save_summary(novel_name: str, chapter_number: int, summary: str,
 
 
 @mcp.tool
-def chapter_get_context(novel_name: str, chapter_number: int) -> str:
-    """获取写作上下文：前N章摘要 + 人物状态 + 未回收伏笔 + 世界观 + 章节大纲
+def chapter_get_context(novel_name: str, chapter_number: int,
+                        load_mode: str = "smart",
+                        regions: str = "", faction_names: str = "",
+                        categories: str = "") -> str:
+    """获取写作上下文：前N章摘要 + 人物状态 + 未回收伏笔 + 世界观（分层加载）+ 章节大纲
+    
+    加载模式(load_mode):
+      - "smart"(默认): 根据章节所属卷级自动推断需要加载的地区和势力，只加载相关设定
+      - "volume": 按卷级过滤世界观，加载当前卷相关的设定
+      - "targeted": 按 regions/faction_names/categories 参数精准加载
+      - "full": 加载全部世界观(仅在需要时使用，数据量大时慎用)
+    
+    参数:
       novel_name: 小说名称
+      chapter_number: 章节序号
+      load_mode: 加载模式(smart/volume/targeted/full)
+      regions: 逗号分隔地区(仅targeted模式生效，如'外围,北境')
+      faction_names: 逗号分隔势力名(仅targeted模式)
+      categories: 逗号分隔类别(仅targeted模式，如'ability,location')
     """
     novel_id = _resolve_novel_id(novel_name)
 
@@ -99,6 +115,14 @@ def chapter_get_context(novel_name: str, chapter_number: int) -> str:
         return json.dumps({"error": f"chapter {chapter_number} not found"}, ensure_ascii=False)
     result["chapter"] = dict(ch)
 
+    # Determine volume from chapter's volume_id
+    volume_str = ""
+    if ch.get("volume_id"):
+        vol = query("SELECT number FROM volumes WHERE id = %s", (ch["volume_id"],), fetch="one")
+        if vol:
+            volume_str = f"V{vol['number']}"
+    
+    # Recent chapter summaries
     prev = query(
         "SELECT cs.summary, cs.dimension_snapshot FROM chapter_summaries cs "
         "JOIN chapters c ON cs.chapter_id = c.id "
@@ -107,19 +131,127 @@ def chapter_get_context(novel_name: str, chapter_number: int) -> str:
     )
     result["recent_summaries"] = [dict(r) for r in prev]
 
+    # Active characters (filtered by volume appearance when possible)
     chars = query("SELECT id, name, role, ability_level, status FROM characters "
                   "WHERE novel_id = %s AND is_active = TRUE", (novel_id,))
     result["active_characters"] = [dict(r) for r in chars]
 
+    # Unresolved foreshadows
     foreshadows = query(
         "SELECT id, description, planted_chapter_id FROM foreshadows "
         "WHERE novel_id = %s AND status = 'planted'", (novel_id,))
     result["unresolved_foreshadows"] = [dict(r) for r in foreshadows]
 
-    world = query("SELECT category, name, data FROM world_settings WHERE novel_id = %s", (novel_id,))
-    result["world_settings"] = [dict(r) for r in world]
+    # ── World Settings: Layered Loading ──
+    if load_mode == "full":
+        # Load everything (legacy behavior)
+        world = query("SELECT category, name, data, region, volume_range, faction_id FROM world_settings WHERE novel_id = %s AND status = 'active'", (novel_id,))
+        result["world_settings"] = [dict(r) for r in world]
+        result["_load_info"] = {"mode": "full", "count": len(world), "warning": "full模式加载全部设定，数据量大"}
+    else:
+        # Use smart/volume/targeted loading via world_load_context logic
+        _load_world_context(result, novel_id, volume_str, load_mode, regions, faction_names, categories)
 
     return json.dumps(result, ensure_ascii=False, default=str)
+
+
+def _load_world_context(result: dict, novel_id: int, volume_str: str,
+                         load_mode: str, regions: str, faction_names: str, categories: str):
+    """Internal: layered world context loading for chapter_get_context."""
+    
+    # Smart mode: infer regions and factions from volume
+    if load_mode == "smart" and volume_str:
+        vol_num = int(volume_str.replace("V", "")) if volume_str.startswith("V") else 0
+        
+        # Volume-to-region-faction mapping (based on the story outline)
+        vol_mapping = {
+            1: {"regions": "外围,北境", "factions": "壁盾军团"},
+            2: {"regions": "外围,中域", "factions": "壁盾军团,灵枢"},
+            3: {"regions": "外围,北境", "factions": "壁盾军团"},
+            4: {"regions": "中域,内城", "factions": "灵枢"},
+            5: {"regions": "中域,全域", "factions": "星火社,教会"},
+            6: {"regions": "全域", "factions": "壁盾军团,灵枢,教会"},
+            7: {"regions": "全域", "factions": "灵枢,星火社"},
+            8: {"regions": "全域", "factions": "灵枢,教会"},
+            9: {"regions": "全域", "factions": "灵枢,教会,壁盾军团"},
+            10: {"regions": "全域", "factions": "裔族,教会"},
+            11: {"regions": "内城,全域", "factions": "灵枢"},
+            12: {"regions": "全域", "factions": "教会,裔族"},
+            13: {"regions": "全域", "factions": "灵枢,教会"},
+            14: {"regions": "全域", "factions": "壁盾军团,灵枢,教会,裔族"},
+            15: {"regions": "全域", "factions": ""},
+        }
+        
+        mapping = vol_mapping.get(vol_num, {"regions": "全域", "factions": ""})
+        regions = mapping["regions"]
+        faction_names = mapping["factions"]
+    elif load_mode == "volume":
+        # Just filter by volume, no region/faction inference
+        regions = ""
+        faction_names = ""
+    
+    # Build query
+    conditions = ["novel_id = %s", "status = 'active'"]
+    params = [novel_id]
+    
+    region_list = [r.strip() for r in regions.split(',') if r.strip()] if regions else []
+    faction_name_list = [f.strip() for f in faction_names.split(',') if f.strip()] if faction_names else []
+    category_list = [c.strip() for c in categories.split(',') if c.strip()] if categories else []
+    
+    # Resolve faction names to IDs
+    faction_ids = []
+    if faction_name_list:
+        for fn in faction_name_list:
+            frow = query(
+                "SELECT id FROM world_settings WHERE novel_id = %s AND category = 'faction' AND name = %s",
+                (novel_id, fn), fetch="one"
+            )
+            if frow:
+                faction_ids.append(frow["id"])
+    
+    # Category filter
+    if category_list:
+        cat_placeholders = ", ".join(["%s"] * len(category_list))
+        conditions.append(f"category IN ({cat_placeholders})")
+        params.extend(category_list)
+    
+    # Region filter
+    if region_list:
+        region_placeholders = ", ".join(["%s"] * (len(region_list) + 1))
+        conditions.append(f"(region IN ({region_placeholders}))")
+        params.extend(region_list + ['全域'])
+    
+    # Faction filter
+    if faction_ids:
+        fid_placeholders = ", ".join(["%s"] * (len(faction_ids) + 1))
+        conditions.append(f"(faction_id IN ({fid_placeholders}) OR faction_id IS NULL)")
+        params.extend(faction_ids + [0])
+    
+    where = " AND ".join(conditions)
+    rows = query(f"SELECT category, name, data, region, volume_range, faction_id FROM world_settings WHERE {where} ORDER BY priority DESC, category, name", tuple(params))
+    
+    # Volume range filtering
+    vol_num = int(volume_str.replace("V", "")) if volume_str.startswith("V") else None
+    if vol_num is not None:
+        from .tools_world import _volume_in_range
+        # Always include constants
+        constant_rows = [r for r in rows if r.get("is_constant")]
+        non_constant = [r for r in rows if not r.get("is_constant")]
+        volume_matched = [r for r in non_constant if _volume_in_range(vol_num, r.get("volume_range", ""))]
+        result_rows = constant_rows + volume_matched
+    else:
+        result_rows = list(rows)
+    
+    result["world_settings"] = [dict(r) for r in result_rows]
+    result["_load_info"] = {
+        "mode": load_mode,
+        "volume": volume_str,
+        "regions": region_list or "all",
+        "factions": faction_name_list or "all",
+        "categories": category_list or "all",
+        "count": len(result_rows),
+        "total_available": len(list(rows)),
+    }
 
 
 @mcp.tool
