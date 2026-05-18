@@ -4,7 +4,7 @@ description: 小说人物设计/修改。触发词：设计人物/加人物/改�
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__novel_get, mcp__novel-db__world_query, mcp__novel-db__character_create, mcp__novel-db__character_list, mcp__novel-db__character_get, mcp__novel-db__character_update, mcp__novel-db__character_detail, mcp__novel-db__relation_create, mcp__novel-db__relation_list, mcp__novel-db__relation_update, mcp__novel-db__skill_loader, mcp__novel-db__consistency_guard
 lifecycle: core
 depends_on: novel-planner, lorecraft, engines/character-design, engines/ability, engines/dialogue
-version: "1.2.0"
+version: "1.3.0"
 ---
 
 # 小说人物设计
@@ -30,7 +30,7 @@ Phase 1: 数据采集（DB优先）
   ↓
 Phase 2: 角色蒸馏7步
   萃取→深度(含弧线+原型)→洋葱→矛盾注入→共情细节→定标→锻造
-  核心角色每步深挖；次要角色/NPC可精简但不可跳过任何步骤
+  核心角色每步深挖；次要角色/NPC可精简但保留每步的核心产出
   ↓
 Phase 3: 外观+对话设计 → 用户确认方案
   appearance 占角色档案整体篇幅的 5%-15%（核心角色取上限，NPC 取下限），race、speech_style、relation_adjustments 覆盖 ≥3 种关系类型
@@ -70,11 +70,11 @@ Phase 5: 级联同步
 ## 角色蒸馏7步详解
 
 > **Phase 2 开始前**：`skill_loader("novel-character", "engine", "character-design")` 加载引擎。
-> 核心角色每步深挖（每步≥3句具体描述），次要角色/NPC 可精简但不可跳过。
+> 核心角色每步深挖（每步≥3句具体描述），次要角色/NPC 可精简但保留每步的核心产出。
 
 | 步 | 名称 | 执行要点 | 产出示例 |
 |----|------|---------|---------|
-| 1 | 萃取 | 提取外貌特征（≤2个标志特征）、身份标签、关键行为模式、他人评价。**不可用形容词堆砌**——用具体可感知的特征 | "左眉有旧疤/说话前先叹气/同事说他'从不回头'" |
+| 1 | 萃取 | 提取外貌特征（≤2个标志特征）、身份标签、关键行为模式、他人评价。用**具体可感知的特征**，不用形容词堆砌 | "左眉有旧疤/说话前先叹气/同事说他'从不回头'" |
 | 2 | 深度 | Ghost（过去创伤）→ Lie（错误信念）→ Want（表层欲望）→ Need（深层需求）→ 弧线方向 → 原型（捣蛋者/守护者/智者等） | Ghost:被师门驱逐→Lie:"力量等于安全"→Want:变强→Need:接受脆弱 |
 | 3 | 洋葱三层 | 社会面具（对外展示）→ 自我认知（自己认为）→ 真实内核（实际）。三层之间必须有裂缝 | 面具：冷酷守信 / 自我：正义执行者 / 内核：害怕被抛弃 |
 | 4 | 矛盾注入 | 主气质 × 矛盾特质 = 让人不舒服的缺陷。**🔐 检查点**：矛盾必须足够尖锐，读者初见时会"不喜欢但记住了" | 最冷静的人最冲动 / 最忠诚的人最善谎 |
@@ -112,11 +112,11 @@ Phase 5: 级联同步
 
 - **appearance** 占角色档案整体篇幅的 5%-15%，核心角色取上限，NPC 取下限；避免形容词堆砌（如"美丽的""高大的"），用具体可感知的特征让读者自行形成印象；标志特征控制在 1-2 个并贯穿全文，过多则分散记忆点
 - **race** 从 DB 取值：`world_query(novel, category='race')`
-- **speech_style** 不可为空，relation_adjustments 覆盖 ≥3 种关系类型
+- **speech_style** 需要具体内容，relation_adjustments 覆盖 ≥3 种关系类型
 - **觉醒者角色** 必须回答能力7问：`engines/ability.md`
 - **对话设计** 参考 `engines/dialogue.md`
-- **角色蒸馏7步**：核心角色每步深挖，次要角色/NPC 精简但不可跳过任意步骤
-- **🔒 术语规范**：角色设计中的能力名称、势力归属、世界观相关描述必须遵守 `lorecraft/references/term-map.md` 禁止术语规则（如能力描述中出现"数据/系统/频率"等现代术语须替换为灵能术语）；角色口头禅和说话风格中涉及世界观概念时须使用口语层术语（参考 term-map「角色口语」列）
+- **角色蒸馏7步**：核心角色每步深挖，次要角色/NPC 精简但保留每步的核心产出
+- **🔒 术语规范**：角色设计中的能力名称、势力归属、世界观相关描述遵循 `lorecraft/references/term-map.md` 术语映射（如能力描述中用灵能术语替代现代术语）；角色口头禅和说话风格中涉及世界观概念时使用口语层术语（参考 term-map「角色口语」列）
 
 ## 边界条件
 

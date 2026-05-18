@@ -4,7 +4,7 @@ description: 全书大纲设计 — 小说骨架+血管。从全局视角确定�
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, mcp__memory__*
 lifecycle: core
 depends_on: novel-setup, lorecraft, engines/causality, engines/three-perspective
-version: "1.3.0"
+version: "1.4.0"
 ---
 
 # 全书大纲设计
@@ -153,7 +153,7 @@ B1: 全书框架+脉络+卷级目标卡+支线体系+审计通过
 | `engines/reader-perspective-agent.md` | 读者视角审查清单 | Step 5 |
 | `engines/author-perspective-agent.md` | 作者视角审查清单 | Step 5 |
 | `engines/character-perspective-agent.md` | 人物视角审查清单 | Step 5 |
-| `lorecraft/references/core-principles.md` | 文化根脉术语核心原则—禁止术语+四步法精简版 | Step 1-5（全程，替代全量SKILL.md） |
+| `lorecraft/references/core-principles.md` | 文化根脉术语生成指南—核心原则+四步法+生成方向 | Step 1-5（全程，替代全量SKILL.md） |
 | `lorecraft/references/term-map.md` | 现代→灵能术语映射表（~60+条） | Step 1-5（全程） |
 | `lorecraft/references/quickref.md` | 术语速查卡（七势力字根+命名法） | Step 1-5（全程） |
 | `engines/world-element-registry.md` | 世界观元素注册机制—已注册元素索引 | Step 1-5（全程） |
@@ -216,7 +216,7 @@ skill_loader("novel-planner", "engine", "character-perspective-agent")
 
 # 🔒 术语规范（全程强制加载——所有Agent生成前必读、生成后必检）：
 # 以下三项在Step 0一次性加载，编排器打包传给所有Agent
-Read(".claude/skills/lorecraft/references/core-principles.md")     # 文化根脉命名引擎精简版（核心原则+禁止术语+四步法精简）— 替代全量SKILL.md节省上下文
+Read(".claude/skills/lorecraft/references/core-principles.md")     # 文化根脉术语生成指南（核心原则+四步法+生成方向）— 替代全量SKILL.md节省上下文
 Read(".claude/skills/lorecraft/references/term-map.md")            # 现代→灵能术语映射表（~60+条）
 Read(".claude/skills/lorecraft/references/quickref.md")             # 速查卡（七势力字根+五步命名法+多样性检查）
 Read(".claude/skills/engines/world-element-registry.md")           # 世界观元素注册机制（已注册元素索引）
@@ -233,7 +233,7 @@ loaded_engines = {
     "Step5-读者视角(reader-perspective)": reader_loaded,
     "Step5-作者视角(author-perspective)": author_loaded,
     "Step5-人物视角(character-perspective)": character_loaded,
-    # 🔒 术语规范（全程强制——不可跳过）
+    # 术语规范（全程——确保所有Agent产出术语一致）
     "术语核心原则(lorecraft-core)": lorecraft_loaded,
     "术语映射(term-map)": term_map_loaded,
     "术语速查(quickref)": quickref_loaded,
@@ -242,16 +242,15 @@ loaded_engines = {
 
 failed = [k for k, v in loaded_engines.items() if not v]
 if failed:
-    print(f"⚠️ 以下引擎/规范加载失败（可能被上下文截断）：{failed}")
-    print("加载失败的引擎不可跳过。请缩短其他内容或分批处理。")
-    # 阻断：不允许启动 Agent
+    print("以下资源加载不完整，Agent产出质量可能受影响：{failed}")
+    print("请缩短其他内容或分批处理。")
     return
 else:
     print(f"✅ 全部 {len(loaded_engines)} 个引擎/规范加载成功")
     # 展示清单给用户确认
 ```
 
-**为什么不应该在引擎加载失败后启动 Agent**：引擎是后续所有步骤的约束条件，缺失引擎意味着 Agent 将在无约束状态下运行，产出可能违反因果逻辑、术语规范或三视角标准。修复成本远高于重新加载。如果上下文不足，编排器应提示用户并等待调整，而非静默跳过。
+**引擎加载验证的作用**：引擎是后续所有步骤的约束条件，缺失引擎意味着 Agent 将在无约束状态下运行，产出可能违反因果逻辑、术语规范或三视角标准。修复成本远高于重新加载。如果上下文不足，编排器应提示用户并等待调整，而非静默跳过。
 
 ## Step1框架建筑师
 
