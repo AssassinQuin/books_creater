@@ -17,11 +17,11 @@ lifecycle: core
 ### 全量模式（首次/大改）
 
 ```
-Step 0: 增量检测 → 加载框架+数据采集
+Step 0: 增量检测 → 加载框架+数据采集 → 🔒引擎验证
   ↓
 Step 1: Agent — 事件架构师 → 因果链+人物弧光+悬念锚点
-  ↓  🔒检查点A: 确认事件架构
-Step 2: Agent — 章节设计师 → 逐章大纲+伏笔节奏+声音适配（详见agent文件）
+  ↓  🔒检查点A: 确认事件架构 + 新实体确认
+Step 2: Agent — 章节设计师 → 逐章大纲+伏笔节奏+声音适配
   ↓  🔒检查点A2: 确认逐章大纲（用户修改→完善→确认）
 Step 3: 卷级验证 → 三视角审查(读者/作者/人物，3Agent并行)
   ↓  🔒检查点B: 确认验证通过(P0必须修复)
@@ -42,10 +42,10 @@ Step 1: 只修改目标章节
 Step 2: 邻章校验
   ↓  检查修改后的章节与前后章的因果链/时间线是否连贯
   ↓  如有断裂，扩展修复范围
-Step 2.5: 轻量级 P0 审查（强制——不可跳过）
-  ↓  编排器对修改章+邻章执行 P0 检查（见下方检查清单）
-  ↓  发现 P0 → 修复后重新检查，直到无 P0
-  ↓  无 P0 → 用户确认 → 继续
+Step 2.5: 轻量级 P0+术语审查（强制——不可跳过）
+  ↓  编排器对修改章+邻章执行 P0 检查 + 🔒术语扫描（见下方检查清单）
+  ↓  发现 P0 或术语违规 → 修复后重新检查，直到全部通过
+  ↓  无问题 → 用户确认 → 继续
 Step 3: 保存 → git commit
 ```
 
@@ -54,8 +54,9 @@ Step 3: 保存 → git commit
 - [ ] **因果链断裂检测**：修改引入的事件是否与前后章因果链连贯？是否有"因为剧情需要"式的无前因事件？
 - [ ] **时间线连续性**：修改章与前后章的时间戳是否递增、无跳跃？
 - [ ] **新实体一致性**：新增的角色/地点/物品是否已调MCP注册（character_create/world_upsert）？
+- [ ] **🔒术语扫描**：修改章中是否出现 term-map 禁止术语（数据/系统/信号/参数/权限/终端/频率等）？
 
-**禁止跳过 Step 2.5**。即使只是"加一句对话"，也必须执行 P0 检查。增量模式可以跳过完整三视角审查，但**不能跳过 P0 门控**。
+**禁止跳过 Step 2.5**。即使只是"加一句对话"，也必须执行 P0+术语检查。增量模式可以跳过完整三视角审查，但**不能跳过 P0+术语门控**。
 
 **触发条件**：用户说"改Ch{N}""扩展Ch{N}""Ch{N}加个场景"等局部修改指令。
 **不触发**：用户说"重新生成""重做大纲"→走全量模式。
@@ -125,43 +126,55 @@ foreshadow_list(novel_name="这次不一样了", status='planted')
 
 # 世界观（DB权威源，一次调用获取全部）
 world_query(novel_name="这次不一样了")
-
-# 引擎按步骤加载（编排器在启动对应Agent时通过 skill_loader 传入）
-# Step 1 需要：
-skill_loader("novel-planner-volume", "engine", "causality")
-skill_loader("novel-planner-volume", "engine", "relationship")
-# Step 2 需要：
-skill_loader("novel-planner-volume", "engine", "scene-type")
-skill_loader("novel-planner-volume", "engine", "scene-composition")
-skill_loader("novel-planner-volume", "engine", "author-voice")
-skill_loader("novel-planner-volume", "engine", "author-voice-emotion")
-skill_loader("novel-planner-volume", "engine", "author-voice-daily")
-skill_loader("novel-planner-volume", "engine", "author-voice-battle")
-skill_loader("novel-planner-volume", "engine", "author-voice-mystery")
-skill_loader("novel-planner-volume", "engine", "anti-ai-quickref")
-# Step 3 需要：
-skill_loader("novel-planner-volume", "engine", "reader-perspective-agent")
-skill_loader("novel-planner-volume", "engine", "author-perspective-agent")
-skill_loader("novel-planner-volume", "engine", "character-perspective-agent")
-# 共享约束（Step 1/2 都需要）：
-skill_loader("novel-planner-volume", "agent", "shared-constraints")
-
-# 🔒 术语规范（全程强制加载——所有 Agent 写前必读、写后自检）：
-# 路径：.claude/skills/lorecraft/references/term-map.md
-# 作用：禁止现代术语（数据/系统/信号/参数/权限等），确保所有产出使用有文化根脉的灵能术语
-Read(".claude/skills/lorecraft/references/term-map.md")
-Read(".claude/skills/lorecraft/SKILL.md")
 ```
 
-**🔒 引擎加载验证（强制——防止静默丢弃）**
+### 0.4 引擎加载（按步骤分批）
 
-编排器完成 Step 0.3 的所有 skill_loader/Read 调用后，**必须**在启动任何 Agent 之前执行以下验证：
+编排器在启动对应 Agent 时通过 `skill_loader` 传入引擎内容，**不预加载全部到编排器上下文**。
+
+```
+Step 1 (事件架构师) 需要：
+  skill_loader("novel-planner-volume", "engine", "causality")
+  skill_loader("novel-planner-volume", "engine", "relationship")
+
+Step 2 (章节设计师) 需要：
+  skill_loader("novel-planner-volume", "engine", "scene-type")
+  skill_loader("novel-planner-volume", "engine", "scene-composition")
+  skill_loader("novel-planner-volume", "engine", "author-voice")
+  skill_loader("novel-planner-volume", "engine", "author-voice-emotion")
+  skill_loader("novel-planner-volume", "engine", "author-voice-daily")
+  skill_loader("novel-planner-volume", "engine", "author-voice-battle")
+  skill_loader("novel-planner-volume", "engine", "author-voice-mystery")
+  skill_loader("novel-planner-volume", "engine", "anti-ai-quickref")
+
+Step 3 (三视角审查) 需要：
+  skill_loader("novel-planner-volume", "engine", "reader-perspective-agent")
+  skill_loader("novel-planner-volume", "engine", "author-perspective-agent")
+  skill_loader("novel-planner-volume", "engine", "character-perspective-agent")
+
+共享（Step 1/2 都需要）：
+  skill_loader("novel-planner-volume", "agent", "shared-constraints")
+
+🔒 术语规范（全程强制——所有 Agent 写前必读、写后自检）：
+  Read(".claude/skills/lorecraft/SKILL.md")
+  Read(".claude/skills/lorecraft/references/term-map.md")
+  Read(".claude/skills/lorecraft/references/quickref.md")
+
+🔒 世界元素索引（全程强制——Agent 1/2 输入必须包含）：
+  Read(".claude/skills/engines/world-element-registry.md")
+```
+
+### 🔒 0.5 引擎加载验证（强制——防止静默丢弃）
+
+编排器完成 Step 0.4 的所有加载后，**必须**在启动任何 Agent 之前执行以下验证：
 
 ```python
-# 编排器在 Step 0.3 最后执行：
-loaded_engines = {
+# 编排器在 Step 0.5 最后执行：
+loaded_resources = {
+    # Step 1 引擎
     "Step1-因果链(causality)": causality_loaded,
     "Step1-关系(relationship)": relationship_loaded,
+    # Step 2 引擎
     "Step2-场景类型(scene-type)": scene_type_loaded,
     "Step2-场面合成(scene-composition)": scene_composition_loaded,
     "Step2-作者声音(author-voice)": author_voice_loaded,
@@ -170,30 +183,35 @@ loaded_engines = {
     "Step2-作者声音-战斗(author-voice-battle)": author_voice_battle_loaded,
     "Step2-作者声音-悬疑(author-voice-mystery)": author_voice_mystery_loaded,
     "Step2-反AI速查(anti-ai-quickref)": anti_ai_loaded,
+    # Step 3 引擎
     "Step3-读者视角(reader-perspective)": reader_loaded,
     "Step3-作者视角(author-perspective)": author_loaded,
     "Step3-人物视角(character-perspective)": character_loaded,
+    # 共享
     "共享约束(shared-constraints)": shared_loaded,
-    "术语规范(term-map)": term_map_loaded,
-    "灵能规范(lorecraft)": lorecraft_loaded,
+    # 🔒 术语规范四件套（强制）
+    "术语引擎(lorecraft-SKILL)": lorecraft_loaded,
+    "术语映射(term-map)": term_map_loaded,
+    "术语速查(quickref)": quickref_loaded,
+    "世界元素索引(world-element-registry)": world_element_registry_loaded,
 }
 
-failed = [k for k, v in loaded_engines.items() if not v]
+failed = [k for k, v in loaded_resources.items() if not v]
 if failed:
-    print(f"⚠️ 以下引擎加载失败（可能被上下文截断）：{failed}")
-    print("加载失败的引擎不可跳过。请缩短其他内容或分批处理。")
+    print(f"⚠️ 以下资源加载失败（可能被上下文截断）：{failed}")
+    print("加载失败的资源不可跳过。请缩短其他内容或分批处理。")
     # 阻断：不允许启动 Agent
     return
 else:
-    print(f"✅ 全部 {len(loaded_engines)} 个引擎/规范加载成功")
+    print(f"✅ 全部 {len(loaded_resources)} 个资源加载成功")
     # 展示清单给用户确认
 ```
 
-**禁止**：引擎加载失败后仍启动 Agent。如果上下文不足，编排器应提示用户并等待调整，而非静默跳过。
+**禁止**：资源加载失败后仍启动 Agent。如果上下文不足，编排器应提示用户并等待调整，而非静默跳过。
 
 **世界观加载原则**：大纲设计必须基于已有世界观。世界观是创作的边界，不是建议。
 
-### 0.4 加载上次审计报告（增量模式）
+### 0.6 加载上次审计报告（增量模式）
 ```python
 if mode == "增量审计":
     Read(audit_report)
@@ -213,7 +231,7 @@ if mode == "增量审计":
 ## Step 1: Agent — 事件架构师
 
 **Agent指令**: `agents/event-architect.md`
-**强制加载引擎**（编排器在 Step 0.3 调用 skill_loader，内容传给 Agent）：
+**强制加载引擎**（编排器在 Step 0.4 调用 skill_loader，内容传给 Agent）：
 - `engines/causality.md` — Agent **必须**集成因果逻辑网四步法设计事件因果链
 - `engines/relationship.md` — Agent **必须**参考关系强度量表设计人物互动矩阵
 
@@ -225,6 +243,8 @@ if mode == "增量审计":
    - 未回收伏笔列表（foreshadow_list, status='planted'）
    - 上卷末角色状态（从上一卷大纲"人物弧光"表提取）
    - 卷定位（起/承/转/合）+ 全书第几卷
+   - **🔒术语规范**：lorecraft/SKILL.md + term-map.md + quickref.md
+   - **🔒世界元素索引**：world-element-registry.md
    - `engines/causality.md` 内容
    - `engines/relationship.md` 内容
 2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/event-architect.md`
@@ -239,10 +259,11 @@ Agent 核心方法论见 `agents/event-architect.md`（已集成 causality.md �
 - 禁止任何角色连续3章无独立出场
 - 因果链每个关键事件有显式前因
 - 巧合计≤1次/卷且必须有伏笔支撑
+- **🔒术语规范**：产出中无 term-map 禁止术语，新术语有文化出处
 
 ### 共享约束（编排器在启动Agent时通过 skill_loader 传入 `agents/shared-constraints.md`）
 
-**Agent 必须遵守以下五类规则，详见 `shared-constraints.md`**：
+**Agent 必须遵守以下六类规则，详见 `shared-constraints.md`**：
 
 | 规则集 | 核心内容 | 查阅文件 |
 |--------|---------|---------|
@@ -251,8 +272,9 @@ Agent 核心方法论见 `agents/event-architect.md`（已集成 causality.md �
 | 伏笔自然设计（冰山理论） | 表面动机、先果后因、场景自检 | `agents/shared-constraints.md §3` |
 | 人物互动规则 | 组合多样性、罕见组合、费笔配额 | `agents/shared-constraints.md §4` |
 | 巧合计规则 | ≤1次/卷、必须有伏笔支撑 | `agents/shared-constraints.md §5` |
+| **🔒术语规范约束** | 禁止术语+替换对照+势力字根+新术语流程+已注册元素+层级区分+写后自检 | `agents/shared-constraints.md §6` |
 
-编排器在 Step 0.3 加载 shared-constraints.md，在 Step 1/2 启动 Agent 时作为输入传入。Agent 在 `## 输入` 部分可见"共享约束"条目，**必须逐条遵守**。
+编排器在 Step 0.4 加载 shared-constraints.md，在 Step 1/2 启动 Agent 时作为输入传入。Agent 在 `## 输入` 部分可见"共享约束"条目，**必须逐条遵守**。
 
 ## 🔒检查点A: 确认事件架构
 
@@ -277,19 +299,20 @@ Agent 核心方法论见 `agents/event-architect.md`（已集成 causality.md �
 
 悬念: 回答了[?] / 新提出[?]
 
+🔒术语自检: 全文无禁止术语 ✅/❌
+
 确认后进入章节设计。输入"OK"或修改意见。
 ```
 
-### 🔒新实体确认（事件架构中的新实体）
-
-**参考引擎**: `engines/world-element-registry.md`（世界元素注册规范—定义元素分类、属性模板、关联关系、注册步骤）
+### 🔒检查点A-附加：新实体确认
 
 如果事件架构师在设计中引入了**世界观中不存在的新实体**（新物品、新地点、新NPC、新能力、新概念等），编排器必须：
 
 1. **列出所有新实体**：名称+类型+用途+为什么需要新增（参考 world-element-registry.md 的元素分类框架）
 2. **查重**：对照 `world_query(novel_name="这次不一样了")` 和已有设定文件确认不重复
-3. **暂停等用户确认**：用户说"OK"才继续，否则修改或删除
-4. **确认后保存**：
+3. **术语验证**：新实体命名是否使用灵能术语（非现代术语），是否有文化出处
+4. **暂停等用户确认**：用户说"OK"才继续，否则修改或删除
+5. **确认后保存**：
    - 文件：追加到 `novels/{小说名}/设定/世界观.md` / `物品.md` / `地图.md` 等对应文件
    - DB：调用 `world_upsert(novel_name="这次不一样了", category, name, data)` 或 `character_create(novel_name="这次不一样了", name, ...)`
 
@@ -314,13 +337,13 @@ Agent 核心方法论见 `agents/event-architect.md`（已集成 causality.md �
 ## Step 2: Agent — 章节设计师
 
 **Agent指令**: `agents/chapter-designer.md`
-**强制加载引擎**（编排器在 Step 0.3 调用 skill_loader，内容传给 Agent）：
+**强制加载引擎**（编排器在 Step 0.4 调用 skill_loader，内容传给 Agent）：
 - `engines/scene-type.md` — Agent **必须**按6种场景类型（对话/动作/氛围/心理/日常/混合）选择每章场景结构
 - `engines/scene-composition.md` — Agent **必须**按场面密度分级（轻/中/重/大场面）+多人动力学设计场景
 - `engines/author-voice.md` + 变体 — Agent **必须**标注每个场景的声音层
 
 ### 编排器操作
-1. 将 Step 1 确认后的事件架构 + 角色蒸馏卡 + 世界观索引 + 引擎内容打包传给 Agent
+1. 将 Step 1 确认后的事件架构 + 角色蒸馏卡 + 世界观索引 + 引擎内容 + **🔒术语规范** + **🔒世界元素索引** 打包传给 Agent
 2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/chapter-designer.md`
 3. Agent 输出逐章大纲
 
@@ -348,6 +371,7 @@ Ch{末}: {标题} | {场景数}个场景 | {章末钩子}
 - 伏笔场景化: 全部有具体场景 ✅/❌
 - 主角在场: ≥60% ✅/❌
 - 时间线连续: 无跳跃 ✅/❌
+- 🔒术语规范: 无禁止术语 ✅/❌
 
 输入"OK"进入验证，或提修改意见（可指定某章修改）。
 ```
@@ -370,24 +394,26 @@ Ch{末}: {标题} | {场景数}个场景 | {章末钩子}
 开始 → 编排器启动 3Agent（并行）→ 等待全部返回 → 编排器汇总交叉检查
 ```
 
-1. 编排器将 Step 2 确认的逐章大纲 + 角色数据打包，同时传给 3 个 Agent
+1. 编排器将 Step 2 确认的逐章大纲 + 角色数据 + **🔒术语规范(term-map)** 打包，同时传给 3 个 Agent
 2. 3 个 Agent **同时启动**（并行），各自加载自己的视角引擎
 3. 编排器**等待全部返回**后才继续
 4. 全部返回后编排器执行交叉检查（读者vs作者/读者vs人物/作者vs人物）
-5. 输出审计报告到 `审阅报告/V{N}-卷级审计.md`
+5. **🔒术语交叉扫描**：编排器对全部逐章大纲执行 term-map 禁止术语扫描，发现违规记为 P1
+6. 输出审计报告到 `审阅报告/V{N}-卷级审计.md`
 
 ### 交叉检查
 - [ ] 读者vs作者无冲突（结构服务读者体验）
 - [ ] 读者vs人物无冲突（人物选择优先，但有动机）
 - [ ] 作者vs人物无冲突（人物逻辑>结构需求）
+- [ ] **🔒术语扫描无违规**（逐章检查 term-map 禁止术语）
 **核心原则**：人物 > 读者 > 作者
 
 ### 问题分级
 | 级别 | 判定标准 | 处理要求 |
 |------|---------|---------|
 | P0 | 三视角冲突/角色OOC/因果链断裂 | **必须修复**，阻断保存 |
-| P1 | 单视角严重问题 | **必须修复**——本轮验证结束前完成修复，不允许留到下一轮 |
-| P2 | 微调建议 | **必须修复**——下一轮迭代（下次触发本skill）开始前完成 |
+| P1 | 单视角严重问题 / **🔒术语违规** | **必须修复**——本轮验证结束前完成修复 |
+| P2 | 微调建议 | **必须修复**——下一轮迭代开始前完成 |
 
 ### 🔒检查点B: 确认验证通过
 
@@ -415,181 +441,14 @@ P0→必须修复（回到对应Step）。无P0→进入保存。
 **禁止**：未经用户确认直接写入文件。即使Agent输出完美，也必须展示后等确认。
 
 ### 文件落盘
-```
-novels/{小说名}/设定/大纲/V{N}-{卷名}.md          # 卷级故事大纲
-```
 
 大纲设计原则：**以章为单元，每章独立成块。** 用户扫读/修改只需要看对应章节，novel-chapter-writer 写作时逐章加载。
 
-#### 卷级大纲模板（参考 `V1-兽潮.md`）
+卷级大纲模板见 `references/volume-outline-template.md`。
 
-卷级大纲以卷为单位的叙事梗概+结构化数据组合。**故事脉络是主体，占70%篇幅**，结构化数据围绕故事脉络组织。
-
-```markdown
-# V{N}：{卷名}
-
-> **核心情绪**：{一句话——本卷读者应该感受到的情绪基线}
-> **POV锚点**：{视角角色·限知程度}
-> **时间跨度**：D{N}-D{N}
-
-## 卷级因果链
-
-因为{上卷末状态/初始条件} → 所以{本卷起点事件} → 逼出{核心选择/冲突} → 雪球{连锁反应} → 到{卷末状态}
-没变的是{遗憾/保留的困境}。
-
-本卷只有一件事：{一句话概括全卷核心——让读者知道这卷到底在讲什么}。
-
-## 故事脉络
-
-> 主线推进+事件清单+费笔清单+读者感受+支线状态，按小说行文节奏展开。
-
-### 起
-
-{开篇叙事。200-400字。}
-
-写清：场景是什么样、主角在干什么、他的日常是什么样的、这个世界怎么运转。关键在**展示**而非告知——通过沈野捡碎渣的动作展示碎渣经济，通过窗户看到的灵站窗口展示制度。
-支线在此阶段的苗头：{哪些支线在起段埋下第一颗种子——通过什么事件/细节暗示，让读者事后回看才发现}
-事件清单（起段涉及的具体事件）：
-- E1：{谁做了什么→结果→引出什么}
-- E2：...
-费笔清单（起段至少{段章数}个）：
-- 费笔1：{谁+什么日常/细节/世界呼吸}（融入{哪个主线场景}）
-读者此刻的感受：{从什么状态到什么状态}
-
-### 承
-
-{事件推进，冲突升级。300-600字。}
-
-写清：压力怎么逐级递进、主角在哪里注意到了什么但没追问、裂缝藏在日常细节中。压抑感来自**一切都在日常中积累**——公告栏数字、灵站操作、捡到的残片、别人的死亡。
-支线在此阶段的推进：{每条支线在承段做了什么——不是隔离的，是融合在主线事件中的}
-事件清单（承段涉及的具体事件）：
-- E1：{因果链——因为前段的X，所以发生了这个}
-- E2：...
-费笔清单（承段至少{段章数÷2向上取整}个）：
-- 费笔{N}：{谁+什么日常/细节/世界呼吸}（融入{哪个主线场景}）
-读者此刻的感受：{从不安到紧张到恐惧——具体递进}
-
-### 转
-
-{转折/高潮，核心事件爆发。300-600字。}
-
-写清：什么秘密被揭开、什么关系被逼到极限、角色被逼到什么选择面前。情绪密度最高的段落——写角色的反应和选择，不只写"发生了什么"。
-支线在此阶段的爆发：{哪些支线在转折点达到卷内高潮或收束}
-事件清单（转段涉及的具体事件）：
-- E1：{核心事件——写清因果链和角色反应}
-- E2：...
-关键对话/核心句（保留全文语义，可调整措辞）：
-> "{角色}"："{核心句}"
-费笔清单（转段至少{段章数÷2向上取整}个）：
-- 费笔{N}：{谁+什么日常/细节/世界呼吸}
-读者此刻的感受：{从什么状态被击穿到什么状态}
-
-### 合
-
-{收尾+下卷钩子。200-400字。}
-
-写清：卷末的新平衡是什么、角色到了什么状态、留了什么悬念引向下卷。**不能收得太平整**——要留一条尾巴让读者想知道下一卷。
-支线在此阶段的状态：{每条支线在卷末停在什么位置——收束了还是悬着}
-事件清单（合段涉及的具体事件）：
-- E1：{收束或铺垫}
-- E2：...
-费笔清单（合段至少{段章数}个）：
-- 费笔{N}：{谁+什么日常/细节/世界呼吸}
-下卷钩子：{什么悬念/事件/细节指向V{N+1}}
 ```
-
-## 人物弧光
-
-| 角色 | 卷初状态 | 触发事件 | 卷末状态 |
-|------|---------|---------|---------|
-| {主角} | {具体状态——不是标签，是他在做什么、想什么、怕什么} | {什么事件逼出变化} | {新状态——他变成了什么样} |
-| {配角A} | {状态} | {事件} | {新状态} |
-| {配角B} | 不变 | — | 理由：{为什么不变} |
-
-"不变"必须有理由（功能角色/伏笔需要/下卷才变）。
-
-## 人物互动矩阵
-
-| 互动对 | 关系类型 | 卷初关系 | 卷末关系 | 关键互动场景（Ch{?}） |
-|--------|---------|---------|---------|---------------------|
-| A↔B | {兄妹/盟友/敌对/...} | {状态} | {状态} | {场景简述——具体事件，不是概括} |
-| A↔C | ... | ... | ... | ... |
-
-罕见组合（本卷至少1个）：{如沈念↔方岩——两个人在彼此不知道的维度上重叠}
-
-## 伏笔清单
-
-| 伏笔 | 埋设场景 | 具体方式（动作/对话/物件/环境） | 计划回收 | 重要性 |
-|------|---------|------------------------------|---------|--------|
-| F{?} {名称} | Ch{?} | {具体怎么埋——不是"提到"，是角色在做什么动作/对话/环境细节中自然触及。必须有表面动机} | V{?} | P0/P1/P2 |
-
-P0=全书级关键伏笔 | P1=卷级重要线索 | P2=可延期
-
-## 不做的
-
-- {明确排除的内容，防止写作时跑偏}
-- {不做的原因——如"不做韩朗的屏幕内容，因为沈野看不到"}
-
-## 悬念锚点
-
-### 本卷回答了什么疑问
-- {疑问1}：{通过什么场景/事件回答}
-
-### 本卷新提出的疑问
-
-| # | 疑问 | 埋设位置 | 计划回答 | 类型 |
-|---|------|---------|---------|------|
-| Q1 | {疑问} | Ch{?} | V{?} | {能力线/暗线/角色线/地理线/势力线/系统线/追杀线/世界观线} |
-
-## 核心对话锚点
-
-> 写作时必须保留核心语义，可根据场景调整措辞。
-
-| 位置 | 对话 | 功能 |
-|------|------|------|
-| Ch{?} | "{角色}"："{对话}" | {功能——情感地标/转折点/核心句} |
-
-## 写作优先级
-
-### P0（不可删减）
-1. {核心事件1}
-2. {核心事件2}
-
-### P1（强烈建议保留）
-1. {重要事件1}
-
-### P2（可压缩但建议保留）
-1. {可压缩事件1}
-
-## 硬约束自检
-
-### 事件密度
-| 章 | 事件数 | 事件清单 |
-|----|--------|---------|
-| Ch{?} | {N} | {事件1}、{事件2}、{事件3} |
-总计：{N}章，每章≥{N}事件 ✓/✗
-
-### 其他
-- 费笔配额 ≥ 总章数×1.0 ✓/✗
-- 人物互动：每个主要角色≥2个不同角色独立互动 ✓/✗
-- 因果链：每个关键事件有显式前因 ✓/✗
-- 巧合计 ≤1次/卷且必须有伏笔支撑 ✓/✗
-- 术语规范（lorecraft）：逐项检查 `term-map.md` 禁止术语，产出中无违规 ✓/✗
+novels/{小说名}/设定/大纲/V{N}-{卷名}.md          # 卷级故事大纲
 ```
-
-##### 模板使用说明
-
-**关键设计**：
-- 故事脉络以叙事为主体，不列表格堆砌。事件清单和费笔清单嵌入叙事段落中，读大纲=读故事梗概
-- 四个段落（起承转合）对应读者情绪的四个阶段。每个段落结尾标注"读者此刻的感受"
-- 所有结构化数据（人物弧光/互动矩阵/伏笔清单等）放在叙事之后，作为附录参考
-- 每段事件清单顺序=实际事件发生顺序，不可调换
-- 费笔清单融入对应主线场景，不单独成段
-
-**对 novel-chapter-writer 的指导方式**：
-- 叙事段落中的事件 = 粗轮廓，写作时在此框架内自由展开
-- 伏笔清单中的"具体方式" = 伏笔的种子位置和方式，写作时保持自然、不刻意
-- 硬约束自检 = 写作完成后验证的质量标准
 
 ##### 硬指标（不达标拒绝存盘）
 
@@ -597,42 +456,14 @@ P0=全书级关键伏笔 | P1=卷级重要线索 | P2=可延期
 - 人物弧光覆盖所有主要角色（主角+≥3配角）
 - 伏笔清单每个操作有具体场景化方式（禁止"在Ch{N}提到"，必须有动作/对话/物件/环境描述+表面动机）
 - 下卷钩子在合段明确标注
+- **🔒术语规范**：全文无 term-map 禁止术语
 
 ### 审计报告保存
 ```
 novels/{小说名}/审阅报告/V{N}-卷级审计.md          # 审计结果持久化
 ```
 
-审计报告格式：
-```markdown
-# V{N}《{卷名}》卷级审计
-
-## 基本信息
-- 审计模式: {增量/全量}
-- 审计范围: {变更章节 or 全部}
-- 上次审计commit: {hash}
-- 本次审计commit: {hash}
-
-## 三视角结果
-### 读者视角
-{审查结果}
-
-### 作者视角
-{审查结果}
-
-### 人物视角
-{审查结果}
-
-## 问题清单
-| 级别 | 问题 | 位置 | 修复建议 | 状态 |
-|------|------|------|---------|------|
-| P0 | ... | Ch? | ... | ✅已修/❌待修 |
-| P1 | ... | Ch? | ... | ✅已修/❌待修 |
-
-## 修改记录
-| 日期 | 变更内容 | 影响章节 | 审计模式 |
-|------|---------|---------|---------|
-```
+审计报告格式见 `references/audit-report-template.md`。
 
 ### DB保存（强制——为正文生成提供数据支撑，含结果校验）
 ```python
@@ -658,7 +489,7 @@ for foreshadow in foreshadows:
     result = foreshadow_plant(novel_name="这次不一样了", description, planned_recall_chapter, importance, tags)
     check_result("foreshadow_plant", result)
 
-# 4. 同步世界观（新增——确保正文生成时DB有完整数据）
+# 4. 同步世界观（确保正文生成时DB有完整数据）
 for location in new_locations:
     result = world_upsert(novel_name="这次不一样了", category='location', name=location.name, data={...},
         keys=location.keys, tags=location.tags, volume_range=location.volume_range,
