@@ -53,17 +53,58 @@ skill_loader("novel-planner", "engine", "three-perspective")
 skill_loader("novel-planner", "engine", "reader-perspective-agent")
 skill_loader("novel-planner", "engine", "author-perspective-agent")
 skill_loader("novel-planner", "engine", "character-perspective-agent")
+
+# 🔒 术语规范（全程强制加载——所有Agent生成前必读、生成后必检）：
+# 以下三项在Step 0一次性加载，编排器打包传给所有Agent
+Read(".claude/skills/lorecraft/SKILL.md")                          # 文化根脉命名引擎（禁止术语+四步法+层积命名法）
+Read(".claude/skills/lorecraft/references/term-map.md")            # 现代→灵能术语映射表（~60+条）
+Read(".claude/skills/lorecraft/references/quickref.md")             # 速查卡（七势力字根+五步命名法+多样性检查）
+Read(".claude/skills/engines/world-element-registry.md")           # 世界观元素注册机制（已注册元素索引）
 ```
 
-**强制原则**：以上引擎内容编排器在启动Agent时打包传入，Agent**必须使用**。因果逻辑法约束全书因果链，三视角框架约束爽点节奏。
+**强制原则**：以上引擎内容编排器在启动Agent时打包传入，Agent**必须使用**。因果逻辑法约束全书因果链，三视角框架约束爽点节奏，**术语规范约束全书产出的世界观用词**。
+
+**🔒 引擎加载验证（强制——防止静默丢弃）**
+
+编排器完成 Step 0 的所有 skill_loader/Read 调用后，**必须**在启动任何 Agent 之前执行以下验证：
+
+```python
+# 编排器在 Step 0 最后执行：
+loaded_engines = {
+    # 结构引擎
+    "Step1-因果链(causality)": causality_loaded,
+    "Step2-三视角(three-perspective)": three_perspective_loaded,
+    "Step5-读者视角(reader-perspective)": reader_loaded,
+    "Step5-作者视角(author-perspective)": author_loaded,
+    "Step5-人物视角(character-perspective)": character_loaded,
+    # 🔒 术语规范（全程强制——不可跳过）
+    "术语规范(lorecraft)": lorecraft_loaded,
+    "术语映射(term-map)": term_map_loaded,
+    "术语速查(quickref)": quickref_loaded,
+    "世界元素注册表(world-element-registry)": world_element_registry_loaded,
+}
+
+failed = [k for k, v in loaded_engines.items() if not v]
+if failed:
+    print(f"⚠️ 以下引擎/规范加载失败（可能被上下文截断）：{failed}")
+    print("加载失败的引擎不可跳过。请缩短其他内容或分批处理。")
+    # 阻断：不允许启动 Agent
+    return
+else:
+    print(f"✅ 全部 {len(loaded_engines)} 个引擎/规范加载成功")
+    # 展示清单给用户确认
+```
+
+**禁止**：引擎加载失败后仍启动 Agent。如果上下文不足，编排器应提示用户并等待调整，而非静默跳过。
 
 ## Step 1: Agent — 框架建筑师
 
 **Agent指令**: `agents/framework-architect.md`
 **强制加载引擎**: `engines/causality.md`（因果逻辑法约束卷间关系必须基于因果而非时间顺序）
+**强制加载规范**: `lorecraft/SKILL.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束卷级定位和骨架描述中的世界观用词）
 
 ### 编排器操作
-1. 打包：世界观设定 + 主角初始状态 + 预估总卷数 → 传给 Agent
+1. 打包：世界观设定 + 主角初始状态 + 预估总卷数 + **术语规范全套** → 传给 Agent
 2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/framework-architect.md`
 3. Agent 输出：全书起承转合 + 每卷功能定位 + 卷间关系
 
@@ -71,6 +112,8 @@ skill_loader("novel-planner", "engine", "character-perspective-agent")
 - [ ] 起承转合四段比例合理（起25%/承35%/转25%/合15%）
 - [ ] 每卷功能定位唯一、不重复
 - [ ] 卷间关系有因果链（因为V{N}的后果→所以V{N+1}面对什么）
+- [ ] 🔒 术语规范：产出中无禁止术语（数据/系统/信号/参数/权限/终端/频率等），全部使用 term-map 映射的灵能术语
+- [ ] 🔒 术语规范：新增世界观术语遵循文化根脉四步法，有文化出处
 
 ## Step 2: Agent — 脉络设计师
 
@@ -78,9 +121,10 @@ skill_loader("novel-planner", "engine", "character-perspective-agent")
 **强制加载引擎**:
 - `engines/causality.md` — 主线因果链（每节点必须回答"因为什么→所以什么→逼出什么"）
 - `engines/three-perspective.md` — 读者视角爽点节奏标准（每2-3卷小爽点/4-5卷大爽点）
+**强制加载规范**: `lorecraft/SKILL.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束暗线描述、人物弧光、情绪曲线中的世界观用词）
 
 ### 编排器操作
-1. 打包：Agent 1 输出 + 角色档案 + 暗线设定 → 传给 Agent
+1. 打包：Agent 1 输出 + 角色档案 + 暗线设定 + **术语规范全套** → 传给 Agent
 2. 启动 Agent，传入引擎内容
 3. Agent 输出：主线脉络 + 暗线递进 + 人物弧光总图 + 情绪曲线
 
@@ -88,6 +132,8 @@ skill_loader("novel-planner", "engine", "character-perspective-agent")
 - [ ] 主线因果链完整（每步"因为所以"，通过可替换性测试）
 - [ ] 暗线每卷至少推进一次，不一次揭完
 - [ ] 情绪曲线有起伏，无连续3卷无爽点
+- [ ] 🔒 术语规范：产出中无禁止术语，暗线/势力/能力相关描述使用灵能术语
+- [ ] 🔒 术语规范：人物弧光描述中的世界观元素（能力/势力/地点）用词与 term-map 一致
 
 ## 🔒检查点A: 确认全书框架
 
@@ -145,9 +191,10 @@ V{N}《{卷名}》目标卡
 ## Step 4: Agent — 支线规划师
 
 **Agent指令**: `agents/subplot-planner.md`
+**强制加载规范**: `lorecraft/SKILL.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束支线中涉及的势力/地点/能力/世界观元素用词）
 
 ### 编排器操作
-1. 打包：确认后的框架+脉络 + 全部角色档案 + 世界观设定 → 传给 Agent
+1. 打包：确认后的框架+脉络 + 全部角色档案 + 世界观设定 + **术语规范全套** → 传给 Agent
 2. 启动 Agent，传入 `agents/subplot-planner.md`
 3. Agent 输出：支线清单 + 支线-主线交织图 + 支线弧光总图 + 支线角色管理
 
@@ -156,6 +203,8 @@ V{N}《{卷名}》目标卡
 - [ ] 每条连续型支线每卷≥1交织节点
 - [ ] 支线不与主线因果链冲突
 - [ ] 支线角色出场不突兀
+- [ ] 🔒 术语规范：支线描述中的势力/地点/世界观元素用词与 term-map 一致
+- [ ] 🔒 术语规范：新引入的世界观元素遵循文化根脉四步法，需同步注册到 world-element-registry
 
 ## 🔒检查点A2: 确认支线体系
 
@@ -177,18 +226,19 @@ V{N}《{卷名}》目标卡
 输入"OK"进入框架验证，或提修改意见。
 ```
 
-## Step 5: Agent — 框架验证器（12项全书检查+三视角审查）
+## Step 5: Agent — 框架验证器（13项全书检查+三视角审查）
 
 **Agent指令**: `agents/framework-validator.md`
 **强制加载引擎**: `engines/reader-perspective-agent.md`, `engines/author-perspective-agent.md`, `engines/character-perspective-agent.md`
+**强制加载规范**: `lorecraft/SKILL.md` + `lorecraft/references/term-map.md`（术语规范作为第13项检查标准）
 
 ### 编排器操作
-1. 收集：Agent 1-2 框架+脉络 + Step 3 卷级目标卡 + Agent 4 支线体系 → 传给 Agent
+1. 收集：Agent 1-2 框架+脉络 + Step 3 卷级目标卡 + Agent 4 支线体系 + **术语规范** → 传给 Agent
 2. 编排器在 Agent 5 内部启动 3 个审查 Agent 并行（互不依赖）：
    - **Agent-读者**: 加载 `engines/reader-perspective-agent.md` → 框架级读者审查
    - **Agent-作者**: 加载 `engines/author-perspective-agent.md` → 框架级作者审查  
    - **Agent-人物**: 加载 `engines/character-perspective-agent.md` → 框架级人物审查
-3. Agent 5 汇总三视角结果 + 执行交叉检查 → 输出验证报告
+3. Agent 5 汇总三视角结果 + 执行交叉检查 + **术语规范扫描** → 输出验证报告
 
 ### 交叉检查
 - [ ] 读者vs作者无冲突（结构服务读者体验）
@@ -200,8 +250,8 @@ V{N}《{卷名}》目标卡
 | 级别 | 判定标准 | 处理要求 |
 |------|---------|---------|
 | P0 | 因果链断裂/三视角冲突/角色OOC | **必须修复**，阻断保存 |
-| P1 | 节奏断层/伏笔遗漏 | 建议修复 |
-| P2 | 微调建议 | 可选 |
+| P1 | 节奏断层/伏笔遗漏 | **必须修复**——本轮验证结束前完成修复，不允许留到下一轮 |
+| P2 | 微调建议 | **必须修复**——下一轮迭代（下次触发本skill）开始前完成 |
 
 ## 🔒检查点B: 确认验证通过
 
@@ -222,19 +272,39 @@ novels/{小说名}/设定/大纲/
 
 落盘后，novel-planner-volume 的 Step 0 读取以上文件作为输入约束。
 
-### DB保存
+### DB保存（含结果校验——失败即中止）
 ```python
+# 🔒 每个 MCP 调用后必须检查返回值，失败时中止并提示
+errors = []
+
 # 卷级目标 → volume_update
 for card in volume_target_cards:
-    volume_update_by_number(novel_name="这次不一样了", number=card.volume_id, main_plotlines=card.targets)
+    result = volume_update_by_number(novel_name="这次不一样了", number=card.volume_id, main_plotlines=card.targets)
+    if '"ok": false' in result or '"error"' in result:
+        errors.append(f"volume_update V{card.volume_id} 失败: {result}")
 
 # 伏笔 → foreshadow_plant
 for f in cross_volume_foreshadows:
-    foreshadow_plant(novel_name="这次不一样了", description=f.desc, planned_recall_chapter=f.recall)
+    result = foreshadow_plant(novel_name="这次不一样了", description=f.desc, planned_recall_chapter=f.recall)
+    if '"ok": false' in result or '"error"' in result:
+        errors.append(f"foreshadow_plant 失败: {result}")
 
 # 支线 → world_upsert
 for s in subplots:
-    world_upsert(novel_name="这次不一样了", category='subplot', name=s.name, data={...})
+    result = world_upsert(novel_name="这次不一样了", category='subplot', name=s.name, data={...})
+    if '"ok": false' in result or '"error"' in result:
+        errors.append(f"world_upsert 支线失败: {result}")
+
+# 🔒 结果校验
+if errors:
+    print(f"⚠️ DB保存失败（{len(errors)}个错误）：")
+    for e in errors:
+        print(f"  - {e}")
+    print("文件已写入但DB未完全同步。请检查后重试。")
+    # 中止流程，不执行 git commit
+    return
+else:
+    print(f"✅ 全部 DB 操作成功")
 ```
 
 ## Step 7: git commit
@@ -264,13 +334,18 @@ B1: 全书框架+脉络+卷级目标卡+支线体系+审计通过
 | `engines/reader-perspective-agent.md` | 读者视角审查清单 | Step 5 |
 | `engines/author-perspective-agent.md` | 作者视角审查清单 | Step 5 |
 | `engines/character-perspective-agent.md` | 人物视角审查清单 | Step 5 |
+| `lorecraft/SKILL.md` | 文化根脉术语命名引擎—禁止术语+命名方法 | Step 1-5（全程） |
+| `lorecraft/references/term-map.md` | 现代→灵能术语映射表（~60+条） | Step 1-5（全程） |
+| `lorecraft/references/quickref.md` | 术语速查卡（七势力字根+命名法） | Step 1-5（全程） |
+| `engines/world-element-registry.md` | 世界观元素注册机制—已注册元素索引 | Step 1-5（全程） |
 
 ## 异常处理
 
 | 场景 | 处理 |
 |------|------|
 | agents/目录缺少文件 | 需创建后再启动对应Step |
-| Step 0 数据为空（新小说） | 允许，基于默认模板构建 |
+| Step 0 数据为空（新小说） | **阻断**，必须先完成 novel-setup（世界观≥3维度+角色≥2个）后才能进入全书大纲设计 |
+| Step 0 世界观<3维度或角色<2个 | **阻断**，提示用户补充世界观/角色后再进入 |
 | Step 5 发现P0 | 回到对应Step修复，修复后重跑验证 |
 
 </supporting-info>

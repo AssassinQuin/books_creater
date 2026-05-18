@@ -2,13 +2,13 @@
   "mcpServers": {
     "novel-db": {
       "type": "stdio",
-      "command": "/Users/ganjie/miniconda3/bin/python3",
+      "command": "/home/z/.venv/bin/python3",
       "args": [
-        "/Users/ganjie/code/personal/bywork/books_creater/novel-db-mcp/server.py"
+        "/home/z/my-project/books_creater/novel-db-mcp/server.py"
       ],
       "env": {
-        "DATABASE_URL": "postgresql://ganjie@localhost:5432/fcli",
-        "NOVEL_PROJECT_ROOT": "/Users/ganjie/code/personal/bywork/books_creater"
+        "DATABASE_URL": "postgresql://z@localhost:5432/fcli?host=/home/z/.local/share/postgresql/run",
+        "NOVEL_PROJECT_ROOT": "/home/z/my-project/books_creater"
       }
     }
   }

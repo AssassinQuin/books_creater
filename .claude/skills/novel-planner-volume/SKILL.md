@@ -42,8 +42,20 @@ Step 1: 只修改目标章节
 Step 2: 邻章校验
   ↓  检查修改后的章节与前后章的因果链/时间线是否连贯
   ↓  如有断裂，扩展修复范围
+Step 2.5: 轻量级 P0 审查（强制——不可跳过）
+  ↓  编排器对修改章+邻章执行 P0 检查（见下方检查清单）
+  ↓  发现 P0 → 修复后重新检查，直到无 P0
+  ↓  无 P0 → 用户确认 → 继续
 Step 3: 保存 → git commit
 ```
+
+**Step 2.5 P0 检查清单**（增量模式下必须全部通过，否则阻断保存）：
+- [ ] **角色OOC检测**：修改章中每个出场角色的行为/对话是否符合其角色蒸馏卡（character_detail）
+- [ ] **因果链断裂检测**：修改引入的事件是否与前后章因果链连贯？是否有"因为剧情需要"式的无前因事件？
+- [ ] **时间线连续性**：修改章与前后章的时间戳是否递增、无跳跃？
+- [ ] **新实体一致性**：新增的角色/地点/物品是否已调MCP注册（character_create/world_upsert）？
+
+**禁止跳过 Step 2.5**。即使只是"加一句对话"，也必须执行 P0 检查。增量模式可以跳过完整三视角审查，但**不能跳过 P0 门控**。
 
 **触发条件**：用户说"改Ch{N}""扩展Ch{N}""Ch{N}加个场景"等局部修改指令。
 **不触发**：用户说"重新生成""重做大纲"→走全量模式。
@@ -141,6 +153,44 @@ Read(".claude/skills/lorecraft/references/term-map.md")
 Read(".claude/skills/lorecraft/SKILL.md")
 ```
 
+**🔒 引擎加载验证（强制——防止静默丢弃）**
+
+编排器完成 Step 0.3 的所有 skill_loader/Read 调用后，**必须**在启动任何 Agent 之前执行以下验证：
+
+```python
+# 编排器在 Step 0.3 最后执行：
+loaded_engines = {
+    "Step1-因果链(causality)": causality_loaded,
+    "Step1-关系(relationship)": relationship_loaded,
+    "Step2-场景类型(scene-type)": scene_type_loaded,
+    "Step2-场面合成(scene-composition)": scene_composition_loaded,
+    "Step2-作者声音(author-voice)": author_voice_loaded,
+    "Step2-作者声音-情感(author-voice-emotion)": author_voice_emotion_loaded,
+    "Step2-作者声音-日常(author-voice-daily)": author_voice_daily_loaded,
+    "Step2-作者声音-战斗(author-voice-battle)": author_voice_battle_loaded,
+    "Step2-作者声音-悬疑(author-voice-mystery)": author_voice_mystery_loaded,
+    "Step2-反AI速查(anti-ai-quickref)": anti_ai_loaded,
+    "Step3-读者视角(reader-perspective)": reader_loaded,
+    "Step3-作者视角(author-perspective)": author_loaded,
+    "Step3-人物视角(character-perspective)": character_loaded,
+    "共享约束(shared-constraints)": shared_loaded,
+    "术语规范(term-map)": term_map_loaded,
+    "灵能规范(lorecraft)": lorecraft_loaded,
+}
+
+failed = [k for k, v in loaded_engines.items() if not v]
+if failed:
+    print(f"⚠️ 以下引擎加载失败（可能被上下文截断）：{failed}")
+    print("加载失败的引擎不可跳过。请缩短其他内容或分批处理。")
+    # 阻断：不允许启动 Agent
+    return
+else:
+    print(f"✅ 全部 {len(loaded_engines)} 个引擎/规范加载成功")
+    # 展示清单给用户确认
+```
+
+**禁止**：引擎加载失败后仍启动 Agent。如果上下文不足，编排器应提示用户并等待调整，而非静默跳过。
+
 **世界观加载原则**：大纲设计必须基于已有世界观。世界观是创作的边界，不是建议。
 
 ### 0.4 加载上次审计报告（增量模式）
@@ -148,6 +198,16 @@ Read(".claude/skills/lorecraft/SKILL.md")
 if mode == "增量审计":
     Read(audit_report)
     # 从报告中提取：已通过的检查项、已标记的问题、上次验证状态
+
+    # 🔒 强制检查：上次审计中是否有未修复的 P1/P2
+    unresolved_p1 = [p for p in report.problems if p.level == "P1" and p.status != "✅已修"]
+    unresolved_p2 = [p for p in report.problems if p.level == "P2" and p.status != "✅已修"]
+    if unresolved_p1 or unresolved_p2:
+        # 展示未修复问题给用户，要求确认是否继续
+        print(f"⚠️ 上次审计有 {len(unresolved_p1)} 个P1 + {len(unresolved_p2)} 个P2未修复")
+        print("未修复的问题不允许复用其审查结果，将在本轮重新审查。")
+        # 将涉及未修复问题的章节加入审查范围
+        scope.extend(affected_chapters_from(unresolved_p1 + unresolved_p2))
 ```
 
 ## Step 1: Agent — 事件架构师
@@ -326,8 +386,8 @@ Ch{末}: {标题} | {场景数}个场景 | {章末钩子}
 | 级别 | 判定标准 | 处理要求 |
 |------|---------|---------|
 | P0 | 三视角冲突/角色OOC/因果链断裂 | **必须修复**，阻断保存 |
-| P1 | 单视角严重问题 | 建议修复 |
-| P2 | 微调建议 | 可选 |
+| P1 | 单视角严重问题 | **必须修复**——本轮验证结束前完成修复，不允许留到下一轮 |
+| P2 | 微调建议 | **必须修复**——下一轮迭代（下次触发本skill）开始前完成 |
 
 ### 🔒检查点B: 确认验证通过
 
@@ -574,73 +634,97 @@ novels/{小说名}/审阅报告/V{N}-卷级审计.md          # 审计结果持�
 |------|---------|---------|---------|
 ```
 
-### DB保存（强制——为正文生成提供数据支撑）
+### DB保存（强制——为正文生成提供数据支撑，含结果校验）
 ```python
+# 🔒 每个 MCP 调用后必须检查返回值，失败时中止并提示
+errors = []
+
+def check_result(op_name, result):
+    """检查 MCP 调用结果，失败则记录"""
+    if '"ok": false' in result or '"error"' in result:
+        errors.append(f"{op_name} 失败: {result}")
+
 # 1. 更新卷级信息
-volume_update_by_number(novel_name="这次不一样了", number={volume_number}, main_plotlines=[...], notes="...")
+result = volume_update_by_number(novel_name="这次不一样了", number={volume_number}, main_plotlines=[...], notes="...")
+check_result("volume_update", result)
 
 # 2. 规划章节（每章一条）
 for chapter in chapters:
-    chapter_plan(novel_name="这次不一样了", number, title, outline, chapter_type, volume_id)
+    result = chapter_plan(novel_name="这次不一样了", number, title, outline, chapter_type, volume_id)
+    check_result(f"chapter_plan Ch{chapter.number}", result)
 
 # 3. 埋设伏笔
 for foreshadow in foreshadows:
-    foreshadow_plant(novel_name="这次不一样了", description, planned_recall_chapter, importance, tags)
+    result = foreshadow_plant(novel_name="这次不一样了", description, planned_recall_chapter, importance, tags)
+    check_result("foreshadow_plant", result)
 
 # 4. 同步世界观（新增——确保正文生成时DB有完整数据）
 for location in new_locations:
-    world_upsert(novel_name="这次不一样了", category='location', name=location.name, data={...},
+    result = world_upsert(novel_name="这次不一样了", category='location', name=location.name, data={...},
         keys=location.keys, tags=location.tags, volume_range=location.volume_range,
         writing_guide=location.writing_guide)
+    check_result(f"world_upsert 地点-{location.name}", result)
 
 for item in new_items:
-    world_upsert(novel_name="这次不一样了", category='ability', name=item.name, data={...},
+    result = world_upsert(novel_name="这次不一样了", category='ability', name=item.name, data={...},
         keys=item.keys, tags=item.tags, volume_range=item.volume_range)
+    check_result(f"world_upsert 物品-{item.name}", result)
 
 for character in new_characters:
-    character_create(novel_name="这次不一样了", name=character.name, ...,
+    result = character_create(novel_name="这次不一样了", name=character.name, ...,
         appearance_detail=character.appearance_detail,
         decision_engine=character.decision_engine,
         voice_fingerprint=character.voice_fingerprint,
         behavior_pattern=character.behavior_pattern,
         current_snapshot=character.current_snapshot)
+    check_result(f"character_create-{character.name}", result)
 
 for faction in new_factions:
-    world_upsert(novel_name="这次不一样了", category='faction', name=faction.name, data={...},
+    result = world_upsert(novel_name="这次不一样了", category='faction', name=faction.name, data={...},
         keys=faction.keys, tags=faction.tags, volume_range=faction.volume_range,
         writing_guide=faction.writing_guide)
+    check_result(f"world_upsert 势力-{faction.name}", result)
 
 # 5. 更新已有角色状态（如有变化）
 for character in changed_characters:
-    character_update_by_name(novel_name="这次不一样了", character_name={character_name}, status=character.new_status, ...,
+    result = character_update_by_name(novel_name="这次不一样了", character_name={character_name}, status=character.new_status, ...,
         current_snapshot=character.current_snapshot,
         growth_trajectory=character.growth_trajectory)
+    check_result(f"character_update-{character_name}", result)
 
 # 6. 创建人物关系（如有新关系）
 for relation in new_relations:
-    relation_create_by_name(novel_name="这次不一样了", from_name={from_name}, to_name={to_name}, relation_type=..., ...)
+    result = relation_create_by_name(novel_name="这次不一样了", from_name={from_name}, to_name={to_name}, relation_type=..., ...)
+    check_result(f"relation_create-{from_name}↔{to_name}", result)
 
-# 7. 注册暗线/支线（新增——确保 get_chapter_context 能读到活跃线索）
+# 7. 注册暗线/支线
 for thread in volume_threads:
-    plot_thread_create(
-        novel_name="这次不一样了",
-        name=thread.name,
-        thread_type=thread.type,  # mainline/subplot/darkline/mystery/clue
-        description=thread.description,
-        start_chapter_id=thread.start_chapter_id,
-        volume_scope=json.dumps(thread.volume_scope),   # 涉及卷号列表
-        related_characters=json.dumps(thread.related_characters),  # 角色名列表
-        related_foreshadows=json.dumps(thread.related_foreshadows)  # 伏笔ID列表
-    )
+    result = plot_thread_create(
+        novel_name="这次不一样了", name=thread.name, thread_type=thread.type,
+        description=thread.description, start_chapter_id=thread.start_chapter_id,
+        volume_scope=json.dumps(thread.volume_scope),
+        related_characters=json.dumps(thread.related_characters),
+        related_foreshadows=json.dumps(thread.related_foreshadows))
+    check_result(f"plot_thread_create-{thread.name}", result)
 
-# 8. 更新已有暗线/支线状态（本卷推进/收束的线索）
+# 8. 更新已有暗线/支线状态
 for thread in updated_threads:
-    plot_thread_update(
-        thread_id=thread.id,
-        status=thread.new_status,  # active/resolved/dormant/abandoned
+    result = plot_thread_update(
+        thread_id=thread.id, status=thread.new_status,
         end_chapter_id=thread.end_chapter_id,
-        progress_notes=json.dumps(thread.progress_notes)  # 本卷进展备注
-    )
+        progress_notes=json.dumps(thread.progress_notes))
+    check_result(f"plot_thread_update-{thread.id}", result)
+
+# 🔒 结果校验
+if errors:
+    print(f"⚠️ DB保存失败（{len(errors)}个错误）：")
+    for e in errors:
+        print(f"  - {e}")
+    print("文件已写入但DB未完全同步。请修复后重试，不执行 git commit。")
+    # 中止流程
+    return
+else:
+    print(f"✅ 全部 {total_ops} 个 DB 操作成功")
 ```
 
 **DB同步原则**：大纲阶段产出的所有结构化数据（地点/物品/人物/势力/伏笔/章节）必须同步到DB，确保正文生成阶段（novel-chapter-writer）通过 `get_chapter_context` 聚合调用能获取到完整信息。
