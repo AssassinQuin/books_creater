@@ -24,8 +24,8 @@ C3更新: 改数据 → db_search找影响 → 🔒确认 → 执行 → 验证
 
 | 级别 | 判定标准 | 处理要求 |
 |------|---------|---------|
-| P0-致命 | 因果链断裂/人物OOC/设定矛盾/违禁词 | 必须修复，阻断发布 |
-| P1-严重 | 伏笔未回收/节奏断层/质量方差超限 | 必须修复，限1轮内 |
+| P0-致命 | 因果链断裂/人物OOC/设定矛盾/违禁词/**禁止术语** | 必须修复，阻断发布 |
+| P1-严重 | 伏笔未回收/节奏断层/质量方差超限/**新术语无文化出处** | 必须修复，限1轮内 |
 | P2-中等 | 描写冗余/对话平淡/爽点不足 | 建议修复，可延期 |
 | P3-轻微 | 标点不均/用词重复/格式不统一 | 可选修复，批量处理 |
 
@@ -50,11 +50,13 @@ Step 1: 加载上下文
   - 全书支线总图（`novels/{小说名}/设定/大纲/支线总图.md`）
   - 世界观数据（`world_query(novel_name="这次不一样了")` 优先；返回空时回退读 `设定/世界观.md`）
   - 作者声音定义（`engines/author-voice.md`）
+  - 🔒 术语规范（`lorecraft/SKILL.md` + `lorecraft/references/term-map.md` — 正文审阅必须检查禁止术语）
 
-Step 2: 4Agent并行扫描
+Step 2: 5Agent并行扫描
   - Agent-人物: OOC检测/知识矛盾/说话风格一致性/关系合理性
   - Agent-逻辑: 时间线连贯/经济系统一致/伏笔回收状态/物品使用逻辑
   - Agent-质量: 战斗场面质量/章节结构/爽点分布/NPC活跃度/写作风格/AI指纹(F1-F6)
+  - **Agent-术语: 术语合规审查** — 加载 `lorecraft/references/term-map.md`，逐章扫描禁止术语（数据/系统/信号/参数/权限/终端/频率等），标记违规位置 + 按映射表给出替换建议；检查新术语是否有文化出处；检查势力/能力/地点术语是否与已注册元素一致
   - **Agent-支线: 支线完整性审查**
     - 本卷支线节点是否按全书总图执行
     - 支线-主线交织方式是否清晰
@@ -101,5 +103,6 @@ AI指纹检测：`skill_loader("novel-qa", "engine", "anti-ai")`
 `skill_loader("novel-qa", "engine", "item")` 物品一致性
 `skill_loader("novel-qa", "engine", "causality")` 因果逻辑审计
 `skill_loader("novel-qa", "engine", "anti-ai")` AI指纹检测
+**`Read(".claude/skills/lorecraft/SKILL.md")` + `Read(".claude/skills/lorecraft/references/term-map.md")` 术语合规审计（强制——正文审阅必须执行）**
 
 </supporting-info>

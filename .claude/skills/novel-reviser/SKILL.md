@@ -33,6 +33,7 @@ Step 1 诊断 → Step 2 规划修改 → 🔒确认 → Step 3 批量执行 →
 - **模式去重**: `grep -c '{pattern}' novels/{小说名}/正文/*.md` 统计重复次数 → 标记情感高点(保留) → 其余替换 → 验证计数
 - **连续性**: `character_get_by_name(novel_name="这次不一样了", character_name={name})` + `world_query(novel_name="这次不一样了")` 交叉验证 → 矛盾点
 - **风格**: `validate_chapter(text)` 硬约束检测
+- **🔒 术语合规**: 加载 `lorecraft/references/term-map.md`，逐章扫描禁止术语（数据/系统/信号/参数/权限/终端/频率等），标记违规位置并按映射表替换
 
 ## Step 2-4: 执行
 
