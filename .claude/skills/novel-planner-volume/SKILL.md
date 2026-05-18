@@ -112,9 +112,10 @@ print(f"审计模式: {mode} | 范围: {scope}")
 ### 0.2 加载全书框架
 ```python
 # 读取 novel-planner 输出（按需加载，不全读）
-Read("novels/{小说名}/设定/全书大纲.md")          # 全书骨架
-# 如有分文件则读取，否则从全书大纲提取
-Read("novels/{小说名}/设定/大纲/跨卷因果链.md")    # 跨卷因果
+Read("novels/{小说名}/设定/大纲/全书框架.md")          # 全书骨架
+Read("novels/{小说名}/设定/大纲/全书脉络.md")          # 主线脉络+暗线
+Read("novels/{小说名}/设定/大纲/卷级目标卡.md")        # 本卷目标卡（核心约束）
+# 如有分文件则读取，否则从全书框架提取
 ```
 
 ### 0.3 加载本卷数据
@@ -240,7 +241,7 @@ if mode == "增量审计":
 ### 编排器操作
 1. 收集以下数据，打包传给 Agent：
    - 本卷大纲（`设定/大纲/V{N}-{卷名}.md`）
-   - 全书骨架（`设定/全书大纲.md` 本卷部分）
+   - 全书骨架（`设定/大纲/全书框架.md` 本卷部分）
    - 活跃角色列表 + 关键角色蒸馏卡（character_list + character_detail）
    - 未回收伏笔列表（foreshadow_list, status='planted'）
    - 上卷末角色状态（从上一卷大纲"人物弧光"表提取）
@@ -323,7 +324,7 @@ Agent 核心方法论见 `agents/event-architect.md`（已集成 causality.md �
 | 新实体类型 | 保存文件 | DB操作 |
 |-----------|---------|--------|
 | 新地点 | 设定/地图.md | world_upsert(category='location') |
-| 新物品 | 设定/物品.md | world_upsert(category='ability') |
+| 新物品 | 设定/物品.md | world_upsert(category='item') |
 | 新NPC | 设定/角色总览.md | character_create() |
 | 新能力/概念 | 设定/世界观.md | world_upsert(category='ability') |
 | 新势力/组织 | 设定/世界观.md | world_upsert(category='faction') |
