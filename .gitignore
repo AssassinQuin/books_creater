@@ -11,10 +11,9 @@ Thumbs.db
 *.swp
 *.swo
 
-# 环境文件
+# 环境文件（含密钥）
 .env
 .env.local
-.mcp.json
 
 # 本地配置（含绝对路径的权限白名单）
 .claude/settings.local.json
