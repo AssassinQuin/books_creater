@@ -3,8 +3,9 @@ SyncEngine — 模板驱动的 DB↔文件 通用同步引擎
 
 设计原则:
   1. 模板定义一切：实体类型、DB查询、文件路径、段落顺序、渲染方式
-  2. 零代码扩展：新增实体类型 = 新增一个 SyncTemplate，不改引擎代码
+  2. 零代码扩展：新增实体类型 = 新增一个 YAML manifest，不改引擎代码
   3. 向后兼容：现有 sync.py 的公开函数保持不变，内部委托给引擎
+  4. YAML 优先：YAML manifest 可覆盖内置 Python 模板
 
 使用方式:
   from novel_db.sync_engine import engine
@@ -21,16 +22,24 @@ SyncEngine — 模板驱动的 DB↔文件 通用同步引擎
   # 双向对比
   report = engine.diff(novel_name="这次不一样了", entity_type="character")
 
-  # 新增模板后一键注册
+  # YAML manifest 扩展
+  engine.load_manifests("sync_manifests/")  # 自动注册目录下所有 .yaml
+  engine.available_types  # 查看所有已注册类型
+
+  # 手动注册
   engine.register(my_custom_template)
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
+
+import yaml
 
 from .db import query, PROJECT_ROOT
 from .sync import (
@@ -39,6 +48,53 @@ from .sync import (
     _record_db_hash, _record_file_hash,
     _NOVELS_BASE,
 )
+
+log = logging.getLogger(__name__)
+
+# ============================================================================
+# 内置变换函数 — YAML manifest 中 transform: builtin.xxx 引用
+# ============================================================================
+
+
+def _resolve_faction_name(val, row):
+    """Transform: faction_id → faction display name."""
+    if not val:
+        return None
+    frow = query("SELECT name FROM world_settings WHERE id = %s", (val,), fetch="val")
+    return frow or str(val)
+
+
+def _resolve_chapter_number(val, row):
+    """Transform: chapter_id → Ch{number} display."""
+    if not val:
+        return None
+    ch = query("SELECT number FROM chapters WHERE id = %s", (val,), fetch="val")
+    return f"Ch{ch}" if ch else str(val)
+
+
+def _resolve_category_file(val, row):
+    """Transform: category → 中文文件名（世界观专用）."""
+    _WORLD_CATEGORY_FILES = {
+        "core_setting": "核心设定",
+        "bestiary": "异灵图鉴",
+        "ability": "能力体系",
+        "item": "物品装备",
+        "economy": "经济体系",
+        "daily_life": "日常生活",
+        "history": "历史事件",
+        "location": "地图",
+        "faction": "势力",
+        "race": "种族",
+    }
+    return _WORLD_CATEGORY_FILES.get(val, val)
+
+
+_BUILTIN_TRANSFORMS: dict[str, Callable] = {
+    "resolve_faction": _resolve_faction_name,
+    "resolve_chapter_number": _resolve_chapter_number,
+    "resolve_category_file": _resolve_category_file,
+}
+
 
 # ============================================================================
 # Template Protocol — 同步模板数据结构
@@ -149,6 +205,10 @@ class SyncTemplate:
     header_template: str | None = None
     skip_existing: bool = False
 
+    # --- Manifest 扩展字段 ---
+    category_file_map: dict[str, str] | None = None  # 世界观：category → 中文文件名
+    manifest_path: str | None = None  # 来源 YAML 路径（调试用）
+
 
 # ============================================================================
 # SyncEngine — 通用同步引擎
@@ -168,6 +228,7 @@ class SyncEngine:
 
     def __init__(self):
         self._templates: dict[str, SyncTemplate] = {}
+        self._manifest_loaded: set[str] = set()  # 已加载的 manifest 路径
 
     # ── 模板管理 ──────────────────────────────────────────────────
 
@@ -184,6 +245,198 @@ class SyncEngine:
     @property
     def available_types(self) -> list[str]:
         return list(self._templates.keys())
+
+    # ── YAML Manifest 加载 ──────────────────────────────────────
+
+    def load_manifest(self, path: str) -> SyncTemplate:
+        """
+        从单个 YAML 文件加载同步模板并注册。
+
+        Args:
+            path: YAML 文件路径
+
+        Returns:
+            加载的 SyncTemplate 实例
+
+        Raises:
+            FileNotFoundError: 文件不存在
+            ValueError: manifest 格式错误
+        """
+        path = os.path.abspath(path)
+        if path in self._manifest_loaded:
+            log.debug(f"Manifest 已加载，跳过: {path}")
+            return self._templates.get(self._name_from_path(path))
+
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Manifest 文件不存在: {path}")
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+
+        if not data or "name" not in data:
+            raise ValueError(f"Manifest 缺少 'name' 字段: {path}")
+
+        tpl = self._parse_manifest(data)
+        tpl.manifest_path = path
+        self.register(tpl)
+        self._manifest_loaded.add(path)
+        log.info(f"已加载 manifest: {data['name']} ({path})")
+        return tpl
+
+    def load_manifests(self, dir_path: str) -> list[SyncTemplate]:
+        """
+        从目录批量加载所有 YAML manifest 文件。
+
+        Args:
+            dir_path: 包含 .yaml 文件的目录路径
+
+        Returns:
+            加载的 SyncTemplate 列表
+        """
+        dir_path = os.path.abspath(dir_path)
+        if not os.path.isdir(dir_path):
+            log.warning(f"Manifest 目录不存在: {dir_path}")
+            return []
+
+        loaded = []
+        for fname in sorted(os.listdir(dir_path)):
+            if fname.endswith(('.yaml', '.yml')) and not fname.startswith('_'):
+                fpath = os.path.join(dir_path, fname)
+                try:
+                    tpl = self.load_manifest(fpath)
+                    loaded.append(tpl)
+                except Exception as e:
+                    log.error(f"加载 manifest 失败: {fpath}: {e}")
+        return loaded
+
+    def _name_from_path(self, path: str) -> str:
+        """从文件路径提取模板名。"""
+        return Path(path).stem
+
+    def _parse_manifest(self, data: dict) -> SyncTemplate:
+        """
+        将 YAML dict 解析为 SyncTemplate 实例。
+
+        YAML 格式与 SyncTemplate 字段 1:1 对应，额外支持:
+          - transforms: 可用 builtin.xxx 引用内置函数
+          - category_file_map: 世界观分类→文件名映射
+        """
+        # --- 解析 transforms ---
+        transforms = {}
+        raw_transforms = data.get("transforms") or {}
+        for key, val in raw_transforms.items():
+            if isinstance(val, str) and val.startswith("builtin."):
+                builtin_name = val[len("builtin."):]  # 去掉 builtin. 前缀
+                if builtin_name in _BUILTIN_TRANSFORMS:
+                    transforms[key] = _BUILTIN_TRANSFORMS[builtin_name]
+                else:
+                    log.warning(f"未知内置变换: {val}，可用: {list(_BUILTIN_TRANSFORMS.keys())}")
+            # 非 builtin 的暂不支持（需要动态 import）
+
+        # --- 解析 sections ---
+        sections = []
+        for sec_data in data.get("sections") or []:
+            sec = self._parse_section(sec_data)
+            if sec:
+                sections.append(sec)
+
+        # --- 解析 relations ---
+        relations = None
+        rel_data = data.get("relations")
+        if rel_data:
+            relations = RelationQueryDef(
+                sql=rel_data["sql"].strip(),
+                param_columns=rel_data.get("param_columns", []),
+                heading=rel_data.get("heading", "关联"),
+            )
+
+        # --- 解析 file_to_db ---
+        ftb = data.get("file_to_db")
+        file_to_db_enabled = False
+        file_to_db_sql = None
+        if ftb:
+            file_to_db_enabled = ftb.get("enabled", False)
+
+        # --- 构建 SyncTemplate ---
+        tpl = SyncTemplate(
+            name=data["name"],
+            display_name=data.get("display_name", data["name"]),
+            db_table=data["db_table"],
+            id_field=data["id_field"],
+            file_dir=data.get("file_dir", ""),
+            authority=data.get("authority", "db"),
+            merge_mode=data.get("merge_mode", "overwrite"),
+            sections=sections,
+            relations=relations,
+            transforms=transforms,
+            query_extra=data.get("query_extra", ""),
+            order_by=data.get("order_by", ""),
+            file_pattern=data.get("file_pattern", "{name}.md"),
+            file_title=data.get("file_title", "{name}"),
+            section_marker=data.get("section_marker"),
+            file_to_db_enabled=file_to_db_enabled,
+            file_to_db_sql=file_to_db_sql,
+            header_template=data.get("header_template"),
+            skip_existing=data.get("skip_existing", False),
+            category_file_map=data.get("category_file_map"),
+        )
+        return tpl
+
+    def _parse_section(self, data: dict) -> SectionDef | None:
+        """将 YAML section dict 解析为 SectionDef。"""
+        sec_type = data.get("type", "fields")
+
+        # fields
+        fields = None
+        if sec_type == "fields" and data.get("fields"):
+            fields = []
+            for fd in data["fields"]:
+                if isinstance(fd, str):
+                    # 简写: "column_name"
+                    fields.append(FieldDef(column=fd))
+                elif isinstance(fd, dict):
+                    fields.append(FieldDef(
+                        column=fd["column"],
+                        md_key=fd.get("md_key"),
+                        type=fd.get("type", "text"),
+                        optional=fd.get("optional", True),
+                        transform=fd.get("transform"),
+                        condition=fd.get("condition"),
+                    ))
+
+        # blockquotes
+        blockquotes = None
+        if sec_type == "blockquote" and data.get("blockquotes"):
+            blockquotes = []
+            for bq in data["blockquotes"]:
+                blockquotes.append(BlockquoteField(
+                    column=bq["column"],
+                    label=bq.get("label"),
+                ))
+
+        # acts
+        acts = None
+        if sec_type == "acts" and data.get("acts"):
+            acts = []
+            for act in data["acts"]:
+                if isinstance(act, list) and len(act) == 2:
+                    acts.append((act[0], act[1]))
+
+        return SectionDef(
+            heading=data["heading"],
+            type=sec_type,
+            condition=data.get("condition", "not_empty"),
+            indent=data.get("indent", 1),
+            fields=fields,
+            jsonb_column=data.get("jsonb_column"),
+            jsonb_key=data.get("jsonb_key"),
+            fallback_columns=data.get("fallback_columns"),
+            static_content=data.get("static_content"),
+            raw_column=data.get("raw_column"),
+            table_column=data.get("table_column"),
+            blockquotes=blockquotes,
+            acts=acts,
+        )
 
     # ── DB → 文件 ────────────────────────────────────────────────
 
@@ -237,13 +490,25 @@ class SyncEngine:
         return query(sql, tuple(params), fetch="all") or []
 
     def _resolve_filepath(self, tpl: SyncTemplate, novel_name: str, row: dict) -> str:
-        """根据模板和DB行解析文件路径。"""
+        """根据模板和DB行解析文件路径。支持 category_file_map（世界观专用）。"""
         fname = tpl.file_pattern
-        for col in [tpl.id_field, "title", "number", "category"]:
+
+        # category_file_map 支持：{category_file} → 中文文件名
+        if "{category_file}" in fname and "category" in row:
+            cat = row["category"]
+            if tpl.category_file_map and cat in tpl.category_file_map:
+                fname = fname.replace("{category_file}", tpl.category_file_map[cat])
+            elif tpl.transforms and "resolve_category_file" in tpl.transforms:
+                fname = fname.replace("{category_file}", tpl.transforms["resolve_category_file"](cat, row))
+            else:
+                fname = fname.replace("{category_file}", str(cat))
+
+        for col in [tpl.id_field, "title", "number", "category", "category_file"]:
             if col in row and f"{{{col}}}" in fname:
                 val = row[col]
                 if val is not None:
                     fname = fname.replace(f"{{{col}}}", str(val))
+
         base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
         os.makedirs(base, exist_ok=True)
         return os.path.join(base, fname)
@@ -566,14 +831,6 @@ class SyncEngine:
 # ============================================================================
 
 
-def _resolve_faction_name(val, row):
-    """Transform: faction_id → faction display name."""
-    if not val:
-        return None
-    frow = query("SELECT name FROM world_settings WHERE id = %s", (val,), fetch="val")
-    return frow or str(val)
-
-
 # 人物模板
 _TEMPLATE_CHARACTER = SyncTemplate(
     name="character",
@@ -734,7 +991,7 @@ _TEMPLATE_VOLUME = SyncTemplate(
 )
 
 # ============================================================================
-# 全局引擎实例（预注册所有内置模板）
+# 全局引擎实例（预注册内置模板 + 自动加载 YAML manifests）
 # ============================================================================
 
 engine = SyncEngine()
@@ -742,3 +999,8 @@ engine.register(_TEMPLATE_CHARACTER)
 engine.register(_TEMPLATE_WORLD)
 engine.register(_TEMPLATE_FORESHADOW)
 engine.register(_TEMPLATE_VOLUME)
+
+# 自动从 sync_manifests/ 加载 YAML manifests（YAML 覆盖同名内置模板）
+_MANIFESTS_DIR = os.path.join(PROJECT_ROOT, "sync_manifests")
+if os.path.isdir(_MANIFESTS_DIR):
+    engine.load_manifests(_MANIFESTS_DIR)
