@@ -733,42 +733,259 @@ class SyncEngine:
                 lines.extend(_jsonb_to_md(r["dialogue_adjustment"], 2))
         return lines
 
-    # ── 文件 → DB ────────────────────────────────────────────────
+    # ── 文件 → DB（结构化解析）───────────────────────────────────
 
     def files_to_db(self, novel_name: str, entity_type: str) -> dict:
         """
-        将文件同步回DB（反向同步）。
+        将文件结构化解析后同步回DB（真正的反向同步，非截断dump）。
 
-        目前支持: world（通过sync_lorebook独立工具）, volume（notes字段）
+        通过模板的 sections 定义逆向解析 MD 文件，按字段映射写入对应 DB 列。
+        支持: character, world, foreshadow, volume, echo
         """
-        tpl = self.get(entity_type)
-        if not tpl.file_to_db_enabled:
-            return {"error": f"'{entity_type}' 不支持 file→DB 同步"}
+        from .md_parser import (
+            split_sections, find_section, parse_bullet_fields,
+            parse_jsonb_bullets, parse_md_table, parse_blockquotes,
+            parse_acts, parse_relations,
+        )
 
+        tpl = self.get(entity_type)
         novel_id = self._resolve_novel_id(novel_name)
         base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
         if not os.path.isdir(base):
             return {"error": f"目录不存在: {base}"}
 
-        result = {"synced": 0, "errors": []}
-        for fname in os.listdir(base):
+        # section_replace 模式：需要处理聚合文件（多行→1文件）
+        if tpl.merge_mode == "section_replace":
+            return self._files_to_db_aggregate(tpl, novel_id, novel_name, base)
+
+        # overwrite 模式：一个文件对应一行DB记录
+        result = {"synced": 0, "errors": [], "details": []}
+        for fname in sorted(os.listdir(base)):
             if not fname.endswith(".md"):
                 continue
+            fpath = os.path.join(base, fname)
             try:
-                fpath = os.path.join(base, fname)
                 with open(fpath, "r", encoding="utf-8") as f:
                     content = f.read()
-                if tpl.file_to_db_sql:
-                    # 使用模板定义的SQL
-                    query(tpl.file_to_db_sql,
-                          (novel_id, content[:4000], content[:4000]),
-                          fetch="none")
-                    _record_db_hash(novel_id, tpl.name, fname.replace(".md", ""), content[:4000])
-                    result["synced"] += 1
+                row = self._parse_file_to_row(tpl, content)
+                if not row:
+                    result["errors"].append({"file": fname, "error": "解析结果为空"})
+                    continue
+                row["novel_id"] = novel_id
+                self._upsert_row(tpl, row)
+                key = str(row.get(tpl.id_field, fname))
+                _record_db_hash(novel_id, tpl.name, key, content)
+                result["synced"] += 1
+                result["details"].append({"file": fname, "key": key, "fields": len(row)})
             except Exception as e:
+                log.error(f"File→DB 解析失败: {fpath}: {e}", exc_info=True)
                 result["errors"].append({"file": fname, "error": str(e)})
 
         return result
+
+    def _parse_file_to_row(self, tpl: SyncTemplate, content: str) -> dict | None:
+        """
+        将单个文件内容解析为 DB 行 dict。
+        根据 template 的 sections 定义逆向解析各段落。
+        """
+        from .md_parser import (
+            split_sections, find_section, parse_bullet_fields,
+            parse_jsonb_bullets, parse_md_table, parse_blockquotes,
+            parse_acts,
+        )
+
+        sections = split_sections(content)
+        if not sections:
+            return None
+
+        row = {}
+        for sec_def in tpl.sections:
+            heading = sec_def.heading
+            # 跳过动态 heading 中的模板变量（如 {category}: {name}）
+            if "{" in heading:
+                # 尝试匹配：把 {xxx} 替换为 .* 正则
+                pattern = re.escape(heading)
+                pattern = re.sub(r'\\\{[^}]+\\\}', r'.*?', pattern)
+                found = find_section(sections, re.compile(f"^{pattern}$"))
+            else:
+                found = find_section(sections, heading)
+
+            if not found or not found["body"]:
+                continue
+
+            if sec_def.type == "fields":
+                fields = parse_bullet_fields(found["body"])
+                for fd in sec_def.fields or []:
+                    # md_key → column 映射（逆向：文件中的key可能是md_key或column）
+                    col = fd.column
+                    # 文件中的 key 优先用 md_key，其次用 column
+                    val = fields.get(fd.md_key) if fd.md_key else None
+                    if val is None:
+                        val = fields.get(col)
+                    if val is not None:
+                        row[col] = val
+
+            elif sec_def.type == "jsonb":
+                parsed = parse_jsonb_bullets(found["body"])
+                if parsed is not None:
+                    row[sec_def.jsonb_column] = json.dumps(parsed, ensure_ascii=False)
+
+            elif sec_def.type == "table":
+                parsed = parse_md_table(found["body"])
+                if parsed is not None:
+                    row[sec_def.table_column] = json.dumps(parsed, ensure_ascii=False)
+
+            elif sec_def.type == "blockquote":
+                bq = parse_blockquotes(found["body"])
+                for bqf in sec_def.blockquotes or []:
+                    col = bqf.column
+                    label = bqf.label or col
+                    if label in bq:
+                        row[col] = bq[label]
+
+            elif sec_def.type == "raw":
+                row[sec_def.raw_column] = found["body"]
+
+            elif sec_def.type == "acts":
+                act_labels = [a[0] for a in (sec_def.acts or [])]
+                parsed = parse_acts(found["body"], act_labels)
+                if parsed:
+                    for label, col_name in (sec_def.acts or []):
+                        if col_name in parsed:
+                            row[col_name] = json.dumps(parsed[col_name], ensure_ascii=False)
+
+            # static: 不需要解析
+
+        # 从第一行标题提取 id_field（如 "# 沈野" → name="沈野"）
+        h1 = sections[0] if sections else None
+        if h1 and h1["level"] == 1 and h1["heading"]:
+            if tpl.id_field == "name":
+                row["name"] = h1["heading"]
+            elif tpl.id_field == "number":
+                m = re.match(r'V(\d+)', h1["heading"])
+                if m:
+                    row["number"] = int(m.group(1))
+
+        return row if row else None
+
+    def _files_to_db_aggregate(self, tpl: SyncTemplate, novel_id: int,
+                                novel_name: str, base: str) -> dict:
+        """
+        聚合文件的 File→DB 解析（section_replace 模式）。
+        多行DB记录共享一个文件，每个段落对应一行。
+        """
+        from .md_parser import (
+            split_sections, find_section, parse_bullet_fields,
+            parse_jsonb_bullets, parse_relations,
+        )
+
+        # 查找匹配的文件
+        target_file = None
+        for fname in os.listdir(base):
+            if not fname.endswith(".md"):
+                continue
+            if tpl.file_pattern.replace("{", "").replace("}", "") in fname:
+                target_file = os.path.join(base, fname)
+                break
+
+        if not target_file:
+            return {"error": f"找不到匹配文件: {tpl.file_pattern}"}
+
+        with open(target_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        sections = split_sections(content)
+        result = {"synced": 0, "errors": [], "details": []}
+
+        # 遍历所有段落，找匹配的
+        for sec in sections:
+            heading = sec["heading"]
+            if not sec["body"]:
+                continue
+
+            # 解析字段
+            fields = parse_bullet_fields(sec["body"])
+            if not fields:
+                continue
+
+            row = {"novel_id": novel_id}
+
+            # 确定实体标识
+            # foreshadow: "foreshadow: 123" → id=123
+            # echo: "echo: 456" → id=456
+            if tpl.name in ("foreshadow", "echo"):
+                m = re.match(rf"{tpl.name}:\s*(\d+)", heading)
+                if m:
+                    row[tpl.id_field] = int(m.group(1))
+                else:
+                    continue
+
+            # 将 fields 映射到 DB 列
+            for sec_def in tpl.sections:
+                if sec_def.type != "fields":
+                    continue
+                for fd in sec_def.fields or []:
+                    col = fd.column
+                    val = fields.get(fd.md_key) if fd.md_key else None
+                    if val is None:
+                        val = fields.get(col)
+                    if val is not None:
+                        row[col] = val
+
+            if not row.get(tpl.id_field):
+                continue
+
+            try:
+                self._upsert_row(tpl, row)
+                key = str(row[tpl.id_field])
+                result["synced"] += 1
+                result["details"].append({"key": key})
+            except Exception as e:
+                result["errors"].append({"key": str(row.get(tpl.id_field)), "error": str(e)})
+
+        return result
+
+    def _upsert_row(self, tpl: SyncTemplate, row: dict):
+        """
+        通用 upsert: 按 id_field 查找，存在则 UPDATE，不存在则 INSERT。
+        """
+        id_val = row.get(tpl.id_field)
+        if not id_val:
+            raise ValueError(f"缺少主标识字段 {tpl.id_field}")
+
+        # 检查是否已存在
+        existing = query(
+            f"SELECT id FROM {tpl.db_table} WHERE novel_id = %s AND {tpl.id_field} = %s",
+            (row["novel_id"], id_val), fetch="one"
+        )
+
+        # 分离 id_field 和 novel_id
+        set_cols = []
+        set_vals = []
+        insert_cols = ["novel_id", tpl.id_field]
+        insert_vals = [row["novel_id"], id_val]
+
+        for col, val in row.items():
+            if col in ("novel_id", tpl.id_field, "id"):
+                continue
+            set_cols.append(col)
+            set_vals.append(val if val is not None else None)
+            insert_cols.append(col)
+            insert_vals.append(val if val is not None else None)
+
+        if existing:
+            # UPDATE
+            set_clause = ", ".join(f"{c} = %s" for c in set_cols)
+            sql = f"UPDATE {tpl.db_table} SET {set_clause}, updated_at = NOW() WHERE id = %s"
+            params = set_vals + [existing["id"]]
+        else:
+            # INSERT
+            cols_str = ", ".join(insert_cols)
+            placeholders = ", ".join(["%s"] * len(insert_vals))
+            sql = f"INSERT INTO {tpl.db_table} ({cols_str}, created_at, updated_at) VALUES ({placeholders}, NOW(), NOW())"
+            params = insert_vals
+
+        query(sql, tuple(params), fetch="none")
 
     # ── 双向对比 ────────────────────────────────────────────────
 
