@@ -36,8 +36,9 @@ Phase 3: 外观+对话设计 → 用户确认方案
   appearance 占角色档案整体篇幅的 5%-15%（核心角色取上限，NPC 取下限），race、speech_style、relation_adjustments 覆盖 ≥3 种关系类型
   ↓
 Phase 4: 写入DB + 文件同步
-  character_create(含JSONB字段) → sync_db_to_files(data_type='character')
+  character_create(含JSONB字段, distillation_tracked=True/False) → sync_db_to_files(data_type='character')
   → relation_create → consistency_guard(novel, auto_sync=True)
+  💡 distillation_tracked：主角/重要角色=True（开启蒸馏追踪，每章记录演化增量）；临时NPC=True（默认追踪，也可关闭）
 ```
 
 ## 修改人物流水线

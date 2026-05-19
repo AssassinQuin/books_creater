@@ -59,7 +59,7 @@ Step 6: 输出到 novels/{NOVEL_NAME}/审阅报告/大纲审计-{date}.md
 
 ### Step 1: 加载上下文
 
-- 角色状态（`character_get` + `chapter_get_context`，novel_name=NOVEL_NAME）
+- 角色状态（`character_get` + `get_chapter_context(novel_name, chapter_number, load_mode="full")`，novel_name=NOVEL_NAME）
 - 卷级大纲（`novels/{NOVEL_NAME}/设定/大纲/V{卷号}-{卷名}.md`）
 - 全书支线总图（`novels/{NOVEL_NAME}/设定/大纲/支线总图.md`）
 - 世界观数据（`world_query(novel_name=NOVEL_NAME)`；空时回退读文件）

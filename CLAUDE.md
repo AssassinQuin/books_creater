@@ -78,9 +78,10 @@ skill操作 → DB（直接写入）→ sync_db_to_files() → 文件（模板�
 3. 冲突默认以DB为准，用户确认后执行同步
 
 **用户主动同步**（需要更新文件时）：
-- `sync_db_to_files(novel_name=NOVEL_NAME)` — 同步全部有差异的
+- `sync_db_to_files(novel_name=NOVEL_NAME)` — DB→file 同步全部有差异的
 - `sync_db_to_files(novel_name=NOVEL_NAME, data_type="world")` — 只同步世界观
 - `sync_db_to_files(novel_name=NOVEL_NAME, overwrite=True)` — 强制全量覆盖
+- `sync_files_to_db(novel_name=NOVEL_NAME)` — file→DB 同步（卷级大纲文件的notes回写）
 
 **数据操作规范**：
 - Skill 需要通过 MCP 工具操作 DB（`character_create` / `world_upsert` / `foreshadow_plant` 等），操作完调 `sync_db_to_files()` 同步到文件
@@ -211,8 +212,9 @@ Priority on conflict: C3 > B2 > others.
 | 工具 | 用途 | 调用时机 |
 |------|------|----------|
 | `sync_startup(novel_name)` | 启动时对比DB与文件差异，返回冲突报告 | 每次开始工作时 |
-| `sync_db_to_files(novel_name)` | DB→文件模板驱动同步（用户主动触发） | DB变更后需要更新文件时 |
-| `get_chapter_context(novel_name, chapter_number)` | 聚合上下文注入（章节信息+卷级大纲+前3章摘要+角色深度信息+未回收伏笔+世界观+人物关系+时间线+质量历史+写作提示词） | 编排器 Step 1 必调 |
+| `sync_db_to_files(novel_name)` | DB→文件模板驱动同步（单向，不写回DB） | DB变更后需要更新文件时 |
+| `sync_files_to_db(novel_name)` | 文件→DB同步（卷级大纲notes回写） | 文件手工编辑后同步回DB时 |
+| `get_chapter_context(novel_name, chapter_number, load_mode)` | 聚合上下文注入（章节信息+卷级大纲+前3章摘要+角色深度信息+未回收伏笔+分层加载的世界观+人物关系+时间线+质量历史+写作提示词）。load_mode: smart/volume/targeted/full | 编排器 Step 1 必调 |
 | `validate_chapter(chapter_text)` | 写后硬约束校验（标点密度/否定句式/字数/创作原则） | 编排器 Step 6 强制 |
 | `writing_finish(novel_name, chapter_number, ...)` | 写作后状态更新（摘要+事件+伏笔+时间线+维度） | 编排器 Step 6 强制，不可跳过 |
 | `health_check(novel_name=NOVEL_NAME)` | 健康诊断（伏笔积压/配角活跃/进阶节奏/日常密度/暗线推进/卷完成度） | C2 诊断时 |
@@ -227,6 +229,10 @@ Priority on conflict: C3 > B2 > others.
 | `scene_delete(novel_name, chapter_number, scene_number)` | 删除场景 | 场景撤销时 |
 | `timeline_update(novel_name, event_id, ...)` | 时间线事件部分更新 | 时间线修正时 |
 | `timeline_delete(novel_name, event_id)` | 删除时间线事件 | 事件撤销时 |
+| `distillation_evolve(novel_name, character_name, ...)` | 记录角色蒸馏演化增量（决策/信念/能力/弧线） | 正文写作每章写完后 |
+| `distillation_get(novel_name, character_name, chapter_number)` | 查询角色蒸馏演化记录 | 审阅/OOC检测时 |
+| `distillation_timeline(novel_name, character_name, dimension)` | 获取角色某维度的时间线 | 分析人物演变时 |
+| `distillation_compare(novel_name, character_name, ch_a, ch_b)` | 对比两章间角色变化 | 人物一致性检测 |
 
 ### Multi-Agent Pipeline 子 Agent 指令
 

@@ -1,7 +1,7 @@
 ---
 name: novel-chapter-writer
 description: 逐章写作编排器，驱动 4 个独立子 Agent 协作完成章节。触发词：写第N章/继续写/写一章
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__get_chapter_context, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__skill_loader, mcp__novel-db__character_update, mcp__novel-db__character_increment, mcp__novel-db__character_snapshot_by_name, mcp__novel-db__relation_snapshot_by_name, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_upsert, mcp__novel-db__character_create, mcp__novel-db__relation_create, mcp__novel-db__consistency_guard, mcp__memory__memory_store, mcp__memory__memory_search
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__get_chapter_context, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__skill_loader, mcp__novel-db__character_update, mcp__novel-db__character_increment, mcp__novel-db__character_snapshot, mcp__novel-db__relation_snapshot, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_upsert, mcp__novel-db__character_create, mcp__novel-db__relation_create, mcp__novel-db__consistency_guard, mcp__novel-db__distillation_evolve, mcp__memory__memory_store, mcp__memory__memory_search
 depends_on: novel-planner, lorecraft, engines/anti-ai-quickref, engines/author-voice, engines/causality, agents/context-curator, agents/creative-director, agents/engine-coordinator, agents/text-generator
 lifecycle: core
 version: "1.3.0"
@@ -170,12 +170,13 @@ writing_finish(chapter_id, chapter_text, summary={Agent 4 自检报告摘要},
 
 > `self_check` 是 Agent 4 的自检报告，不是 novel-qa 的独立审计。
 
-### 6.1.1–6.1.3 更新角色与关系快照
+### 6.1.1–6.1.4 更新角色与关系快照
 
 每章写完后，必须更新出场角色状态。详细伪代码详见 supporting-info §DB 存盘伪代码：
 - **6.1.1** `character_increment` — 增量更新角色状态（identity/ability/goal/knows/relationships）
-- **6.1.2** `character_snapshot_by_name` — 保存角色快照到独立表（供 get_chapter_context 消费）
-- **6.1.3** `relation_snapshot_by_name` — 保存有显著变化的角色关系快照
+- **6.1.2** `character_snapshot` — 保存角色快照到独立表（供 get_chapter_context 消费）
+- **6.1.3** `relation_snapshot` — 保存有显著变化的角色关系快照
+- **6.1.4** `distillation_evolve` — 记录角色蒸馏模型演化增量（决策/认知/信念/关系/能力/弧线——每章写完后，对每个**有显著变化**的角色调用）
 
 ### 6.2 存盘
 
@@ -303,13 +304,13 @@ for character in involved_characters:
     )
 ```
 
-### 6.1.2 角色快照（character_snapshot_by_name）
+### 6.1.2 角色快照（character_snapshot）
 
 `character_increment` 写入 `characters.current_snapshot`（可变），但 `get_chapter_context` 和 `character_detail` 从 `character_state_snapshots` 表读取。必须同时写入快照表，下游才能读到数据：
 
 ```python
 for character in involved_characters:
-    character_snapshot_by_name(
+    character_snapshot(
         novel_name="NOVEL_NAME",
         character_name=character.name,
         chapter_number=chapter_number,
@@ -324,13 +325,13 @@ for character in involved_characters:
     )
 ```
 
-### 6.1.3 关系快照（relation_snapshot_by_name）
+### 6.1.3 关系快照（relation_snapshot）
 
 Creative Director 在创意蓝图中设计了关系变化。每章写完后，对有显著变化的角色关系调用快照：
 
 ```python
 for relation_change in blueprint.relationship_changes:
-    relation_snapshot_by_name(
+    relation_snapshot(
         novel_name="NOVEL_NAME",
         from_name=relation_change.from_name,
         to_name=relation_change.to_name,
@@ -340,6 +341,32 @@ for relation_change in blueprint.relationship_changes:
         notes=relation_change.description
     )
 ```
+
+### 6.1.4 人物蒸馏演化记录（distillation_evolve）
+
+每章写完后，对**有显著演化**的角色（决策变化/信念转变/能力解锁/弧线推进/关键抉择），记录蒸馏模型增量：
+
+```python
+for character in characters_with_evolution:
+    if not character.distillation_tracked:
+        continue  # 跳过已关闭蒸馏追踪的角色（临时NPC）
+    distillation_evolve(
+        novel_name="NOVEL_NAME",
+        character_name=character.name,
+        chapter_number=chapter_number,
+        decision_delta=json.dumps(character.decision_changes),
+        new_knowledge=json.dumps(character.new_information),
+        changed_beliefs=json.dumps(character.belief_shifts),
+        relation_shifts=json.dumps(character.relation_shifts),
+        voice_changes=json.dumps(character.voice_changes),
+        ability_changes=json.dumps(character.ability_changes),
+        arc_transition=json.dumps(character.arc_transition),
+        key_decision=json.dumps(character.key_decision),
+        notes=character.evolution_notes
+    )
+```
+
+主角色（`distillation_tracked=1`）应每次写完后都调（持续追踪弧线推进），配角只在有显著变化时调（避免噪音）。临时NPC（`distillation_tracked=0`）会被上述 `if not character.distillation_tracked: continue` 自动跳过。
 
 ## consistency_guard 自动同步原理
 

@@ -392,7 +392,7 @@ def sync_startup(novel_name: str, data_type: str = "") -> str:
 
 @mcp.tool
 def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = False) -> str:
-    """将DB数据同步到文件（用户主动触发）。skill操作只写DB，用户选择何时同步到文件。
+    """将DB数据同步到文件（单向：DB→file）。skill操作只写DB，用户选择何时同步到文件。
     参数:
       novel_name: 小说名称
       data_type: 同步范围，空=全部，可选: world/character/foreshadow/volume/chapter
@@ -401,6 +401,7 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
       sync_db_to_files(novel_name="这次不一样了")                    # 同步全部有差异的
       sync_db_to_files(novel_name="这次不一样了", data_type="world")  # 只同步世界观
       sync_db_to_files(novel_name="这次不一样了", overwrite=True)     # 强制全量覆盖
+    注: file→DB方向请使用 sync_files_to_db()
     """
     novel_id = _resolve_novel_id(novel_name)
     results = {"synced": [], "skipped": [], "errors": []}
@@ -444,7 +445,6 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
                 results["errors"].append({"type": "foreshadow", "key": str(row["id"]), "error": str(e)})
 
     if "volume" in types_to_sync:
-        # DB → file: generate files for volumes that don't have them yet
         vol_rows = query(
             "SELECT * FROM volumes WHERE novel_id = %s ORDER BY number",
             (novel_id,)
@@ -458,29 +458,6 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
             except Exception as e:
                 results["errors"].append({"type": "volume", "key": key, "error": str(e)})
 
-        # file → DB: for existing volume files, sync notes to DB
-        outline_dir = os.path.join(_NOVELS_BASE, novel_name, "设定", "大纲")
-        if os.path.isdir(outline_dir):
-            for fname in sorted(os.listdir(outline_dir)):
-                if not fname.endswith(".md"):
-                    continue
-                fpath = os.path.join(outline_dir, fname)
-                vol_match = re.match(r"V(\d+)", fname)
-                if vol_match:
-                    vol_num = int(vol_match.group(1))
-                    vol = query(
-                        "SELECT id FROM volumes WHERE novel_id = %s AND number = %s",
-                        (novel_id, vol_num), fetch="one"
-                    )
-                    if vol:
-                        with open(fpath, "r", encoding="utf-8") as f:
-                            content = f.read()
-                        query(
-                            "UPDATE volumes SET notes = %s, updated_at = NOW() WHERE id = %s",
-                            (content[:2000], vol["id"]), fetch="none"
-                        )
-                        results["synced"].append({"type": "volume", "key": fname.replace(".md", ""), "direction": "file→DB"})
-
     summary = {
         "novel_id": novel_id,
         "novel_name": novel_name,
@@ -491,3 +468,54 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
         "errors": results["errors"],
     }
     return json.dumps(summary, ensure_ascii=False, default=str)
+
+
+@mcp.tool
+def sync_files_to_db(novel_name: str) -> str:
+    """将文件数据同步回DB（单向：file→DB）。当前支持卷级大纲文件→volumes.notes。
+    参数:
+      novel_name: 小说名称
+    用法:
+      sync_files_to_db(novel_name="这次不一样了")  # 读取设定/大纲/V*.md → 更新volumes表
+    """
+    novel_id = _resolve_novel_id(novel_name)
+    synced = []
+    errors = []
+
+    outline_dir = os.path.join(_NOVELS_BASE, novel_name, "设定", "大纲")
+    if not os.path.isdir(outline_dir):
+        return json.dumps({"ok": True, "synced": [], "errors": [], "note": "目录不存在"}, ensure_ascii=False)
+
+    for fname in sorted(os.listdir(outline_dir)):
+        if not fname.endswith(".md"):
+            continue
+        fpath = os.path.join(outline_dir, fname)
+        vol_match = re.match(r"V(\d+)", fname)
+        if not vol_match:
+            continue
+        vol_num = int(vol_match.group(1))
+        vol = query(
+            "SELECT id FROM volumes WHERE novel_id = %s AND number = %s",
+            (novel_id, vol_num), fetch="one"
+        )
+        if not vol:
+            continue
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                content = f.read()
+            query(
+                "UPDATE volumes SET notes = %s, updated_at = NOW() WHERE id = %s",
+                (content[:2000], vol["id"]), fetch="none"
+            )
+            synced.append({"type": "volume", "key": fname.replace(".md", ""), "direction": "file→DB"})
+        except Exception as e:
+            errors.append({"type": "volume", "key": fname.replace(".md", ""), "error": str(e)})
+
+    return json.dumps({
+        "ok": True,
+        "novel_name": novel_name,
+        "synced_count": len(synced),
+        "error_count": len(errors),
+        "synced": synced,
+        "errors": errors,
+    }, ensure_ascii=False)

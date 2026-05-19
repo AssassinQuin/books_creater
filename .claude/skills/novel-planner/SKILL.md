@@ -397,7 +397,7 @@ errors = []
 
 # 卷级目标 → volume_update
 for card in volume_target_cards:
-    result = volume_update_by_number(novel_name=NOVEL_NAME, number=card.volume_id, main_plotlines=card.targets)
+    result = volume_update(novel_name=NOVEL_NAME, number=card.volume_id, main_plotlines=card.targets)
     if '"ok": false' in result or '"error"' in result:
         errors.append(f"volume_update V{card.volume_id} 失败: {result}")
 

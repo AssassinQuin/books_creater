@@ -542,45 +542,6 @@ def sync_lorebook(novel_name: str) -> str:
 
 
 @mcp.tool
-def seed_engine_data(novel_name: str, engine_type: str = "", content: str = "") -> str:
-    """写入或更新引擎参考内容到 DB。engine_type: scene/action/dialogue/environment/item/snapshot/ability/causality。
-    模型可从 skill 文件中读取内容后调此工具写入。content 为空则返回当前内容供参考。
-      novel_name: 小说名称
-    """
-    novel_id = _resolve_novel_id(novel_name)
-
-    if not engine_type:
-        rows = query(
-            "SELECT name, data FROM world_settings WHERE novel_id = %s AND category = 'engine_reference'",
-            (novel_id,)
-        )
-        result = {}
-        for r in rows:
-            d = r["data"]
-            result[r["name"]] = d.get("content","")[:100] if isinstance(d, dict) else ""
-        return json.dumps({"engines": result, "count": len(result)}, ensure_ascii=False)
-
-    if not content:
-        row = query(
-            "SELECT data FROM world_settings WHERE novel_id = %s AND category = 'engine_reference' AND name = %s",
-            (novel_id, engine_type), fetch="one"
-        )
-        if row:
-            d = row["data"]
-            return json.dumps({"engine": engine_type, "content": d.get("content","") if isinstance(d, dict) else d}, ensure_ascii=False)
-        return json.dumps({"engine": engine_type, "content": None}, ensure_ascii=False)
-
-    query(
-        "INSERT INTO world_settings (novel_id, category, name, data) "
-        "VALUES (%s, 'engine_reference', %s, %s) "
-        "ON CONFLICT (novel_id, category, name) DO UPDATE SET data = %s, updated_at = NOW()",
-        (novel_id, engine_type, json.dumps({"content": content}), json.dumps({"content": content})),
-        fetch="none"
-    )
-    return json.dumps({"ok": True, "engine_type": engine_type, "content_length": len(content)}, ensure_ascii=False)
-
-
-@mcp.tool
 def engine_detail(engine_type: str, novel_name: str) -> str:
     """加载写作引擎参考。从 world_settings 读取，模型可自定义覆盖。
       novel_name: 小说名称

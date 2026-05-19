@@ -266,5 +266,5 @@
 1. 在 DB `world_settings` 表的 `category` 列使用新值（已有索引，无需DDL）
 2. 在本模板 `## 分类专属模板` 部分追加新分类的 JSON 结构
 3. 在 `world_upsert` MCP 工具中无需修改（category 是动态参数）
-4. 在 `get_chapter_context` 的 `world_categories` 列表中追加新分类名
+4. 在 `get_chapter_context(novel_name, chapter_number, categories="新分类名")` 的 `categories` 参数中传入即可过滤；`load_mode="full"` 自动包含所有分类（无需修改代码）
 5. 创建对应的 `设定/世界观/{新分类名}.md` 文件

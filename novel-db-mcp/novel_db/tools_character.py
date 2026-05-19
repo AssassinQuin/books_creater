@@ -15,9 +15,11 @@ def character_create(novel_name: str, name: str, role: str = "npc",
                      appearance_detail: str = "", decision_engine: str = "",
                      voice_fingerprint: str = "", ability_system: str = "",
                      behavior_pattern: str = "", current_snapshot: str = "",
-                     growth_trajectory: str = "") -> str:
+                     growth_trajectory: str = "",
+                     distillation_tracked: bool = True) -> str:
     """创建人物。role: protagonist/ally/antagonist/mentor/rival/love_interest/npc
     appearance_detail/decision_engine/voice_fingerprint/ability_system/behavior_pattern/current_snapshot/growth_trajectory: JSON字符串
+    distillation_tracked: 是否开启人物蒸馏追踪（默认True）。主角/主要配角应追踪；临时NPC可关闭。
       novel_name: 小说名称
     """
     novel_id = _resolve_novel_id(novel_name)
@@ -37,6 +39,8 @@ def character_create(novel_name: str, name: str, role: str = "npc",
         _json_fields["current_snapshot"] = json.loads(current_snapshot)
     if growth_trajectory:
         _json_fields["growth_trajectory"] = json.loads(growth_trajectory)
+    if not distillation_tracked:
+        _json_fields["distillation_tracked"] = False
 
     base_cols = ("novel_id, name, role, faction_id, race, ability_level, "
                  "appearance, personality, background, goals, weaknesses, speech_style, catchphrase, "
@@ -72,7 +76,8 @@ def _character_update_by_id(character_id: int, name: str = "", role: str = "", f
                      appearance_detail: str = "", decision_engine: str = "",
                      voice_fingerprint: str = "", ability_system: str = "",
                      behavior_pattern: str = "", current_snapshot: str = "",
-                     growth_trajectory: str = "") -> str:
+                     growth_trajectory: str = "",
+                     distillation_tracked: bool = True) -> str:
     fields = {}
     if name: fields["name"] = name
     if role: fields["role"] = role
@@ -97,6 +102,7 @@ def _character_update_by_id(character_id: int, name: str = "", role: str = "", f
     if behavior_pattern: fields["behavior_pattern"] = json.loads(behavior_pattern)
     if current_snapshot: fields["current_snapshot"] = json.loads(current_snapshot)
     if growth_trajectory: fields["growth_trajectory"] = json.loads(growth_trajectory)
+    if not distillation_tracked: fields["distillation_tracked"] = False
     if not fields:
         return json.dumps({"ok": False, "error": "no valid fields"}, ensure_ascii=False)
     sets = [f"{k} = %s" for k in fields]
@@ -239,8 +245,10 @@ def character_update(novel_name: str, character_name: str, name: str = "", role:
                              appearance_detail: str = "", decision_engine: str = "",
                              voice_fingerprint: str = "", ability_system: str = "",
                              behavior_pattern: str = "", current_snapshot: str = "",
-                             growth_trajectory: str = "") -> str:
+                             growth_trajectory: str = "",
+                             distillation_tracked: bool = True) -> str:
     """按角色名更新人物信息（无需ID）。传入需要修改的字段，空值/零值会被忽略。
+    distillation_tracked: 人物蒸馏追踪开关（默认True），设为False可关闭临时NPC的蒸馏记录。
       novel_name: 小说名称
       character_name: 角色名
     """
@@ -252,7 +260,8 @@ def character_update(novel_name: str, character_name: str, name: str = "", role:
                             appearance, personality, background, goals, weaknesses, speech_style,
                             catchphrase, arc_notes, is_active, _status_json,
                             appearance_detail, decision_engine, voice_fingerprint, ability_system,
-                            behavior_pattern, current_snapshot, growth_trajectory)
+                            behavior_pattern, current_snapshot, growth_trajectory,
+                            distillation_tracked=distillation_tracked)
 
 
 @mcp.tool
@@ -763,20 +772,30 @@ def distillation_timeline(novel_name: str, character_name: str,
     if not char:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
 
-    valid_dims = ["decision_delta", "new_knowledge", "changed_beliefs", "relation_shifts",
-                  "voice_changes", "ability_changes", "arc_transition", "key_decision"]
-    if dimension not in valid_dims:
-        return json.dumps({"error": f"无效维度 '{dimension}'。可选: {', '.join(valid_dims)}"}, ensure_ascii=False)
+    _COL_MAP = {
+        "decision_delta": "decision_delta",
+        "new_knowledge": "new_knowledge",
+        "changed_beliefs": "changed_beliefs",
+        "relation_shifts": "relation_shifts",
+        "voice_changes": "voice_changes",
+        "ability_changes": "ability_changes",
+        "arc_transition": "arc_transition",
+        "key_decision": "key_decision",
+    }
+    col = _COL_MAP.get(dimension)
+    if not col:
+        valid = ", ".join(_COL_MAP)
+        return json.dumps({"error": f"无效维度 '{dimension}'。可选: {valid}"}, ensure_ascii=False)
 
-    rows = query(
-        f"SELECT cde.{dimension}, c.number as chapter_number, c.title as chapter_title "
+    sql = (
+        f"SELECT cde.{col} as value, c.number as chapter_number, c.title as chapter_title "
         "FROM character_distillation_evolution cde "
         "JOIN chapters c ON cde.chapter_id = c.id "
-        "WHERE cde.character_id = %s AND cde.{dimension} IS NOT NULL "
-        "AND cde.{dimension} != '{{}}' AND cde.{dimension} != '[]' "
-        "ORDER BY c.number",
-        (char["id"],)
+        f"WHERE cde.character_id = %s AND cde.{col} IS NOT NULL "
+        f"AND cde.{col} != '{{}}' AND cde.{col} != '[]' "
+        "ORDER BY c.number"
     )
+    rows = query(sql, (char["id"],))
 
     result = {
         "character": character_name,

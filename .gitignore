@@ -19,6 +19,9 @@ Thumbs.db
 # 本地配置（含绝对路径的权限白名单）
 .claude/settings.local.json
 
+# 本地 SQLite 副本（非 data/novel.db）
+novel-db-mcp/novel.db
+
 # Python
 __pycache__/
 *.py[cod]

@@ -2,9 +2,9 @@
 name: novel-planner-volume
 description: 卷级大纲设计。把握小说脉络——事件架构+因果链+人物弧光+伏笔节奏。不做细节注册，留给正文写作阶段。触发词：设计卷/卷大纲/章节规划/事件设计
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*
-depends_on: novel-planner, lorecraft, engines/causality, engines/relationship, engines/scene-type, engines/scene-composition
+depends_on: novel-planner, lorecraft, engines/causality, engines/relationship, engines/scene-type, engines/scene-composition, lorecraft/references/quickref
 lifecycle: core
-version: "1.4.0"
+version: "1.5.0"
 ---
 
 # 卷级大纲设计
@@ -58,9 +58,11 @@ consistency_guard(novel_name="NOVEL_NAME", auto_sync=True)
 
 ### 0.2 加载全书框架
 ```python
-Read("novels/{小说名}/设定/大纲/全书框架.md")
-Read("novels/{小说名}/设定/大纲/全书脉络.md")
-Read("novels/{小说名}/设定/大纲/卷级目标卡.md")
+# 检查文件存在再加载，不存在则跳过（框架文件非必需）
+for f in ["全书框架.md", "全书脉络.md", "卷级目标卡.md"]:
+    path = f"novels/{{小说名}}/设定/大纲/{f}"
+    if os.path.exists(path):
+        Read(path)
 ```
 
 ### 0.3 加载本卷数据
@@ -68,20 +70,48 @@ Read("novels/{小说名}/设定/大纲/卷级目标卡.md")
 Read("novels/{小说名}/设定/大纲/V{N}-{卷名}.md")
 character_list(novel_name="NOVEL_NAME")
 foreshadow_list(novel_name="NOVEL_NAME", status='planted')
-world_query(novel_name="NOVEL_NAME")
+world_query(novel_name="NOVEL_NAME", volume="V{N}")  # 按卷过滤，减少无关设定
 ```
 
-### 0.4 引擎加载（按步骤分批）
+### 0.4 引擎加载（按步骤分批，编排器统一加载后分发）
 
-编排器在启动对应 Agent 时通过 `skill_loader` 传入引擎内容，**不预加载全部到编排器上下文**。
+编排器按步骤顺序加载所需引擎，**打包后传入对应 Agent**。编排器上下文只保留加载清单，不预加载全部引擎内容到编排器上下文。
 
-- **Step 1** (事件架构师)：causality, relationship
-- **Step 2** (章节设计师)：scene-type, scene-composition, author-voice(+4变体), anti-ai-quickref
-- **Step 3** (三视角审查)：reader/author/character-perspective-agent
-- **共享** (Step 1/2)：shared-constraints
-- **🔒全程强制**：术语规范四件套(lorecraft-core-principles + term-map + quickref) + 世界元素索引
+**分发原则**：编排器加载完的文件直接打包传 Agent，Agent 自主使用。但对 Step 3 审查 Agent 采用**精简分发**——编排器预提取关键信息（术语禁止列表+势力字根表），作为字符串直接注入 Agent 指令，Agent **不再自主加载任何引擎或 lorecraft 文件**。
+
+- **Step 1** (事件架构师)：causality, relationship, shared-constraints, lorecraft四件套, world-element-registry
+- **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-quickref, shared-constraints, lorecraft四件套, world-element-registry
+  + 声音层：编排器不从引擎文件全量加载 author-voice×5（详见 §0.4.5 声音层头部提取），而是用 Read(limit=5) 提取每个变体的**头部摘要**（标题+加载时机行），编译为速查表注入 Agent
+- **Step 3** (三视角审查)：reader/author/character-perspective-agent + **精简分发**（只给 quickref 禁止术语+势力字根摘要，不给全量）
+  - ❌已移除：world-element-registry, shared-constraints, lorecraft-core-principles, term-map
 
 完整清单详见 supporting-info §引擎加载清单。
+
+### 0.4.5 作者声音层头部提取（替代 author-voice 全量加载）
+
+编排器**不通过 skill_loader 也不设独立查表文件**，而是直接 Read 每个 author-voice 变体文件的**前 5 行**（标题+加载时机行），提取关键关联：
+
+```python
+# 提取各声音变体头部（标题+加载时机）编译为速查表
+voice_layer_headers = {}
+files = {
+    "battle":  ".claude/skills/engines/author-voice-battle.md",
+    "emotion": ".claude/skills/engines/author-voice-emotion.md",
+    "daily":   ".claude/skills/engines/author-voice-daily.md",
+    "mystery": ".claude/skills/engines/author-voice-mystery.md",
+}
+for variant, path in files.items():
+    lines = Read(path, limit=5)  # 只读前5行
+    # 第1行: # 作者声音 — {类型}剧情层
+    # 第2-3行: > 加载时机：{场景类型}。在通用层基础上叠加。
+    voice_layer_headers[variant] = lines
+
+# 编译为速查表字符串直接注入 Agent 2 指令
+# → 事件类型=情感/离别/重逢 → 标记声音层=emotion
+# → 事件类型=战斗/动作 → 标记声音层=battle
+```
+
+**优势**：读取量仅 ~25 行（5 文件×前 5 行），约 1.5 KB，替代 17.5 KB 全量加载。**引擎源文件是唯一权威源，无需独立维护查表文件**。novel-chapter-writer 正文阶段仍然加载完整引擎文件。
 
 ### 0.5 引擎加载验证（确保Agent拿到完整约束）
 
@@ -128,12 +158,37 @@ Agent 必须遵守六类规则（POV时间线铁律、内容密度、伏笔冰�
 
 ## Step 2: Agent — 章节设计师
 
-**Agent指令**: `agents/chapter-designer.md` | **引擎**: scene-type + scene-composition + author-voice(+变体)
+**Agent指令**: `agents/chapter-designer.md` | **引擎**: scene-type + scene-composition + 声音层头部提取(§0.4.5)
 
 ### 编排器操作
-1. 打包：Step 1 确认的事件架构 + 角色蒸馏卡 + 世界观索引 + 引擎内容 + 🔒术语规范 + 🔒世界元素索引
+1. 打包：**传递摘要**（Step 1 的压缩版——见下方"Step 1→Step 2 手递格式"）+ 角色蒸馏卡 + 世界观索引 + 引擎内容 + 🔒术语规范 + 🔒世界元素索引
 2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + agent 指令
 3. Agent 输出逐章大纲
+
+### Step 1→Step 2 手递格式（结构化的传递摘要）
+
+编排器从 Step 1 输出的完整事件架构中提取以下字段打包，**不传全量事件架构**：
+
+```
+## 传递摘要（仅用于Step 2的结构化输入）
+
+### 章级事件流
+Ch{N}: [事件A→事件B→事件C] | 功能: {起/承/转/合}
+Ch{N+1}: [事件D→事件E→事件F→事件G] | 功能: {起/承/转/合}
+
+### 角色弧线备忘
+{角色X}: {卷初状态} → {关键触发} → {卷末状态}
+{角色Y}: {不变+理由}
+
+### 伏笔操作清单
+| 操作 | 伏笔ID | 预期章节 | 表面动机 |
+|------|--------|---------|---------|
+| 埋设 | F{N} | Ch{N} | {动作动机} |
+| 深化 | F{M} | Ch{N+2} | {场景动机} |
+| 回收 | F{K} | Ch{N+3} | {触发条件} |
+```
+
+**重要**：这是编排器的手递动作，不是 Step 1 的输出格式。Step 1 Agent 仍按 `event-architect.md` 输出完整版（含因果链推理和悬念锚点）。编排器在 Step 1 输出中**提取传递摘要**，传给 Step 2 Agent。
 
 ### 🔒检查点A2：确认逐章大纲
 
@@ -143,18 +198,20 @@ Agent 必须遵守六类规则（POV时间线铁律、内容密度、伏笔冰�
 
 **修改循环**：用户提修改意见 → 编排器局部修改指定章节 → 重新展示 → 确认OK → 进入三视角审查。
 
-## Step 3: 三视角审查（3Agent 并行）
+## Step 3: 三视角审查（3Agent 并行·精简分发）
 
-| Agent | 审查维度 | 运行模式 |
-|-------|---------|---------|
-| **Agent-读者** | 开篇钩子/信息层级/悬念分布/爽点节奏/弃文风险 | 独立并行 |
-| **Agent-作者** | 起承转合/因果链穿透/伏笔层级/主题一致性 | 独立并行 |
-| **Agent-人物** | 弧光对齐/动机充分/选择必然/代价明确/OOC检测 | 独立并行 |
+| Agent | 审查维度 | 运行模式 | 所获数据 |
+|-------|---------|---------|---------|
+| **Agent-读者** | 开篇钩子/信息层级/悬念分布/爽点节奏/弃文风险 | 独立并行 | 逐章大纲+角色出场表+🔒术语速查摘要 |
+| **Agent-作者** | 起承转合/因果链穿透/伏笔层级/主题一致性 | 独立并行 | 逐章大纲+🔒术语速查摘要 |
+| **Agent-人物** | 弧光对齐/动机充分/选择必然/代价明确/OOC检测 | 独立并行 | 逐章大纲+角色蒸馏卡+🔒术语速查摘要 |
 
 ### 编排器操作
-1. 打包逐章大纲 + 角色数据 + 🔒术语规范 → 同时传给 3 个 Agent
+1. 打包逐章大纲 + 🔒**术语精简摘要**（编排器预提取 quickref 中的禁止术语清单+势力字根表，直接注入）
 2. 3Agent 同时启动（并行），各自加载视角引擎
 3. 等待全部返回 → 交叉检查(读者vs作者/读者vs人物/作者vs人物) → 🔒术语交叉扫描 → 输出审计报告
+
+> 📌 **精简分发原则**：编排器在 Step 0.4 已加载完整的术语规范文件。Step 3 启动 Agent 时，编排器将 quickref 中最关键的部分——**禁止术语列表（§6.1）和势力字根表（§6.3）**——提取为一段摘要字符串直接注入 Agent 指令。Step 3 Agent **不自主加载** world-element-registry、shared-constraints、lorecraft-core-principles、term-map 或任何其他文件。**这是强制约束——审查 Agent 只需要做术语验证，不需要知道命名方法论。**
 
 ### 交叉检查 & 问题分级
 **核心原则**：人物 > 读者 > 作者
@@ -234,7 +291,7 @@ B1: V{N}《{卷名}》卷级大纲{变更描述}
 
 ```
 Step 0: 定位影响范围
-  ↓  读取现有逐章大纲，确定用户要改的章节
+  ↓  读取目标章节行范围（不读全卷卷纲）：编排器利用 shell 提取修改章对应的 section 行范围
   ↓  检查因果链影响：改动是否波及邻章？
 Step 1: 只修改目标章节
   ↓  编排器直接修改指定章节的场景/事件
@@ -292,36 +349,41 @@ print(f"审计模式: {mode} | 范围: {scope}")
 
 ## 引擎加载清单（Step 0.4 完整列表）
 
+编排器按步骤加载并分发，**Step 3 采用精简分发**——编排器预提取 quickref 的禁止术语+势力字根，直接注入指令，Agent 不自主加载任何引擎文件。
+
 ```
 Step 1 (事件架构师) 需要：
   skill_loader("novel-planner-volume", "engine", "causality")
   skill_loader("novel-planner-volume", "engine", "relationship")
+  skill_loader("novel-planner-volume", "agent", "shared-constraints")
+  Read(".claude/skills/lorecraft/references/core-principles.md")   # 核心原则+禁止术语+四步法
+  Read(".claude/skills/lorecraft/references/term-map.md")          # 现代→灵能术语映射表
+  Read(".claude/skills/lorecraft/references/quickref.md")           # 速查卡
+  Read(".claude/skills/engines/world-element-registry.md")         # 已注册元素索引
 
 Step 2 (章节设计师) 需要：
   skill_loader("novel-planner-volume", "engine", "scene-type")
   skill_loader("novel-planner-volume", "engine", "scene-composition")
-  skill_loader("novel-planner-volume", "engine", "author-voice")
-  skill_loader("novel-planner-volume", "engine", "author-voice-emotion")
-  skill_loader("novel-planner-volume", "engine", "author-voice-daily")
-  skill_loader("novel-planner-volume", "engine", "author-voice-battle")
-  skill_loader("novel-planner-volume", "engine", "author-voice-mystery")
   skill_loader("novel-planner-volume", "engine", "anti-ai-quickref")
+  skill_loader("novel-planner-volume", "agent", "shared-constraints")
+  Read(".claude/skills/lorecraft/references/core-principles.md")
+  Read(".claude/skills/lorecraft/references/term-map.md")
+  Read(".claude/skills/lorecraft/references/quickref.md")
+  Read(".claude/skills/engines/world-element-registry.md")
+  # 声音层：编排器 Read(author-voice-{variant}.md, limit=5) 提取头部速查，详见 §0.4.5
+  Read(".claude/skills/engines/author-voice.md", limit=3)
+  Read(".claude/skills/engines/author-voice-battle.md", limit=5)
+  Read(".claude/skills/engines/author-voice-emotion.md", limit=5)
+  Read(".claude/skills/engines/author-voice-daily.md", limit=5)
+  Read(".claude/skills/engines/author-voice-mystery.md", limit=5)
 
 Step 3 (三视角审查) 需要：
   skill_loader("novel-planner-volume", "engine", "reader-perspective-agent")
   skill_loader("novel-planner-volume", "engine", "author-perspective-agent")
   skill_loader("novel-planner-volume", "engine", "character-perspective-agent")
-
-共享（Step 1/2 都需要）：
-  skill_loader("novel-planner-volume", "agent", "shared-constraints")
-
-🔒 术语规范（全程强制——所有 Agent 写前必读、写后自检）：
-  Read(".claude/skills/lorecraft/references/core-principles.md")    # 核心原则+禁止术语+四步法精简
-  Read(".claude/skills/lorecraft/references/term-map.md")          # 现代→灵能术语映射表
-  Read(".claude/skills/lorecraft/references/quickref.md")           # 速查卡
-
-🔒 世界元素索引（全程强制——Agent 1/2 输入必须包含）：
-  Read(".claude/skills/engines/world-element-registry.md")
+  # 📌 精简分发：编排器预提取 quickref 的禁止术语清单+势力字根表，作为字符串注入指令。
+  # ❌ 不加载：world-element-registry, shared-constraints, lorecraft-core-principles, term-map
+  # Step 3 Agent 收到的术语约束仅为精简摘要，禁止自行加载文件。
 ```
 
 ## 引擎加载验证（Step 0.5 完整逻辑）
@@ -337,23 +399,27 @@ loaded_resources = {
     # Step 2 引擎
     "Step2-场景类型(scene-type)": scene_type_loaded,
     "Step2-场面合成(scene-composition)": scene_composition_loaded,
-    "Step2-作者声音(author-voice)": author_voice_loaded,
-    "Step2-作者声音-情感(author-voice-emotion)": author_voice_emotion_loaded,
-    "Step2-作者声音-日常(author-voice-daily)": author_voice_daily_loaded,
-    "Step2-作者声音-战斗(author-voice-battle)": author_voice_battle_loaded,
-    "Step2-作者声音-悬疑(author-voice-mystery)": author_voice_mystery_loaded,
     "Step2-反AI速查(anti-ai-quickref)": anti_ai_loaded,
-    # Step 3 引擎
+    "Step2-声音层头部(voice-battle)": voice_battle_header_loaded,
+    "Step2-声音层头部(voice-emotion)": voice_emotion_header_loaded,
+    "Step2-声音层头部(voice-daily)": voice_daily_header_loaded,
+    "Step2-声音层头部(voice-mystery)": voice_mystery_header_loaded,
+    # 共享约束
+    "Step1-共享约束(shared-constraints)": shared_loaded_s1,
+    "Step2-共享约束(shared-constraints)": shared_loaded_s2,
+    # 🔒 术语规范（Step 1/2 强制，Step 3 精简分发）
+    "Step1-术语核心原则(lorecraft-core)": lorecraft_loaded_s1,
+    "Step1-术语映射(term-map)": term_map_loaded_s1,
+    "Step1-术语速查(quickref)": quickref_loaded_s1,
+    "Step1-世界元素索引(world-element-registry)": registry_loaded_s1,
+    "Step2-术语核心原则(lorecraft-core)": lorecraft_loaded_s2,
+    "Step2-术语映射(term-map)": term_map_loaded_s2,
+    "Step2-术语速查(quickref)": quickref_loaded_s2,
+    "Step2-世界元素索引(world-element-registry)": registry_loaded_s2,
+    # Step 3 引擎（只加载视角引擎，术语约束为编排器预提取的精简摘要）
     "Step3-读者视角(reader-perspective)": reader_loaded,
     "Step3-作者视角(author-perspective)": author_loaded,
     "Step3-人物视角(character-perspective)": character_loaded,
-    # 共享
-    "共享约束(shared-constraints)": shared_loaded,
-    # 🔒 术语规范四件套（强制）
-    "术语核心原则(lorecraft-core)": lorecraft_loaded,
-    "术语映射(term-map)": term_map_loaded,
-    "术语速查(quickref)": quickref_loaded,
-    "世界元素索引(world-element-registry)": world_element_registry_loaded,
 }
 
 failed = [k for k, v in loaded_resources.items() if not v]
@@ -506,14 +572,27 @@ def check_result(op_name, result):
     if '"ok": false' in result or '"error"' in result:
         errors.append(f"{op_name} 失败: {result}")
 
-# 1. 更新卷级信息
-result = volume_update_by_number(novel_name="NOVEL_NAME", number={volume_number}, main_plotlines=[...], notes="...")
-check_result("volume_update", result)
+# 1. 创建/更新卷级信息（走MCP：新卷用 volume_create，已有卷用 volume_update）
+if is_new_volume:
+    result = volume_create(novel_name="NOVEL_NAME", number={volume_number}, title="...", main_plotlines=[...], notes="...")
+else:
+    result = volume_update(novel_name="NOVEL_NAME", number={volume_number}, title="...", main_plotlines=[...], notes="...")
+check_result("volume_save", result)
 
 # 2. 规划章节（每章一条）
 for chapter in chapters:
     result = chapter_plan(novel_name="NOVEL_NAME", number, title, outline, chapter_type, volume_id)
     check_result(f"chapter_plan Ch{chapter.number}", result)
+    # 2a. 同时创建每章的场景大纲（如有结构化场景数据）
+    if hasattr(chapter, 'scenes'):
+        for scene in chapter.scenes:
+            result = scene_create(
+                novel_name="NOVEL_NAME", chapter_number=chapter.number,
+                scene_number=scene.number, location=scene.location,
+                characters_involved=scene.characters,
+                conflict=scene.conflict, emotion_type=scene.emotion_type,
+                key_beats=scene.key_beats, notes=scene.notes)
+            check_result(f"scene_create Ch{chapter.number} S{scene.number}", result)
 
 # 3. 埋设伏笔
 for foreshadow in foreshadows:
@@ -569,6 +648,15 @@ for thread in volume_threads:
         related_foreshadows=json.dumps(thread.related_foreshadows))
     check_result(f"plot_thread_create-{thread.name}", result)
 
+# 7a. 验证暗线/支线创建成功
+result = plot_thread_list(novel_name="NOVEL_NAME")
+created_threads = json.loads(result)
+if len(created_threads) >= len(volume_threads):
+    print(f"✅ {len(volume_threads)}个暗线/支线注册确认成功")
+else:
+    print(f"⚠️ 期望 {len(volume_threads)} 个暗线，实际查询到 {len(created_threads)} 个")
+    errors.append("暗线/支线注册未完全成功")
+
 # 8. 更新已有暗线/支线状态
 for thread in updated_threads:
     result = plot_thread_update(
@@ -593,7 +681,8 @@ else:
 
 ## 声音适配规则
 
-**相关引擎**: `engines/author-voice.md`（作者声音三层架构）+ 5个变体文件：
+🔁 **novel-planner-volume 侧（章节设计师）**：编排器 Read(author-voice-{variant}.md, limit=5) 提取头部摘要①，编译速查表注入 Agent 2。不加载全量 author-voice 引擎。
+🔁 **novel-chapter-writer 侧（正文生成）**：正文写作阶段按章内标注的声音层标签，加载对应的全量 author-voice 引擎文件：
 - `engines/author-voice-emotion.md` — 情感场景的感性与克制平衡
 - `engines/author-voice-daily.md` — 日常场景的松弛与真实感
 - `engines/author-voice-battle.md` — 战斗场景的节奏与压迫感

@@ -4,6 +4,28 @@ from .db import mcp, query
 from .resolvers import _resolve_novel_id, _resolve_chapter_id
 
 
+def _save_chapter_summary_internal(chapter_id: int, summary: str,
+                                    key_events: str = "[]",
+                                    characters_involved: list = None,
+                                    new_foreshadows: list = None,
+                                    resolved_foreshadows: list = None,
+                                    dimension_snapshot: str = "{}") -> None:
+    """Internal: upsert chapter_summaries (shared by chapter_save_summary, chapter_update_metadata, writing_finish)."""
+    query(
+        "INSERT INTO chapter_summaries (chapter_id, summary, key_events, characters_involved, "
+        "new_foreshadows, resolved_foreshadows, dimension_snapshot) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s) "
+        "ON CONFLICT (chapter_id) DO UPDATE SET "
+        "summary = %s, key_events = %s, characters_involved = %s, "
+        "new_foreshadows = %s, resolved_foreshadows = %s, dimension_snapshot = %s",
+        (chapter_id, summary, key_events, characters_involved or [],
+         new_foreshadows or [], resolved_foreshadows or [], dimension_snapshot,
+         summary, key_events, characters_involved or [],
+         new_foreshadows or [], resolved_foreshadows or [], dimension_snapshot),
+        fetch="none"
+    )
+
+
 @mcp.tool
 def chapter_plan(novel_name: str, number: int, title: str = "",
                  outline: str = "", chapter_type: str = "normal",
@@ -70,26 +92,16 @@ def chapter_save_summary(novel_name: str, chapter_number: int, summary: str,
     ci = characters_involved or []
     nf = new_foreshadows or []
     rf = resolved_foreshadows or []
-    query(
-        "INSERT INTO chapter_summaries (chapter_id, summary, key_events, characters_involved, "
-        "new_foreshadows, resolved_foreshadows, dimension_snapshot) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s) "
-        "ON CONFLICT (chapter_id) DO UPDATE SET "
-        "summary = %s, key_events = %s, characters_involved = %s, "
-        "new_foreshadows = %s, resolved_foreshadows = %s, dimension_snapshot = %s",
-        (chapter_id, summary, ke, ci, nf, rf, ds,
-         summary, ke, ci, nf, rf, ds),
-        fetch="none"
-    )
+    _save_chapter_summary_internal(chapter_id, summary, ke, ci, nf, rf, ds)
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
 @mcp.tool
-def chapter_get_context(novel_name: str, chapter_number: int,
-                        load_mode: str = "smart",
-                        regions: str = "", faction_names: str = "",
-                        categories: str = "") -> str:
-    """获取写作上下文：前N章摘要 + 人物状态 + 未回收伏笔 + 世界观（分层加载）+ 章节大纲
+def get_chapter_context(novel_name: str, chapter_number: int,
+                         load_mode: str = "smart",
+                         regions: str = "", faction_names: str = "",
+                         categories: str = "") -> str:
+    """获取写某章所需的全部上下文（聚合查询，一次调用替代10+单独调用）。
     
     加载模式(load_mode):
       - "smart"(默认): 根据章节所属卷级自动推断需要加载的地区和势力，只加载相关设定
@@ -104,10 +116,20 @@ def chapter_get_context(novel_name: str, chapter_number: int,
       regions: 逗号分隔地区(仅targeted模式生效，如'外围,北境')
       faction_names: 逗号分隔势力名(仅targeted模式)
       categories: 逗号分隔类别(仅targeted模式，如'ability,location')
+    
+    返回:
+      - 章节信息 + 卷级大纲 + 前N章摘要
+      - 出场角色深度信息（外观/性格/说话风格/能力/状态/关系+快照）
+      - 未回收伏笔 + 活跃线索
+      - 分层加载的世界观
+      - 人物关系
+      - 时间线（前3章）
+      - 质量历史
+      - 写作提示词（含规则+作者DNA）
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    result = {}
+    result = {"chapter_number": chapter_number}
 
     ch = query("SELECT * FROM chapters WHERE novel_id = %s AND number = %s",
                (novel_id, chapter_number), fetch="one")
@@ -118,73 +140,146 @@ def chapter_get_context(novel_name: str, chapter_number: int,
     # Determine volume from chapter's volume_id
     volume_str = ""
     if ch.get("volume_id"):
-        vol = query("SELECT number FROM volumes WHERE id = %s", (ch["volume_id"],), fetch="one")
+        vol = query("SELECT * FROM volumes WHERE id = %s", (ch["volume_id"],), fetch="one")
         if vol:
             volume_str = f"V{vol['number']}"
-    
-    # Recent chapter summaries
-    prev = query(
-        "SELECT cs.summary, cs.dimension_snapshot FROM chapter_summaries cs "
+            result["volume"] = {"number": vol["number"], "title": vol["title"],
+                                "main_plotlines": vol["main_plotlines"], "notes": vol.get("notes", "")}
+
+    # Recent chapter summaries (with full data)
+    prev_summaries = query(
+        "SELECT cs.*, c.number FROM chapter_summaries cs "
         "JOIN chapters c ON cs.chapter_id = c.id "
         "WHERE c.novel_id = %s AND c.number < %s ORDER BY c.number DESC LIMIT 3",
         (novel_id, chapter_number)
     )
-    result["recent_summaries"] = [dict(r) for r in prev]
+    result["prev_summaries"] = [dict(r) for r in prev_summaries]
 
-    # Active characters (filtered by volume appearance when possible)
-    chars = query("SELECT id, name, role, ability_level, status FROM characters "
-                  "WHERE novel_id = %s AND is_active = TRUE", (novel_id,))
-    result["active_characters"] = [dict(r) for r in chars]
-
-    # Unresolved foreshadows
+    # All active characters with details + relations + snapshots
     foreshadows = query(
-        "SELECT id, description, planted_chapter_id FROM foreshadows "
-        "WHERE novel_id = %s AND status = 'planted'", (novel_id,))
+        "SELECT * FROM foreshadows WHERE novel_id = %s AND status = 'planted' ORDER BY importance, id",
+        (novel_id,)
+    )
     result["unresolved_foreshadows"] = [dict(r) for r in foreshadows]
+
+    threads = query("SELECT * FROM plot_threads WHERE novel_id = %s AND status = 'active'", (novel_id,))
+    result["active_threads"] = [dict(r) for r in threads]
+
+    all_chars = query("SELECT * FROM characters WHERE novel_id = %s AND is_active = TRUE", (novel_id,))
+    char_details = []
+    for c in all_chars:
+        cd = dict(c)
+        rels = query(
+            "SELECT cr.relation_type, cr.description, cr.intensity, cr.status, "
+            "c1.name as from_name, c2.name as to_name "
+            "FROM character_relations cr "
+            "JOIN characters c1 ON cr.from_character_id = c1.id "
+            "JOIN characters c2 ON cr.to_character_id = c2.id "
+            "WHERE cr.novel_id = %s AND (c1.id = %s OR c2.id = %s)",
+            (novel_id, c["id"], c["id"])
+        )
+        cd["relations"] = [dict(r) for r in rels]
+        snap = query(
+            "SELECT css.* FROM character_state_snapshots css "
+            "JOIN chapters ch2 ON css.chapter_id = ch2.id "
+            "WHERE css.character_id = %s ORDER BY ch2.number DESC LIMIT 1",
+            (c["id"],), fetch="one"
+        )
+        if snap:
+            cd["latest_snapshot"] = dict(snap)
+        char_details.append(cd)
+    result["character_details"] = char_details
+
+    # Relations summary
+    relations = query(
+        "SELECT cr.relation_type, cr.description, cr.intensity, cr.status, "
+        "c1.name as from_name, c2.name as to_name "
+        "FROM character_relations cr "
+        "JOIN characters c1 ON cr.from_character_id = c1.id "
+        "JOIN characters c2 ON cr.to_character_id = c2.id "
+        "WHERE cr.novel_id = %s",
+        (novel_id,)
+    )
+    result["relations"] = [dict(r) for r in relations]
 
     # ── World Settings: Layered Loading ──
     if load_mode == "full":
-        # Load everything (legacy behavior)
-        world = query("SELECT category, name, data, region, volume_range, faction_id FROM world_settings WHERE novel_id = %s AND status = 'active'", (novel_id,))
+        world = query(
+            "SELECT category, name, data, region, volume_range, faction_id "
+            "FROM world_settings WHERE novel_id = %s AND status = 'active'",
+            (novel_id,)
+        )
         result["world_settings"] = [dict(r) for r in world]
-        result["_load_info"] = {"mode": "full", "count": len(world), "warning": "full模式加载全部设定，数据量大"}
+        result["_load_info"] = {"mode": "full", "count": len(world),
+                                "warning": "full模式加载全部设定，数据量大"}
     else:
-        # Use smart/volume/targeted loading via world_load_context logic
-        _load_world_context(result, novel_id, volume_str, load_mode, regions, faction_names, categories)
+        _load_world_context(result, novel_id, volume_str, load_mode,
+                            regions, faction_names, categories)
+
+    # Timeline (last 3 chapters)
+    timeline = query(
+        "SELECT te.*, c.number as chapter_number FROM timeline_events te "
+        "JOIN chapters c ON te.chapter_id = c.id "
+        "WHERE c.novel_id = %s AND c.number >= %s ORDER BY c.number",
+        (novel_id, max(1, chapter_number - 3))
+    )
+    result["timeline"] = [dict(r) for r in timeline]
+
+    # Quality history + writing prompt
+    from .prompts import _get_quality_history, _build_writing_prompt
+    quality_history = _get_quality_history(novel_id, chapter_number)
+    result["quality_history"] = quality_history
+    result["writing_prompt"] = _build_writing_prompt(
+        ch=dict(ch),
+        summaries=[dict(r) for r in prev_summaries],
+        chars=[{"id": c["id"], "name": c["name"], "role": c["role"]} for c in all_chars],
+        foreshadows=[dict(r) for r in foreshadows],
+        world_index=[{"category": cat, "name": w["name"]}
+                      for cat, items in result.get("world_settings", {}).items()
+                      for w in items] if isinstance(result.get("world_settings"), dict) else [],
+        vol=result.get("volume", {}),
+        quality_history=quality_history,
+    )
 
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
+def _load_volume_context_map(novel_id: int) -> dict:
+    """Load volume→region/faction mapping from DB. Falls back to empty if not configured.
+    
+    DB entries are stored in world_settings(category='volume_context_map', name='V{num}').
+    Each entry's data field: {"regions": "外围,北境", "factions": "壁盾军团"}
+    """
+    rows = query(
+        "SELECT name, data FROM world_settings WHERE novel_id = %s AND category = 'volume_context_map'",
+        (novel_id,)
+    )
+    mapping = {}
+    for row in rows:
+        vol_num = 0
+        vname = row["name"]
+        if vname.startswith("V"):
+            try:
+                vol_num = int(vname[1:])
+            except ValueError:
+                continue
+        d = row["data"]
+        if isinstance(d, dict) and ("regions" in d or "factions" in d):
+            mapping[vol_num] = d
+    return mapping
+
+
 def _load_world_context(result: dict, novel_id: int, volume_str: str,
                          load_mode: str, regions: str, faction_names: str, categories: str):
-    """Internal: layered world context loading for chapter_get_context."""
+    """Internal: layered world context loading for chapter_get_context / get_chapter_context."""
     
-    # Smart mode: infer regions and factions from volume
+    # Smart mode: infer regions and factions from volume (via DB-stored mapping)
     if load_mode == "smart" and volume_str:
         vol_num = int(volume_str.replace("V", "")) if volume_str.startswith("V") else 0
-        
-        # Volume-to-region-faction mapping (based on the story outline)
-        vol_mapping = {
-            1: {"regions": "外围,北境", "factions": "壁盾军团"},
-            2: {"regions": "外围,中域", "factions": "壁盾军团,灵枢"},
-            3: {"regions": "外围,北境", "factions": "壁盾军团"},
-            4: {"regions": "中域,内城", "factions": "灵枢"},
-            5: {"regions": "中域,全域", "factions": "星火社,教会"},
-            6: {"regions": "全域", "factions": "壁盾军团,灵枢,教会"},
-            7: {"regions": "全域", "factions": "灵枢,星火社"},
-            8: {"regions": "全域", "factions": "灵枢,教会"},
-            9: {"regions": "全域", "factions": "灵枢,教会,壁盾军团"},
-            10: {"regions": "全域", "factions": "裔族,教会"},
-            11: {"regions": "内城,全域", "factions": "灵枢"},
-            12: {"regions": "全域", "factions": "教会,裔族"},
-            13: {"regions": "全域", "factions": "灵枢,教会"},
-            14: {"regions": "全域", "factions": "壁盾军团,灵枢,教会,裔族"},
-            15: {"regions": "全域", "factions": ""},
-        }
-        
+        vol_mapping = _load_volume_context_map(novel_id)
         mapping = vol_mapping.get(vol_num, {"regions": "全域", "factions": ""})
-        regions = mapping["regions"]
-        faction_names = mapping["factions"]
+        regions = mapping.get("regions", "全域")
+        faction_names = mapping.get("factions", "")
     elif load_mode == "volume":
         # Just filter by volume, no region/faction inference
         regions = ""
@@ -252,88 +347,6 @@ def _load_world_context(result: dict, novel_id: int, volume_str: str,
         "count": len(result_rows),
         "total_available": len(list(rows)),
     }
-
-
-@mcp.tool
-def chapter_plan_batch(novel_name: str, chapters_json: str = "[]") -> str:
-    """批量规划章节（卷级大纲用，一次创建15-20章）。
-
-    参数:
-      novel_name: 小说名称
-      chapters_json: 章节数组JSON，每项: {"number": 1, "title": "标题", "outline": "大纲", "chapter_type": "normal", "volume_number": 1}
-    """
-    novel_id = _resolve_novel_id(novel_name)
-
-    chapters = json.loads(chapters_json)
-    results = []
-    for ch in chapters:
-        vol = query("SELECT id FROM volumes WHERE novel_id=%s AND number=%s", (novel_id, ch.get("volume_number", 1)), fetch="one")
-        vol_id = vol["id"] if vol else None
-        r = query(
-            "INSERT INTO chapters (novel_id, number, title, outline, chapter_type, volume_id) "
-            "VALUES (%s, %s, %s, %s, %s, %s) "
-            "ON CONFLICT (novel_id, number) DO UPDATE SET title=%s, outline=%s, chapter_type=%s, volume_id=%s, updated_at=NOW() "
-            "RETURNING id",
-            (novel_id, ch["number"], ch.get("title", ""), ch.get("outline", ""), ch.get("chapter_type", "normal"), vol_id,
-             ch.get("title", ""), ch.get("outline", ""), ch.get("chapter_type", "normal"), vol_id),
-            fetch="one"
-        )
-        results.append({"number": ch["number"], "id": r["id"]})
-    return json.dumps({"ok": True, "created": len(results), "chapters": results}, ensure_ascii=False)
-
-
-@mcp.tool
-def chapter_update_metadata(novel_name: str, chapter_number: int,
-                            summary: str = "", key_events: str = "[]",
-                            characters_involved: str = "[]",
-                            new_foreshadows: str = "[]",
-                            resolved_foreshadows: str = "[]") -> str:
-    """更新章节元数据（不重新校验正文）。修订后同步DB用。
-
-    参数:
-      novel_name: 小说名称
-      chapter_number: 章节序号
-      summary: 章节摘要
-      key_events: 关键事件(JSON数组)
-      characters_involved: 参与角色(JSON数组)
-      new_foreshadows: 新埋伏笔(JSON数组)
-      resolved_foreshadows: 已回收伏笔(JSON数组)
-    """
-    novel_id = _resolve_novel_id(novel_name)
-
-    ch = query("SELECT id FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_number), fetch="one")
-    if not ch:
-        return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
-    existing = query("SELECT chapter_id FROM chapter_summaries WHERE chapter_id=%s", (ch["id"],), fetch="one")
-    if existing:
-        sets = []
-        vals = []
-        if summary:
-            sets.append("summary = %s")
-            vals.append(summary)
-        if key_events != "[]":
-            sets.append("key_events = %s::jsonb")
-            vals.append(key_events)
-        if characters_involved != "[]":
-            sets.append("characters_involved = %s::jsonb")
-            vals.append(characters_involved)
-        if new_foreshadows != "[]":
-            sets.append("new_foreshadows = %s::jsonb")
-            vals.append(new_foreshadows)
-        if resolved_foreshadows != "[]":
-            sets.append("resolved_foreshadows = %s::jsonb")
-            vals.append(resolved_foreshadows)
-        if sets:
-            vals.append(ch["id"])
-            query(f"UPDATE chapter_summaries SET {', '.join(sets)} WHERE chapter_id = %s", tuple(vals), fetch="none")
-    else:
-        query(
-            "INSERT INTO chapter_summaries (chapter_id, summary, key_events, characters_involved, new_foreshadows, resolved_foreshadows) "
-            "VALUES (%s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb)",
-            (ch["id"], summary, key_events, characters_involved, new_foreshadows, resolved_foreshadows),
-            fetch="none"
-        )
-    return json.dumps({"ok": True, "chapter_number": chapter_number}, ensure_ascii=False)
 
 
 @mcp.tool

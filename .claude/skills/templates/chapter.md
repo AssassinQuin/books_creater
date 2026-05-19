@@ -61,4 +61,4 @@
 新增维度时：
 1. 在 DB `chapters` 表新增列
 2. 在 `chapter_plan` / `chapter_update` MCP 工具中新增对应参数
-3. 在 `get_chapter_context` 返回值中追加新字段
+3. 在 `get_chapter_context`（tools_chapter.py）的返回值 dict 中追加新字段；同时更新 `_resolvers.py` / `tools_chapter.py` / `tools_writing.py` 中的对应查询
