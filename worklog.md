@@ -100,3 +100,26 @@ Stage Summary:
 - 上下文节省估算：每个消费skill省去~170行lorecraft加载（232→62行），乘以4-5个skill = 总计节省~700-850行
 - 全部12个skill现在版本对齐在1.2.0-1.3.0
 - novel-qa what-to-do从205行降到132行，符合≤200行规范
+---
+Task ID: 1
+Agent: main
+Task: 设计通用同步流程模板 — YAML manifest 驱动的DB↔File桥梁
+
+Work Log:
+- 分析 sync.py 中4个实体的同步模式（character/world/foreshadow/volume）
+- 分析 sync_engine.py 现有模板数据结构（SyncTemplate/SectionDef/FieldDef）
+- 分析 .claude/skills/templates/ 下6个模板文件的规格定义
+- 发现 sync_engine.py 已定义但未接入 MCP 工具链
+- 创建 sync_manifests/ 目录，编写5个YAML manifest
+- 增强 sync_engine.py：load_manifest/load_manifests/YAML→SyncTemplate转换
+- 添加3个内置 transform（resolve_faction/resolve_chapter_number/resolve_category_file）
+- 添加 category_file_map 支持（世界观分类→中文文件名映射）
+- 重写 tools_misc.py 的 sync_db_to_files 和 sync_startup，从4个硬编码分支改为引擎驱动循环
+- 新增 echo 实体类型支持（之前无sync代码）
+- MCP服务器启动验证通过，5个模板全部正确加载
+
+Stage Summary:
+- 产出: commit 315457f，7个文件变更（+784/-158行）
+- 5个YAML manifest: character/world/foreshadow/volume/echo
+- 核心设计原则：新增实体类型 = 新增一个YAML文件，零代码修改
+- YAML manifest 覆盖同名Python内置模板，echo为纯YAML新增
