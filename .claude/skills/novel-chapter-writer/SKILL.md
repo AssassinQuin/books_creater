@@ -74,7 +74,7 @@ get_chapter_context(novel_name="NOVEL_NAME", chapter_number) → 全部写作上
 
 **一次调用返回**：章节信息 + 卷级大纲 + 前3章摘要 + 全部角色深度信息（外观/性格/说话风格/能力/状态/关系）+ 未回收伏笔 + 活跃线索 + 世界观全分类数据 + 人物关系 + 时间线 + 质量历史 + 写作提示词（含规则+作者DNA）
 
-**无需再单独调用**：~~writing_start~~ / ~~volume_get~~ / ~~foreshadow_list~~ / ~~character_detail~~ / ~~relation_list~~ / ~~world_query~~ / ~~timeline_query~~ — 全部已聚合。
+**无需再单独调用**：`volume_get` / `foreshadow_list` / `character_detail` / `relation_list` / `world_query` / `timeline_query` — 全部已聚合（`writing_start` 已移除，使用 `get_chapter_context` 替代）。
 
 **如 world_settings 某分类为空**：说明大纲阶段未同步到DB，编排器回退读取设定文件。
 

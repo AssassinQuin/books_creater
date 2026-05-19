@@ -30,7 +30,7 @@ from novel_db.tools_chapter import (  # noqa: F401
     timeline_add, timeline_query, timeline_update, timeline_delete,
 )
 from novel_db.tools_writing import (  # noqa: F401
-    writing_start, writing_finish, validate_chapter,
+    writing_finish, validate_chapter,
     rule_detail, record_new_content, event_checklist,
     foreshadow_plant, foreshadow_recall, foreshadow_list, foreshadow_update,
 )

@@ -9,63 +9,6 @@ from .sync import _record_db_hash
 
 
 @mcp.tool
-def writing_start(novel_name: str, chapter_number: int) -> str:
-    """写章前一键注入上下文：章节信息+前3章摘要+活跃人物索引+未回收伏笔+当前卷规划+硬约束+质量历史。
-      novel_name: 小说名称
-    """
-    novel_id = _resolve_novel_id(novel_name)
-
-    result = {}
-
-    ch = query("SELECT * FROM chapters WHERE novel_id = %s AND number = %s",
-               (novel_id, chapter_number), fetch="one")
-    if not ch:
-        return json.dumps({"error": f"chapter {chapter_number} not found"}, ensure_ascii=False)
-    result["chapter"] = dict(ch)
-
-    prev = query(
-        "SELECT cs.summary, cs.dimension_snapshot FROM chapter_summaries cs "
-        "JOIN chapters c ON cs.chapter_id = c.id "
-        "WHERE c.novel_id = %s AND c.number < %s ORDER BY c.number DESC LIMIT 3",
-        (novel_id, chapter_number)
-    )
-    result["recent_summaries"] = [dict(r) for r in prev]
-
-    chars = query("SELECT id, name, role FROM characters "
-                  "WHERE novel_id = %s AND is_active = TRUE", (novel_id,))
-    result["active_characters"] = [dict(r) for r in chars]
-
-    foreshadows = query(
-        "SELECT id, description, planted_chapter_id, importance FROM foreshadows "
-        "WHERE novel_id = %s AND status = 'planted' ORDER BY id", (novel_id,))
-    result["unresolved_foreshadows"] = [dict(r) for r in foreshadows]
-
-    world = query("SELECT category, name FROM world_settings WHERE novel_id = %s", (novel_id,))
-    result["world_settings_index"] = [dict(r) for r in world]
-
-    if ch.get("volume_id"):
-        vol = query("SELECT * FROM volumes WHERE id = %s", (ch["volume_id"],), fetch="one")
-        if vol:
-            result["current_volume"] = dict(vol)
-
-    quality_history = _get_quality_history(novel_id, chapter_number)
-    result["quality_history"] = quality_history
-
-    result["writing_prompt"] = _build_writing_prompt(
-        ch=result["chapter"],
-        summaries=result["recent_summaries"],
-        chars=result["active_characters"],
-        foreshadows=result["unresolved_foreshadows"],
-        world_index=result["world_settings_index"],
-        vol=result.get("current_volume", {}),
-        quality_history=quality_history,
-        echoes=result.get("active_echoes", []),
-    )
-
-    return json.dumps(result, ensure_ascii=False, default=str)
-
-
-@mcp.tool
 def rule_detail(rule_key: str) -> str:
     """查看某条创作原则的完整说明。从 writing-constraints.md 加载。"""
     c = _get_constraints()

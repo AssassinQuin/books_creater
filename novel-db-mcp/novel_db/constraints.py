@@ -209,6 +209,6 @@ def _enrichment_level(current_words: int, min_words: int) -> str:
             f"1. `event_checklist(chapter_id)` → 找未使用的事件追加\n"
             f"2. 加微事件（日常碎片/路人互动/环境异常信号），150-300字\n"
             f"   - 必须与主线/暗线/人物弧线之一相关\n"
-            f"   - 找不出相关事件？说明你对大纲不够熟。再读一遍 `writing_start` 返回的事件清单\n\n"
+            f"   - 找不出相关事件？说明你对大纲不够熟。再读一遍 `get_chapter_context` 返回的事件清单\n\n"
             f"加事件后重新调 `writing_finish`。不努力的话，有的是比你更能写的模型替你。"
         )
