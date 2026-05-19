@@ -28,7 +28,7 @@
 
 编排器已预加载以下术语规范，创意决策中必须遵守：
 - `lorecraft/SKILL.md` — 文化根脉术语命名引擎
-- `lorecraft/references/term-map.md` — 禁止术语映射表
+- `lorecraft/references/term-map.md` — 术语映射表
 - `lorecraft/references/quickref.md` — 七势力字根
 
 **规则**：

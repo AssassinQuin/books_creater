@@ -82,7 +82,7 @@ world_query(novel_name="NOVEL_NAME", volume="V{N}")  # 按卷过滤，减少无�
 - **Step 1** (事件架构师)：causality, relationship, shared-constraints, lorecraft四件套, world-element-registry, **spiral-structure, plot-density**
 - **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-quickref, shared-constraints, lorecraft四件套, world-element-registry
   + 声音层：编排器不从引擎文件全量加载 author-voice×5（详见 §0.4.5 声音层头部提取），而是用 Read(limit=5) 提取每个变体的**头部摘要**（标题+加载时机行），编译为速查表注入 Agent
-- **Step 3** (三视角审查)：reader/author/character-perspective-agent + **精简分发**（只给 quickref 禁止术语+势力字根摘要，不给全量）
+- **Step 3** (三视角审查)：reader/author/character-perspective-agent + **精简分发**（只给 quickref 需替换术语+势力字根摘要，不给全量）
   - ❌已移除：world-element-registry, shared-constraints, lorecraft-core-principles, term-map
 
 完整清单详见 supporting-info §引擎加载清单。
@@ -209,11 +209,11 @@ Ch{N+1}: [事件D→事件E→事件F→事件G] | 功能: {起/承/转/合}
 | **Agent-人物** | 弧光对齐/动机充分/选择必然/代价明确/OOC检测 | 独立并行 | 逐章大纲+角色蒸馏卡+🔒术语速查摘要 |
 
 ### 编排器操作
-1. 打包逐章大纲 + 🔒**术语精简摘要**（编排器预提取 quickref 中的禁止术语清单+势力字根表，直接注入）
+1. 打包逐章大纲 + 🔒**术语精简摘要**（编排器预提取 quickref 中的需替换术语清单+势力字根表，直接注入）
 2. 3Agent 同时启动（并行），各自加载视角引擎
 3. 等待全部返回 → 交叉检查(读者vs作者/读者vs人物/作者vs人物) → 🔒术语交叉扫描 → 输出审计报告
 
-> 📌 **精简分发原则**：编排器在 Step 0.4 已加载完整的术语规范文件。Step 3 启动 Agent 时，编排器将 quickref 中最关键的部分——**禁止术语列表（§6.1）和势力字根表（§6.3）**——提取为一段摘要字符串直接注入 Agent 指令。Step 3 Agent **不自主加载** world-element-registry、shared-constraints、lorecraft-core-principles、term-map 或任何其他文件。**这是强制约束——审查 Agent 只需要做术语验证，不需要知道命名方法论。**
+> 📌 **精简分发原则**：编排器在 Step 0.4 已加载完整的术语规范文件。Step 3 启动 Agent 时，编排器将 quickref 中最关键的部分——**需替换术语列表（§6.1）和势力字根表（§6.3）**——提取为一段摘要字符串直接注入 Agent 指令。Step 3 Agent **不自主加载** world-element-registry、shared-constraints、lorecraft-core-principles、term-map 或任何其他文件。**这是强制约束——审查 Agent 只需要做术语验证，不需要知道命名方法论。**
 
 ### 交叉检查 & 问题分级
 **核心原则**：人物 > 读者 > 作者
@@ -351,7 +351,7 @@ print(f"审计模式: {mode} | 范围: {scope}")
 
 ## 引擎加载清单（Step 0.4 完整列表）
 
-编排器按步骤加载并分发，**Step 3 采用精简分发**——编排器预提取 quickref 的禁止术语+势力字根，直接注入指令，Agent 不自主加载任何引擎文件。
+编排器按步骤加载并分发，**Step 3 采用精简分发**——编排器预提取 quickref 的需替换术语+势力字根，直接注入指令，Agent 不自主加载任何引擎文件。
 
 ```
 Step 1 (事件架构师) 需要：
@@ -360,7 +360,7 @@ Step 1 (事件架构师) 需要：
   skill_loader("novel-planner-volume", "engine", "spiral-structure")
   skill_loader("novel-planner-volume", "engine", "plot-density")
   skill_loader("novel-planner-volume", "agent", "shared-constraints")
-  Read(".claude/skills/lorecraft/references/core-principles.md")   # 核心原则+禁止术语+四步法
+  Read(".claude/skills/lorecraft/references/core-principles.md")   # 核心原则+需替换术语+四步法
   Read(".claude/skills/lorecraft/references/term-map.md")          # 现代→灵能术语映射表
   Read(".claude/skills/lorecraft/references/quickref.md")           # 速查卡
   Read(".claude/skills/engines/world-element-registry.md")         # 已注册元素索引
@@ -385,7 +385,7 @@ Step 3 (三视角审查) 需要：
   skill_loader("novel-planner-volume", "engine", "reader-perspective-agent")
   skill_loader("novel-planner-volume", "engine", "author-perspective-agent")
   skill_loader("novel-planner-volume", "engine", "character-perspective-agent")
-  # 📌 精简分发：编排器预提取 quickref 的禁止术语清单+势力字根表，作为字符串注入指令。
+  # 📌 精简分发：编排器预提取 quickref 的需替换术语清单+势力字根表，作为字符串注入指令。
   # ❌ 不加载：world-element-registry, shared-constraints, lorecraft-core-principles, term-map
   # Step 3 Agent 收到的术语约束仅为精简摘要，禁止自行加载文件。
 ```
@@ -554,7 +554,7 @@ Ch{末}: {标题} | {场景数}个场景 | {章末钩子}
 - 伏笔场景化: 全部有具体场景 ✅/❌
 - 主角在场: 占全卷章节数的一半以上 ✅/❌
 - 事件弧节奏: 高潮事件多章展开，日常压缩，无按天填充 ✅/❌
-- 🔒术语规范: 无禁止术语 ✅/❌
+- 🔒术语规范: 无需替换术语 ✅/❌
 - 🔒螺旋结构: 信息钩子Lv2/Lv3≥60% ✅/❌ | 回旋锚已标注 ✅/❌
 - 🔒情节密度: 每章≥2条链推进 ✅/❌ | 每章≥1次复杂化 ✅/❌
 

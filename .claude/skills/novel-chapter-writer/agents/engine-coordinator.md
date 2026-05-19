@@ -34,8 +34,8 @@
 - `engines/anti-ai-quickref.md` —— 反AI指纹速查卡（F1-F13+禁用词+否定替代+场景组合）。编排器已注入，Agent 无需读取完整 SENTENCE-PATTERNS.md
 - `engines/writing-style.md` —— 写作通用标准。编排器已通过 skill_loader 注入
 - **`engines/author-voice.md` —— 叙事声音指纹**
-- **`.claude/skills/lorecraft/SKILL.md` —— 文化根脉术语命名引擎（禁止术语+命名方法）**
-- **`.claude/skills/lorecraft/references/term-map.md` —— 禁止术语映射表（写前必读，写作全程使用灵能术语）**
+- **`.claude/skills/lorecraft/SKILL.md` —— 文化根脉术语命名引擎（需替换术语+命名方法）**
+- **`.claude/skills/lorecraft/references/term-map.md` —— 术语映射表（写前必读，写作全程使用灵能术语）**
 - **`.claude/skills/lorecraft/references/quickref.md` —— 七势力字根速查**
 - **`.claude/skills/engines/world-element-registry.md` —— 已注册世界观元素索引**
 - writing-constraints.md 规则已由编排器通过 `get_chapter_context` 注入，无需重复读取
@@ -59,8 +59,8 @@
 | 指纹 | 本章指令 |
 |------|---------|
 | F1 标点多样性 | 每段≥3 种标点类型，全章 8-15 个破折号 |
-| F2 信息投放节奏 | 引入→冲突展示→必要时解释（禁止介绍完立刻解释） |
-| F3 场景结构随机 | 相邻场面结构不能相同（入口类型×主体类型×收束类型） |
+| F2 信息投放节奏 | 引入→冲突展示→必要时解释（介绍完后先让角色按规则行动再解释） |
+| F3 场景结构随机 | 相邻场面结构必须不同（入口类型×主体类型×收束类型） |
 | F4 否定句式管理 | 全章≤1 个「不是 X，而是 Y」 |
 | F5 意象梯度 | 检查本章意象是否与前 3 章重复，提供替代意象 |
 | F6 环境音效轮换 | 同类型环境音≤2 次/章 |
@@ -97,7 +97,7 @@
 
 - **POV锁定**：{本章POV人物}，不进入他人内心
 - **句式节奏**：短句≤25字为主，长句用于环境/内心
-- **比喻限制**：{本章可用意象}，禁止现代比喻
+- **比喻选择**：{本章可用意象}，优先世界观特有物品/生物作为比喻素材
 - **信息投放**：环境通过动作带出，背景通过对话碎片
 - **留白要求**：{本章关键情感时刻}后不立即转场
 - **校验标准**：本章需通过 author-voice 8项校验（POV/句式/比喻/展示/环境/开篇/结尾/禁用词）
