@@ -134,6 +134,7 @@ class SectionDef:
     # type=jsonb
     jsonb_column: str | None = None
     jsonb_key: str | None = None   # 用作bullet key（默认同jsonb_column）
+    title_key: str | None = None   # list[dict] 标注键名（如 "name", "stage"），用于 MD 往返还原
     fallback_columns: list[str] | None = None  # jsonb为空时的备选列
 
     # type=static
@@ -433,6 +434,7 @@ class SyncEngine:
             fields=fields,
             jsonb_column=data.get("jsonb_column"),
             jsonb_key=data.get("jsonb_key"),
+            title_key=data.get("title_key"),
             fallback_columns=data.get("fallback_columns"),
             static_content=data.get("static_content"),
             raw_column=data.get("raw_column"),
@@ -634,7 +636,12 @@ class SyncEngine:
                 val = tpl.transforms[fd.transform](val, row)
 
             key = fd.md_key or fd.column
-            lines.append(_md_bullet(key, val))
+            bullet = _md_bullet(key, val)
+            # _md_bullet 可能返回 list（list 类型多行渲染）
+            if isinstance(bullet, list):
+                lines.extend(bullet)
+            else:
+                lines.append(bullet)
         return lines
 
     def _render_jsonb(self, tpl: SyncTemplate, sec: SectionDef, row: dict) -> list[str]:
@@ -661,7 +668,7 @@ class SyncEngine:
             return None
 
         key = sec.jsonb_key or col
-        return [f"- **{key}**:"] + _jsonb_to_md(parsed, sec.indent)
+        return [f"- **{key}**:"] + _jsonb_to_md(parsed, sec.indent, title_key=sec.title_key)
 
     def _render_static(self, tpl: SyncTemplate, sec: SectionDef, row: dict) -> list[str]:
         """type=static: 静态文本内容。"""

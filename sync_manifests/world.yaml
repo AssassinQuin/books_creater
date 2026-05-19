@@ -39,6 +39,8 @@ category_file_map:
 
 # --- 段落定义 ---
 # 世界观使用动态 heading（包含 category 和 name）
+# 注意：keys/tags/secondary_keys 等字段在 DB 中同时存在于 data JSONB 和平铺列。
+# 渲染时只从平铺列输出（避免重复），data 中的 content 等独有字段通过 jsonb section 输出。
 sections:
   - heading: "{category}: {name}"
     type: fields
@@ -70,6 +72,12 @@ sections:
         md_key: 首次出场
         type: int
         optional: true
+  # data JSONB 中的 content 字段（独有数据，不在平铺列中）
+  - heading: 详细内容
+    type: jsonb
+    jsonb_column: data
+    jsonb_key: content
+    condition: always
 
 # --- File→DB 反向同步 ---
 file_to_db:

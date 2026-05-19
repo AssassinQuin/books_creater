@@ -122,6 +122,9 @@ def parse_bullet_fields(text: str) -> dict[str, Any]:
       - **key**: true / false (bool)
       - **key**: 42 (int)
 
+    重复键处理：当同一 key 出现多次时，收集为 list。
+    例如多个 `- **main_plotlines**: xxx` 行 → {"main_plotlines": [val1, val2, ...]}
+
     Returns:
         {"key": parsed_value, ...}
     """
@@ -141,20 +144,38 @@ def parse_bullet_fields(text: str) -> dict[str, Any]:
             if m2:
                 key = m2.group(1).strip()
                 val = m2.group(2).strip()
-                result[key] = _parse_value(val)
+                _append_or_set(result, key, _parse_value(val))
             continue
 
         key = m.group(1).strip()
         val = m.group(2).strip()
-        result[key] = _parse_value(val)
+        _append_or_set(result, key, _parse_value(val))
 
     return result
+
+
+def _append_or_set(result: dict, key: str, val: Any):
+    """向 dict 中添加键值：首次直接设值，重复键收集为 list。"""
+    if key not in result:
+        result[key] = val
+    else:
+        existing = result[key]
+        if isinstance(existing, list):
+            existing.append(val)
+        else:
+            result[key] = [existing, val]
 
 
 def _parse_value(val: str) -> Any:
     """解析单个字段值。"""
     if not val:
         return None
+
+    # Empty JSON structures
+    if val == "[]":
+        return []
+    if val == "{}":
+        return {}
 
     # JSON array or object
     if val.startswith(("[", "{")):
@@ -192,7 +213,8 @@ def parse_jsonb_bullets(text: str) -> dict | list | None:
     """
     将 `_jsonb_to_md()` 渲染的嵌套 bullet 结构逆向解析回 Python 对象。
 
-    这是 `_jsonb_to_md()` 的逆函数。
+    这是 `_jsonb_to_md()` 的逆函数。支持完整的 round-trip：
+    dict ↔ 嵌套 bullet dict，list ↔ 嵌套 bullet list，混合结构正确还原。
 
     输入格式:
         - **key**:
@@ -210,7 +232,7 @@ def parse_jsonb_bullets(text: str) -> dict | list | None:
         return None
 
     lines = text.split("\n")
-    # 跳过第一行（通常是 `- **key**:` 本身）
+    # 跳过第一行（通常是 `- **key**:` 本身，即 jsonb_key 的标题行）
     if lines and lines[0].strip().startswith("- **") and lines[0].strip().endswith("**:"):
         lines = lines[1:]
 
@@ -225,13 +247,35 @@ def _get_indent(line: str) -> int:
     return len(line) - len(stripped)
 
 
+# 在 _parse_nested_bullets 中使用的正则：匹配去掉 "- " 前缀后的 **key**: value
+_INNER_KV_RE = re.compile(r'^\*\*(.+?)\*\*:\s*(.*)$')
+# 匹配 **key**: 格式（无值，子行跟随）
+_INNER_KEY_ONLY_RE = re.compile(r'^\*\*(.+?)\*\*:\s*$')
+# 匹配 **value**: <!-- title_key --> 格式 — list[dict] 的 HTML 注释标注
+# 例如: **沈野**: <!-- name --> → title_val="沈野", title_key="name"
+# 使用 HTML 注释而非行内标注，对人类读者不可见，对解析器可识别
+_TITLE_HTML_COMMENT_RE = re.compile(
+    r'^\*\*(.+?)\*\*:\s*<!--\s*([\w\u4e00-\u9fff]+)\s*-->\s*$'
+)
+# 匹配 **value**: <!-- title_key --> (旧格式兼容: **value** (title_key):)
+_TITLE_PAREN_ANNOTATION_RE = re.compile(
+    r'^\*\*(.+?)\*\*\s+\(([\w\u4e00-\u9fff]+)\)\s*:\s*$'
+)
+
+
 def _parse_nested_bullets(lines: list[str], base_indent: int) -> dict | list:
     """
     递归解析嵌套 bullet 结构。
 
-    策略：
-      1. 如果所有顶层 bullet 都是 `- **key**: value` 格式 → dict
-      2. 如果所有顶层 bullet 都是 `- plain_text` 或 `- **key**:` (无值) → list
+    核心修复：去掉 "- " 前缀后的 content 使用 _INNER_KV_RE 正则匹配
+    `**key**: value` 格式，而非 _FIELD_LINE_RE（后者要求行首有 `- `），
+    从而正确提取键名和值。
+
+    策略（优先级从高到低）：
+      0. 如果任一顶层 bullet 匹配 `**value**: <!-- title_key -->` 标注格式
+         → list_of_dicts 模式，还原 list[dict] 结构
+      1. 如果所有顶层 bullet 都是 `**key**: value` 或 `**key**:` 格式 → dict
+      2. 如果所有顶层 bullet 都是纯文本或 `- **title**:` (list-of-dict 模式) → list
       3. 混合情况 → dict
     """
     # 过滤有效行，计算相对缩进
@@ -248,11 +292,15 @@ def _parse_nested_bullets(lines: list[str], base_indent: int) -> dict | list:
             break  # 回到更上层
 
         stripped = line.strip()
-        if not stripped.startswith("- "):
+        if not stripped.startswith("- ") and stripped != "-":
             i += 1
             continue
 
-        content = stripped[2:]  # 去掉 "- "
+        # content = 去掉 "- " 前缀后的内容（"- " 或 "-" 后面的部分）
+        if stripped == "-":
+            content = ""  # 空字符串项
+        else:
+            content = stripped[2:]  # 去掉 "- "
 
         # 收集子行（缩进更深的行）
         child_lines = []
@@ -274,34 +322,87 @@ def _parse_nested_bullets(lines: list[str], base_indent: int) -> dict | list:
     if not items:
         return {}
 
-    # 判断是 dict 还是 list
-    all_kv = all(
-        _FIELD_LINE_RE.match(item["content"]) or
-        (item["content"].startswith("**") and item["content"].endswith("**:"))
+    # ── 检测 list_of_dicts 标注模式 ──
+    # 任一项匹配 `**value**: <!-- title_key -->` 即视为 list[dict]
+    # 同时兼容旧格式 `**value** (title_key):`
+    has_annotation = any(
+        _TITLE_HTML_COMMENT_RE.match(item["content"]) or
+        _TITLE_PAREN_ANNOTATION_RE.match(item["content"])
         for item in items
     )
-    all_plain = all(
-        not _FIELD_LINE_RE.match(item["content"]) and
-        not (item["content"].startswith("**") and item["content"].endswith("**:"))
+
+    if has_annotation:
+        # ── List-of-dicts 标注模式 ──
+        # 还原 list[dict]：从 HTML 注释或旧格式中提取 title_key
+        result: list = []
+        for item in items:
+            m_html = _TITLE_HTML_COMMENT_RE.match(item["content"])
+            m_paren = _TITLE_PAREN_ANNOTATION_RE.match(item["content"])
+
+            if m_html:
+                title_val = m_html.group(1).strip()
+                title_key = m_html.group(2).strip()
+            elif m_paren:
+                title_val = m_paren.group(1).strip()
+                title_key = m_paren.group(2).strip()
+            else:
+                # 未匹配标注的项：降级为普通 KV 或纯文本
+                # 尝试作为 KV 解析，如果失败则作为纯字符串
+                m_kv = _INNER_KV_RE.match(item["content"])
+                if m_kv:
+                    sub_dict = {m_kv.group(1).strip(): _parse_value(m_kv.group(2).strip())}
+                else:
+                    sub_dict = {"_text": item["content"].strip().strip("*")}
+                if item["children"]:
+                    child_indent = _get_indent(item["children"][0]) if item["children"] else item["indent"] + 4
+                    child_val = _parse_nested_bullets(item["children"], child_indent)
+                    if isinstance(child_val, dict):
+                        sub_dict.update(child_val)
+                result.append(sub_dict)
+                continue
+
+            # 构建子 dict：title_key 回注为 dict 的键
+            sub_dict = {title_key: title_val}
+
+            if item["children"]:
+                child_indent = _get_indent(item["children"][0]) if item["children"] else item["indent"] + 4
+                child_val = _parse_nested_bullets(item["children"], child_indent)
+                if isinstance(child_val, dict):
+                    sub_dict.update(child_val)
+                elif child_val is not None:
+                    # child_val 是纯列表（如 list[str]），用 "items" 作为键名
+                    sub_dict["items"] = child_val
+
+            result.append(sub_dict)
+        return result
+
+    # ── 判断是 dict 还是 list ──
+    # 使用 _INNER_KV_RE 匹配去掉 "- " 前缀后的 **key**: value 格式
+    all_kv = all(
+        _INNER_KV_RE.match(item["content"]) or
+        _INNER_KEY_ONLY_RE.match(item["content"])
         for item in items
     )
 
     if all_kv:
-        # Dict 模式
+        # ── Dict 模式 ──
         result = {}
         for item in items:
-            m = _FIELD_LINE_RE.match(item["content"])
+            m = _INNER_KV_RE.match(item["content"])
+            m_key_only = _INNER_KEY_ONLY_RE.match(item["content"])
             if m:
                 key = m.group(1).strip()
                 val_str = m.group(2).strip()
+            elif m_key_only:
+                key = m_key_only.group(1).strip()
+                val_str = ""
             else:
-                # **key**: 格式（无值）
-                key = item["content"].strip().strip("*: ")
+                # 降级：strip ** 和 :
+                key = item["content"].strip("*: ")
                 val_str = ""
 
             if item["children"]:
-                # 有子行 → 递归解析
-                child_indent = _get_indent(item["children"][0]) if item["children"] else item["indent"] + 2
+                child_indent = _get_indent(item["children"][0]) if item["children"] else item["indent"] + 4
                 result[key] = _parse_nested_bullets(item["children"], child_indent)
             elif val_str:
                 result[key] = _parse_value(val_str)
@@ -309,49 +410,57 @@ def _parse_nested_bullets(lines: list[str], base_indent: int) -> dict | list:
                 result[key] = None
         return result
     else:
-        # List 模式或混合模式
-        result = []
+        # ── List 模式 ──
+        result: list = []
         for item in items:
-            m = _FIELD_LINE_RE.match(item["content"])
+            m = _INNER_KV_RE.match(item["content"])
+            m_key_only = _INNER_KEY_ONLY_RE.match(item["content"])
+
             if m:
-                # 混合中有 KV → dict
+                # `**key**: value` — list 中的 dict 元素（title_key 模式）
                 key = m.group(1).strip()
                 val_str = m.group(2).strip()
                 if item["children"]:
-                    child_indent = _get_indent(item["children"][0]) if item["children"] else item["indent"] + 2
-                    parsed = _parse_nested_bullets(item["children"], child_indent)
-                    if isinstance(result, list):
-                        # 转换为 dict
-                        new_result = {}
-                        for prev in result:
-                            if isinstance(prev, dict):
-                                new_result.update(prev)
-                            else:
-                                new_result[str(len(new_result))] = prev
-                        new_result[key] = _parse_value(val_str) if val_str else parsed
-                        result = new_result
+                    child_indent = _get_indent(item["children"][0]) if item["children"] else item["indent"] + 4
+                    child_val = _parse_nested_bullets(item["children"], child_indent)
+                    # 合并：key 的值 + 子行解析结果
+                    if isinstance(child_val, dict):
+                        if val_str:
+                            child_val[key] = _parse_value(val_str)
+                        result.append(child_val)
                     else:
-                        result[key] = _parse_value(val_str) if val_str else parsed
+                        result.append({key: _parse_value(val_str) if val_str else child_val})
                 else:
-                    if isinstance(result, list):
-                        result.append({key: _parse_value(val_str)})
+                    # 简单 KV 在 list 中 → 作为 dict 元素
+                    result.append({key: _parse_value(val_str)})
+            elif m_key_only:
+                # `**key**:` — list 中的子结构标题
+                key = m_key_only.group(1).strip()
+                if item["children"]:
+                    child_indent = _get_indent(item["children"][0]) if item["children"] else item["indent"] + 4
+                    child_val = _parse_nested_bullets(item["children"], child_indent)
+                    if isinstance(child_val, dict):
+                        result.append({key: child_val})
                     else:
-                        result[key] = _parse_value(val_str)
+                        result.append({key: child_val})
+                else:
+                    result.append({key: None})
             else:
                 # 纯文本条目
                 text = item["content"].strip().strip("*")  # 去掉可能的 ** 包裹
                 if item["children"]:
-                    child_indent = _get_indent(item["children"][0]) if item["children"] else item["indent"] + 2
+                    child_indent = _get_indent(item["children"][0]) if item["children"] else item["indent"] + 4
                     child_val = _parse_nested_bullets(item["children"], child_indent)
                     if isinstance(child_val, dict):
-                        child_val["_text"] = text
-                        result.append(child_val)
-                    elif isinstance(child_val, list):
-                        result.append({"_text": text, "_items": child_val})
+                        result.append({text: child_val})
                     else:
                         result.append(text)
                 else:
-                    result.append(text)
+                    # 空字符串项：content 为空或只有空格
+                    if not text:
+                        result.append("")
+                    else:
+                        result.append(text)
         return result
 
 

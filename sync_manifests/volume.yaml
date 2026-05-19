@@ -88,6 +88,8 @@ sections:
   - heading: 悬念锚点
     type: jsonb
     jsonb_column: suspense_anchors
+    # 顶层 dict{answered:[], new_questions:[]}
+    # 内部 new_questions 是 list[dict]，自动检测 #/question 作为 title_key
 
   - heading: 核心对话锚点
     type: table
@@ -96,10 +98,13 @@ sections:
   - heading: 写作优先级
     type: jsonb
     jsonb_column: writing_priorities
+    # 顶层 dict{P0:[], P1:[], P2:[]} — dict of list[str]，无 list[dict]
 
   - heading: 硬约束自检
     type: jsonb
     jsonb_column: hard_constraints
+    # 顶层 dict{事件密度:list[dict], ...}
+    # 内部 list[dict] 用自动检测
 
   # ---- 节奏与信息 ----
   - heading: 信息投放节奏
