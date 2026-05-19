@@ -634,7 +634,12 @@ class SyncEngine:
                 val = tpl.transforms[fd.transform](val, row)
 
             key = fd.md_key or fd.column
-            lines.append(_md_bullet(key, val))
+            bullet = _md_bullet(key, val)
+            # _md_bullet 可能返回 list（list 类型多行渲染）
+            if isinstance(bullet, list):
+                lines.extend(bullet)
+            else:
+                lines.append(bullet)
         return lines
 
     def _render_jsonb(self, tpl: SyncTemplate, sec: SectionDef, row: dict) -> list[str]:

@@ -19,8 +19,10 @@ Thumbs.db
 # 本地配置（含绝对路径的权限白名单）
 .claude/settings.local.json
 
-# 本地 SQLite 副本（非 data/novel.db）
+# SQLite 数据库文件（二进制，不入库）
 novel-db-mcp/novel.db
+data/novel.db
+mydatabase.db
 
 # Python
 __pycache__/
@@ -28,9 +30,10 @@ __pycache__/
 *$py.class
 *.so
 
-# 临时测试脚本
+# 临时测试脚本（根目录级别，novel-db-mcp/tests/ 目录下的正式测试除外）
 test_*.py
 start*.bat
+!novel-db-mcp/tests/
 
 # 下载/临时文件（与项目无关）
 download/
