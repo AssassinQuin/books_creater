@@ -1,4 +1,4 @@
-"""Novel Writer MCP Server - FastMCP 3.x + PostgreSQL"""
+"""Novel Writer MCP Server - FastMCP 3.x + SQLite (libsql)"""
 
 from novel_db.db import mcp
 

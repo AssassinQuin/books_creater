@@ -79,7 +79,7 @@ world_query(novel_name="NOVEL_NAME", volume="V{N}")  # 按卷过滤，减少无�
 
 **分发原则**：编排器加载完的文件直接打包传 Agent，Agent 自主使用。但对 Step 3 审查 Agent 采用**精简分发**——编排器预提取关键信息（术语禁止列表+势力字根表），作为字符串直接注入 Agent 指令，Agent **不再自主加载任何引擎或 lorecraft 文件**。
 
-- **Step 1** (事件架构师)：causality, relationship, shared-constraints, lorecraft四件套, world-element-registry
+- **Step 1** (事件架构师)：causality, relationship, shared-constraints, lorecraft四件套, world-element-registry, **spiral-structure, plot-density**
 - **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-quickref, shared-constraints, lorecraft四件套, world-element-registry
   + 声音层：编排器不从引擎文件全量加载 author-voice×5（详见 §0.4.5 声音层头部提取），而是用 Read(limit=5) 提取每个变体的**头部摘要**（标题+加载时机行），编译为速查表注入 Agent
 - **Step 3** (三视角审查)：reader/author/character-perspective-agent + **精简分发**（只给 quickref 禁止术语+势力字根摘要，不给全量）
@@ -125,12 +125,12 @@ for variant, path in files.items():
 
 ## Step 1: Agent — 事件架构师
 
-**Agent指令**: `agents/event-architect.md` | **引擎**: causality.md + relationship.md
+**Agent指令**: `agents/event-architect.md` | **引擎**: causality.md + relationship.md + **spiral-structure.md + plot-density.md**
 
 ### 编排器操作
-1. 收集并打包传给 Agent：本卷大纲、全书骨架、活跃角色列表+蒸馏卡、未回收伏笔、上卷末角色状态、卷定位、🔒术语规范、🔒世界元素索引、引擎内容
+1. 收集并打包传给 Agent：本卷大纲、全书骨架、活跃角色列表+蒸馏卡、未回收伏笔、上卷末角色状态、卷定位、🔒术语规范、🔒世界元素索引、引擎内容（含 spiral-structure + plot-density）
 2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + agent 指令
-3. Agent 输出事件架构（因果链+起承转合+人物弧光+悬念锚点+伏笔操作）
+3. Agent 输出事件架构（因果链+起承转合+人物弧光+悬念锚点+伏笔操作+**螺旋结构+情节密度**）
 
 ### Agent 硬约束
 - 每章至少3个可辨识事件
@@ -140,6 +140,8 @@ for variant, path in files.items():
 - 因果链每个关键事件有显式前因
 - 巧合计≤1次/卷且必须有伏笔支撑
 - **🔒术语规范**：产出中的世界观术语有文化根脉、与根隐喻字根一致
+- **🔒螺旋结构**：三层信息矩阵完整（L1/L2/L3）+ 翻新型揭示 ≥1次/卷 + 回旋镖决策 ≥3个/卷
+- **🔒情节密度**：并行活跃链 ≥3条 + 每章≥2条链推进 + NPC议程追踪表完整 + 复杂化每章≥1次
 
 ### 共享约束
 
@@ -355,6 +357,8 @@ print(f"审计模式: {mode} | 范围: {scope}")
 Step 1 (事件架构师) 需要：
   skill_loader("novel-planner-volume", "engine", "causality")
   skill_loader("novel-planner-volume", "engine", "relationship")
+  skill_loader("novel-planner-volume", "engine", "spiral-structure")
+  skill_loader("novel-planner-volume", "engine", "plot-density")
   skill_loader("novel-planner-volume", "agent", "shared-constraints")
   Read(".claude/skills/lorecraft/references/core-principles.md")   # 核心原则+禁止术语+四步法
   Read(".claude/skills/lorecraft/references/term-map.md")          # 现代→灵能术语映射表
@@ -396,6 +400,8 @@ loaded_resources = {
     # Step 1 引擎
     "Step1-因果链(causality)": causality_loaded,
     "Step1-关系(relationship)": relationship_loaded,
+    "Step1-螺旋结构(spiral-structure)": spiral_structure_loaded,
+    "Step1-情节密度(plot-density)": plot_density_loaded,
     # Step 2 引擎
     "Step2-场景类型(scene-type)": scene_type_loaded,
     "Step2-场面合成(scene-composition)": scene_composition_loaded,
@@ -491,6 +497,16 @@ Agent 必须遵守以下七类规则，详见 `shared-constraints.md`：
 
 悬念: 回答了[?] / 新提出[?]
 
+螺旋结构:
+  信息矩阵: L1[?] L2[?] L3[?] ✅/❌
+  翻新型揭示: {模式} {翻新事件} ✅/❌
+  回旋镖: ≥3个 ✅/❌
+
+情节密度:
+  并行活跃链: {N}条 (需≥3) ✅/❌
+  NPC议程: {已追踪NPC数} ✅/❌
+  复杂化: 每章≥1次 ✅/❌
+
 🔒术语自检: 术语有文化根脉 ✅/❌
 
 确认后进入章节设计。输入"OK"或修改意见。
@@ -539,6 +555,8 @@ Ch{末}: {标题} | {场景数}个场景 | {章末钩子}
 - 主角在场: 占全卷章节数的一半以上 ✅/❌
 - 事件弧节奏: 高潮事件多章展开，日常压缩，无按天填充 ✅/❌
 - 🔒术语规范: 无禁止术语 ✅/❌
+- 🔒螺旋结构: 信息钩子Lv2/Lv3≥60% ✅/❌ | 回旋锚已标注 ✅/❌
+- 🔒情节密度: 每章≥2条链推进 ✅/❌ | 每章≥1次复杂化 ✅/❌
 
 输入"OK"进入验证，或提修改意见（可指定某章修改）。
 ```
