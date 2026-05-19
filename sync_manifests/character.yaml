@@ -1,0 +1,139 @@
+# ============================================================
+# 人物同步模板 — DB↔File 桥梁定义
+# ============================================================
+# 权威源：DB characters 表
+# 映射：characters + character_relations → 设定/人物/{name}.md
+# 基数：1行(+关系JOIN) → 1文件（overwrite）
+# ============================================================
+
+name: character
+display_name: 人物
+authority: db
+
+# --- DB 映射 ---
+db_table: characters
+id_field: name
+query_extra: "AND is_active = TRUE"
+order_by: "name ASC"
+
+# --- 文件映射 ---
+file_dir: "设定/人物"
+file_pattern: "{name}.md"
+merge_mode: overwrite
+header_template: "# {name}"
+
+# --- 段落定义（有序） ---
+sections:
+
+  # ---- 基础信息层 ----
+  - heading: 基本信息
+    type: fields
+    fields:
+      - column: role
+        optional: false
+      - column: race
+        optional: true
+      - column: ability_level
+        optional: true
+      - column: faction_id
+        md_key: faction
+        transform: resolve_faction
+        optional: true
+
+  - heading: 外观与性格
+    type: fields
+    fields:
+      - column: appearance
+        optional: false
+      - column: personality
+        optional: false
+      - column: speech_style
+        optional: false
+      - column: catchphrase
+        optional: true
+
+  - heading: 背景与动机
+    type: fields
+    fields:
+      - column: background
+        optional: false
+      - column: goals
+        optional: false
+      - column: weaknesses
+        optional: false
+
+  - heading: 弧线
+    type: fields
+    fields:
+      - column: arc_notes
+        optional: false
+      - column: first_appearance_chapter
+        type: int
+        optional: false
+      - column: status
+        optional: true
+
+  # ---- 丰富数据层（JSONB字段 — 人物蒸馏7步产出） ----
+  - heading: 外观描写库
+    type: jsonb
+    jsonb_column: appearance_detail
+
+  - heading: 决策引擎
+    type: jsonb
+    jsonb_column: decision_engine
+
+  - heading: 对话声音指纹
+    type: jsonb
+    jsonb_column: voice_fingerprint
+
+  - heading: 能力体系
+    type: jsonb
+    jsonb_column: ability_system
+
+  - heading: 行为模式
+    type: jsonb
+    jsonb_column: behavior_pattern
+
+  # ---- 终局快照 ----
+  - heading: "当前快照（终局）"
+    type: jsonb
+    jsonb_column: current_snapshot
+    fallback_columns:
+      - current_location
+      - current_arc_phase
+      - emotional_state
+      - physical_state
+      - ability_progression
+      - inventory
+      - knowledge_state
+
+  # ---- 动态追踪占位 ----
+  - heading: "动态追踪（不在此文件维护）"
+    type: static
+    static_content: "人物动态状态见 DB：`character_state_snapshots`（状态快照）/ `character_distillation_evolution`（蒸馏演化）"
+
+# --- 关联查询（多表JOIN） ---
+relations:
+  heading: 关系
+  sql: |
+    SELECT cr.relation_type, cr.description, cr.intensity,
+           c1.name as from_name, c2.name as to_name,
+           cr.dialogue_adjustment, cr.micro_expressions, cr.subtext_design
+    FROM character_relations cr
+    JOIN characters c1 ON cr.from_character_id = c1.id
+    JOIN characters c2 ON cr.to_character_id = c2.id
+    WHERE cr.novel_id = %s
+      AND (cr.from_character_id = %s OR cr.to_character_id = %s)
+      AND cr.status = 'active'
+    ORDER BY cr.intensity DESC
+  param_columns: [novel_id, id, id]
+
+# --- 变换函数 ---
+transforms:
+  resolve_faction: builtin.resolve_faction
+
+# --- File→DB 反向同步 ---
+file_to_db:
+  enabled: true
+  note: "人物以DB为权威源，但支持文件→DB反向解析用于round-trip验证和应急恢复。通过引擎结构化解析全部字段。"
+  strategy: full_parse

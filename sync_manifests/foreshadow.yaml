@@ -1,0 +1,58 @@
+# ============================================================
+# 伏笔同步模板 — DB↔File 桥梁定义
+# ============================================================
+# 权威源：DB foreshadows 表
+# 映射：多行 foreshadows → 1个文件伏笔清单.md（section_replace）
+# 基数：Many行 → 1文件
+# ============================================================
+
+name: foreshadow
+display_name: 伏笔
+authority: db
+
+# --- DB 映射 ---
+db_table: foreshadows
+id_field: id
+order_by: "id ASC"
+
+# --- 文件映射 ---
+file_dir: "设定/大纲"
+file_pattern: "伏笔清单.md"
+merge_mode: section_replace
+section_marker: "## foreshadow: {id}"
+
+# --- 段落定义 ---
+sections:
+  - heading: "foreshadow: {id}"
+    type: fields
+    fields:
+      - column: description
+        optional: false
+      - column: status
+        optional: false
+      - column: importance
+        optional: true
+      - column: planted_chapter_id
+        md_key: planted_chapter
+        transform: resolve_chapter_number
+        optional: true
+      - column: planned_recall_chapter
+        md_key: planned_recall
+        optional: true
+      - column: related_characters
+        type: list
+        optional: true
+      - column: tags
+        type: list
+        optional: true
+
+# --- 变换函数 ---
+transforms:
+  resolve_chapter_number: builtin.resolve_chapter_number
+
+# --- File→DB 反向同步 ---
+file_to_db:
+  enabled: true
+  note: "通过引擎结构化解析全部字段（description/status/importance/planted_chapter/related_characters/tags）。"
+  strategy: full_parse
+  # 旧方案已废弃：status_only

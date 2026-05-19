@@ -1,0 +1,79 @@
+# ============================================================
+# 世界观同步模板 — DB↔File 桥梁定义
+# ============================================================
+# 权威源：DB world_settings 表
+# 映射：多行 world_settings → 1个分类文件（section_replace）
+# 基数：Many行 → 1文件（按category聚合）
+# ============================================================
+
+name: world
+display_name: 世界观
+authority: db
+
+# --- DB 映射 ---
+db_table: world_settings
+id_field: name
+composite_id_fields: [category, name]
+order_by: "category, name"
+
+# --- 文件映射 ---
+# category → 文件名 映射表
+file_dir: "设定/世界观"
+file_pattern: "{category_file}.md"
+merge_mode: section_replace
+section_marker: "## {category}: {name}"
+file_to_db_enabled: false
+
+# --- 分类文件名映射 ---
+category_file_map:
+  core_setting: 核心设定
+  bestiary: 异灵图鉴
+  ability: 能力体系
+  item: 物品装备
+  economy: 经济体系
+  daily_life: 日常生活
+  history: 历史事件
+  location: 地图
+  faction: 势力
+  race: 种族
+
+# --- 段落定义 ---
+# 世界观使用动态 heading（包含 category 和 name）
+sections:
+  - heading: "{category}: {name}"
+    type: fields
+    fields:
+      - column: keys
+        optional: true
+      - column: secondary_keys
+        optional: true
+      - column: tags
+        optional: true
+      - column: related_ids
+        md_key: related
+        optional: true
+      - column: region
+        optional: true
+      - column: volume_range
+        optional: true
+      - column: faction_id
+        optional: true
+      - column: writing_guide
+        optional: true
+      - column: priority
+        optional: true
+        condition: null
+      - column: is_constant
+        type: bool
+        optional: true
+      - column: first_appearance_chapter
+        md_key: 首次出场
+        type: int
+        optional: true
+
+# --- File→DB 反向同步 ---
+file_to_db:
+  enabled: true
+  tool: sync_lorebook
+  note: "通过引擎聚合解析世界观文件，按category:name提取字段映射到DB列。"
+  strategy: aggregate_parse
