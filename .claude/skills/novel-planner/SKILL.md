@@ -4,7 +4,7 @@ description: 全书大纲设计 — 小说骨架+血管。从全局视角确定�
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, mcp__memory__*
 lifecycle: core
 depends_on: novel-setup, lorecraft, engines/causality, engines/three-perspective
-version: "1.4.0"
+version: "1.5.0"
 ---
 
 # 全书大纲设计
@@ -18,35 +18,69 @@ version: "1.4.0"
 
 ```
 Step 0: 断点检测 → 数据采集（世界观/人物/已有卷）+ 加载引擎
-  ↓
-Step 1: Agent — 框架建筑师 → 全书骨架（起承转合+卷功能定位+卷间关系）         agents/framework-architect.md
-  ↓
-Step 2: Agent — 脉络设计师 → 主线脉络+暗线递进+人物弧光总图+情绪曲线          agents/vein-designer.md
+  ↓  ✅ 进度写入 .claude/temp/novel-planner-progress.json
+Step 1: Agent — 框架建筑师 → 全书骨架 → 立即写入 全书框架.md
+  ↓  ✅ 进度更新
+Step 2: Agent — 脉络设计师 → 主线脉络+暗线+弧光 → 立即写入 全书脉络.md
+  ↓  ✅ 进度更新
   ↓  🔒检查点A: 确认全书框架（骨架+脉络）
-Step 3: 编排器 — 卷级目标卡 → 基于框架输出每卷目标/角色变化方向/暗线推进度     (编排器直接生成，不改agent)
-  ↓
-Step 4: Agent — 支线规划师 → 全书支线体系+支线-主线交织图                     agents/subplot-planner.md
+Step 3: Agent — 卷级目标卡生成器 → 15卷目标卡 → 立即写入 卷级目标卡.md
+  ↓  ✅ 进度更新
+Step 4: Agent — 支线规划师 → 全书支线体系 → 立即写入 支线总图.md
+  ↓  ✅ 进度更新
   ↓  🔒检查点A2: 确认支线体系
-Step 5: Agent — 框架验证器 → 12项全书检查+三视角审查(3Agent并行)               agents/framework-validator.md
+Step 5: Agent — 框架验证器(3Agent并行) → 审计报告 → 立即写入 全书框架审计.md
   ↓  🔒检查点B: 确认验证通过(P0必须修复)
-Step 6: 保存（DB + 文件）+ 跨卷伏笔总图+支线总图
-Step 7: 🔒用户确认 → git commit
+Step 6: 保存（DB + 跨卷伏笔总图 + 新角色入库）+ sync_db_to_files → git commit
 ```
+
+### 🔒 即时落盘原则
+
+**每个 Agent/Step 完成后必须立即将输出写入文件**。不等到 Step 6 统一落盘。原因：
+1. 防止 context 窗口断裂丢失全部产出
+2. 续接时从文件恢复，无需重跑已完成的 Step
+3. 减少主 context 中累积的中间内容
+
+### 断点续传
+
+```python
+# 进度文件: .claude/temp/novel-planner-progress.json
+{
+    "novel_name": NOVEL_NAME,
+    "current_step": 3,           # 下一步要执行的Step
+    "completed_steps": [0,1,2],  # 已完成的Step
+    "output_files": {
+        "step1": "novels/{小说名}/设定/大纲/全书框架.md",
+        "step2": "novels/{小说名}/设定/大纲/全书脉络.md"
+    },
+    "timestamp": "2026-05-19T..."
+}
+```
+
+**续接逻辑**：Step 0 先检查进度文件。如果 `current_step > 0`，从对应文件读取已有产出，跳过已完成的 Step，直接进入 `current_step`。
 
 ## 编排器职责
 
-只负责：**MCP调用 + 引擎加载 + Agent启动 + 检查点确认 + Step3卷级目标卡生成**。不直接设计框架/脉络/支线。
+只负责：**MCP调用 + 引擎加载 + Agent启动 + 检查点确认 + 进度管理**。不直接设计框架/脉络/支线、不直接生成目标卡。
 
 ## Step 0: 数据采集与引擎加载
 
 ```python
-# 基础数据
+# ─── 基础数据（MCP查询，不读文件）───
 novel_get(novel_name=NOVEL_NAME)          # 小说基本信息
 world_query(novel_name=NOVEL_NAME)        # 世界观全部数据
 character_list(novel_name=NOVEL_NAME)     # 角色列表（含主角/反派/关键配角）
-volume_list(novel_name=NOVEL_NAME)        # 已有卷信息（如有）
 foreshadow_list(novel_name=NOVEL_NAME)    # 全局伏笔（如有）
+
+# ─── 已有卷信息（通过 volume_get 获取结构化摘要）───
+# ✅ volume_get 每卷 notes 字段 = 结构化摘要（~5K tokens）
+#    对比：读卷大纲原文 = 平均40K/卷 × 15卷 ≈ 600K/150K tokens（volume_get 省 97%）
+volume_list(novel_name=NOVEL_NAME)        # 卷列表（获取卷号和标题）
+for v in volumes:
+    volume_get(novel_name=NOVEL_NAME, number=v.number)  # 每卷notes（含目标/角色变化/暗线）
 ```
+
+**🔒 卷级信息用 volume_get 获取**：卷大纲原文（V01-V15 .md 文件）是 novel-planner-volume 的产物，平均 40K/卷。novel-planner 需要的是"这卷定位是什么"的结构化摘要，`volume_get` 返回的 `notes` 字段已包含。当 notes 为空时，回退读文件。
 
 **🔒 上下文预算管理**：编排器在加载前**必须**执行 token 预算估算，超限时启用分层加载策略。详见 supporting-info §Token预算估算。
 
@@ -62,7 +96,12 @@ foreshadow_list(novel_name=NOVEL_NAME)    # 全局伏笔（如有）
 **强制加载引擎**: `engines/causality.md`（因果逻辑法约束卷间关系必须基于因果而非时间顺序）
 **强制加载规范**: `lorecraft/references/core-principles.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束卷级定位和骨架描述中的世界观用词）
 
-编排器操作与输出验证详见 supporting-info §Step1框架建筑师。
+编排器操作：
+1. 打包：世界观设定 + 主角初始状态 + 预估总卷数 + 已有卷notes + **术语规范全套** → 传给 Agent
+2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/framework-architect.md`
+3. **立即落盘**：Agent 输出 → 写入 `novels/{小说名}/设定/大纲/全书框架.md` + 更新进度文件
+
+输出验证详见 supporting-info §Step1框架建筑师。
 
 ## Step 2: Agent — 脉络设计师
 
@@ -72,24 +111,40 @@ foreshadow_list(novel_name=NOVEL_NAME)    # 全局伏笔（如有）
 - `engines/three-perspective.md` — 读者视角爽点节奏标准（每2-3卷小爽点/4-5卷大爽点）
 **强制加载规范**: `lorecraft/references/core-principles.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束暗线描述、人物弧光、情绪曲线中的世界观用词）
 
-编排器操作与输出验证详见 supporting-info §Step2脉络设计师。
+编排器操作：
+1. 从文件读取 Step 1 输出（不依赖 context 中的残留）+ 角色档案 + 暗线设定 + **术语规范全套** → 传给 Agent
+2. 启动 Agent
+3. **立即落盘**：Agent 输出 → 写入 `novels/{小说名}/设定/大纲/全书脉络.md` + 更新进度文件
+
+输出验证详见 supporting-info §Step2脉络设计师。
 
 ## 🔒检查点A: 确认全书框架（骨架+脉络）
 
 编排器展示全书框架+卷功能定位+主线脉络+暗线递进+情绪曲线摘要，用户确认"OK"后进入Step 3。展示模板详见 supporting-info §检查点A展示模板。
 
-## Step 3: 编排器 — 卷级目标卡（全书级→卷级的桥梁）
+## Step 3: Agent — 卷级目标卡生成器（全书级→卷级的桥梁）
 
-**不调用 Agent**，编排器基于 Step 1-2 的确认输出直接生成。
+**Agent指令**: `agents/target-card-generator.md`
+**输入**: 从文件读取全书框架 + 全书脉络 + 已有卷notes + 术语规范
 
-对每卷，基于 Step 1 的"卷功能定位" + Step 2 的"人物弧光总图"+"暗线递进"生成约束卡片（卷功能/必须目标/角色变化/暗线推进/伏笔操作/冲突类型/下卷接口）。目标卡直接提供给 novel-planner-volume 作为输入约束。输出验证详见 supporting-info §Step3卷级目标卡。
+编排器操作：
+1. 从文件读取 Step 1-2 的确认输出 + 已有卷notes + **术语规范** → 传给 Agent
+2. 启动 Agent（subagent_type: "general-purpose"）
+3. **立即落盘**：Agent 输出 → 写入 `novels/{小说名}/设定/大纲/卷级目标卡.md` + 更新进度文件
+
+输出验证详见 supporting-info §Step3卷级目标卡。
 
 ## Step 4: Agent — 支线规划师
 
 **Agent指令**: `agents/subplot-planner.md`
 **强制加载规范**: `lorecraft/references/core-principles.md` + `lorecraft/references/term-map.md` + `lorecraft/references/quickref.md` + `engines/world-element-registry.md`（术语规范约束支线中涉及的势力/地点/能力/世界观元素用词）
 
-编排器操作与输出验证详见 supporting-info §Step4支线规划师。
+编排器操作：
+1. 从文件读取确认后的框架+脉络+目标卡 + 全部角色档案 + 世界观设定 + **术语规范全套** → 传给 Agent
+2. 启动 Agent
+3. **立即落盘**：Agent 输出 → 写入 `novels/{小说名}/设定/大纲/支线总图.md` + 更新进度文件
+
+输出验证详见 supporting-info §Step4支线规划师。
 
 ## 🔒检查点A2: 确认支线体系
 
@@ -101,36 +156,66 @@ foreshadow_list(novel_name=NOVEL_NAME)    # 全局伏笔（如有）
 **强制加载引擎**: `engines/reader-perspective-agent.md`, `engines/author-perspective-agent.md`, `engines/character-perspective-agent.md`
 **强制加载规范**: `lorecraft/references/core-principles.md` + `lorecraft/references/term-map.md`（术语规范作为第13项检查标准）
 
-编排器内部启动3个审查Agent并行（读者/作者/人物），汇总三视角结果+交叉检查+术语规范扫描。核心原则：人物 > 读者 > 作者。编排器操作、交叉检查、问题分级详见 supporting-info §Step5框架验证器。
+编排器操作：
+1. 从文件读取框架+脉络+目标卡+支线体系 + **术语规范** → 传给 Agent
+2. 启动3个审查Agent并行（读者/作者/人物），各自独立审查
+3. 汇总三视角结果+交叉检查+术语规范扫描 → 输出验证报告
+4. **立即落盘**：验证报告 → 写入 `novels/{小说名}/设定/大纲/全书框架审计.md` + 更新进度文件
+
+核心原则：人物 > 读者 > 作者。交叉检查、问题分级详见 supporting-info §Step5框架验证器。
 
 ## 🔒检查点B: 确认验证通过
 
 P0→必须修复（回对应Step）。无P0→进入保存。P0修复循环退出机制：最多3轮，超出升级为用户决策（①接受/②回退/③手动修复）。详见 supporting-info §P0修复循环详解。
 
-## Step 6: 保存
+## Step 6: 保存（DB + 文件 + 新角色入库 + git commit）
 
-### 文件落盘
+### 6A: 跨卷伏笔总图（编排器直接生成）
+
+从卷级目标卡的伏笔操作段落提取+汇总跨卷伏笔总图，写入 `跨卷伏笔总图.md`。
+
+### 6B: 新角色入库
+
+从支线总图的"支线角色管理"表中提取标注为"新角色需求: 是"的角色，逐个调用 `character_create` 写入 DB：
+
+```python
+# 新角色入库（支线总图中标注的新NPC）
+for npc in subplot_new_characters:
+    result = character_create(
+        novel_name=NOVEL_NAME,
+        name=npc.name,
+        role="npc",
+        background=npc.function,
+        first_appearance_chapter=npc.appearance_volume  # 第一个出场卷
+    )
+    if '"ok": false' in result or '"error"' in result:
+        errors.append(f"character_create {npc.name} 失败: {result}")
 ```
-novels/{小说名}/设定/大纲/
-├── 全书框架.md            # Agent 1输出
-├── 全书脉络.md            # Agent 2输出
-├── 卷级目标卡.md           # Step 3编排器生成
-├── 支线总图.md            # Agent 4输出
-├── 跨卷伏笔总图.md         # 编排器汇总
-└── 全书框架审计.md         # Agent 5输出
-```
 
-落盘后，novel-planner-volume 的 Step 0 读取以上文件作为输入约束。
-
-### DB保存（含结果校验——失败即中止）
+### 6C: DB保存（含结果校验——失败即中止）
 
 详见 supporting-info §DB保存。
 
-## Step 7: git commit
+### 6D: sync_db_to_files + git commit
 
+```python
+sync_db_to_files(novel_name=NOVEL_NAME)
+# git commit
+# B1: 全书框架+脉络+卷级目标卡+支线体系+审计通过
 ```
-B1: 全书框架+脉络+卷级目标卡+支线体系+审计通过
+
+### 文件清单（全部已在对应Step即时落盘，此处只补伏笔总图）
 ```
+novels/{小说名}/设定/大纲/
+├── 全书框架.md            # Step 1 Agent 输出（即时落盘）
+├── 全书脉络.md            # Step 2 Agent 输出（即时落盘）
+├── 卷级目标卡.md           # Step 3 Agent 输出（即时落盘）
+├── 支线总图.md            # Step 4 Agent 输出（即时落盘）
+├── 全书框架审计.md         # Step 5 Agent 输出（即时落盘）
+└── 跨卷伏笔总图.md         # Step 6A 编排器汇总（此处生成）
+```
+
+落盘后，novel-planner-volume 的 Step 0 读取以上文件作为输入约束。
 
 </what-to-do>
 
@@ -166,23 +251,48 @@ B1: 全书框架+脉络+卷级目标卡+支线体系+审计通过
 | Step 0 数据为空（新小说） | **阻断**，必须先完成 novel-setup（世界观≥3维度+角色≥2个）后才能进入全书大纲设计 |
 | Step 0 世界观<3维度或角色<2个 | **阻断**，提示用户补充世界观/角色后再进入 |
 | Step 5 发现P0 | 回到对应Step修复，修复后重跑验证（最多3轮，超出则升级为用户决策） |
+| context窗口断裂 | 续接时检查 `.claude/temp/novel-planner-progress.json`，从 `current_step` 恢复，已有文件从磁盘读取 |
+| 用户指令范围不明确 | **必须主动确认**：全量重做还是增量校准？确认后再进入流程 |
+| 已有卷大纲与新框架不一致 | **必须主动提出异议**：展示不一致点，等用户决定覆盖/保留/合并 |
+
+## 进度文件格式
+
+```json
+// .claude/temp/novel-planner-progress.json
+{
+    "novel_name": "这次不一样了",
+    "skill": "novel-planner",
+    "current_step": 4,
+    "completed_steps": [0, 1, 2, 3],
+    "output_files": {
+        "step1": "novels/这次不一样了/设定/大纲/全书框架.md",
+        "step2": "novels/这次不一样了/设定/大纲/全书脉络.md",
+        "step3": "novels/这次不一样了/设定/大纲/卷级目标卡.md"
+    },
+    "checkpoints_passed": ["A"],
+    "timestamp": "2026-05-19T..."
+}
+```
 
 ## Token预算估算
 
 ```python
-# Token 预算估算（粗略：引擎文件 ~2000 tokens/个，lorecraft 文件 ~1500 tokens/个）
+# Token 预算估算（v1.5 优化后）
 TOKEN_BUDGET_LIMIT = 80000  # 留余量给 Agent 产出 + 对话
 
 estimated_tokens = (
-    # 结构引擎（Step 1/2 + Step 5）
+    # 结构引擎（Step 1/2 + Step 5，按步骤按需加载）
     5 * 2000 +  # causality + three-perspective + 3个perspective-agent
     # 术语规范（全程强制）
-    4 * 1500 +  # lorecraft SKILL + term-map + quickref + world-element-registry
+    4 * 1500 +  # lorecraft core-principles + term-map + quickref + world-element-registry
     # 基础数据（MCP 返回）
-    5 * 1000    # novel_get + world_query + character_list + volume_list + foreshadow_list
+    5 * 1000 +  # novel_get + world_query + character_list + foreshadow_list
+    # 已有卷信息（volume_get 获取notes，不读大纲文件）
+    15 * 200    # 15卷 × 每卷notes约200 tokens（vs 读大纲文件每卷~10K tokens）
 )
-# estimated_tokens ≈ 23000（正常情况不会超限）
-# 但如果 novel 数据量极大（多卷+多角色+丰富世界观），需重新评估
+# estimated_tokens ≈ 24000（正常情况不会超限）
+# v1.4 时: 读15卷大纲 ~150K tokens → v1.5: volume_get notes ~3K tokens
+# 节省约 ~120K tokens (30%)
 
 if estimated_tokens > TOKEN_BUDGET_LIMIT:
     # 分层加载策略：
@@ -255,9 +365,10 @@ else:
 ## Step1框架建筑师
 
 ### 编排器操作
-1. 打包：世界观设定 + 主角初始状态 + 预估总卷数 + **术语规范全套** → 传给 Agent
+1. 打包：世界观设定 + 主角初始状态 + 预估总卷数 + 已有卷notes + **术语规范全套** → 传给 Agent
 2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + `agents/framework-architect.md`
 3. Agent 输出：全书起承转合 + 每卷功能定位 + 卷间关系
+4. **立即写入文件** `全书框架.md` + 更新进度文件
 
 ### 输出验证
 - [ ] 起承转合四段比例合理（起20%-30%/承30%-40%/转20%-30%/合10%-20%，总和100%）
@@ -269,9 +380,10 @@ else:
 ## Step2脉络设计师
 
 ### 编排器操作
-1. 打包：Agent 1 输出 + 角色档案 + 暗线设定 + **术语规范全套** → 传给 Agent
+1. 从文件读取 Step 1 输出（不依赖 context） + 角色档案 + 暗线设定 + **术语规范全套** → 传给 Agent
 2. 启动 Agent，传入引擎内容
 3. Agent 输出：主线脉络 + 暗线递进 + 人物弧光总图 + 情绪曲线
+4. **立即写入文件** `全书脉络.md` + 更新进度文件
 
 ### 输出验证
 - [ ] 主线因果链完整（每步"因为所以"，通过可替换性测试）
@@ -308,9 +420,13 @@ V1-V3: {揭示程度} | V4-V7: {揭示程度} | V8-V11: {揭示程度} | V12-V14
 
 ## Step3卷级目标卡
 
-### 生成逻辑
+### 编排器操作
+1. 从文件读取 Step 1 全书框架 + Step 2 全书脉络 + 已有卷notes + **术语规范** → 传给 Agent
+2. 启动 Agent（subagent_type: "general-purpose"），传入 `agents/target-card-generator.md`
+3. Agent 输出：15卷目标卡 + 一致性校验结果
+4. **立即写入文件** `卷级目标卡.md` + 更新进度文件
 
-对每卷，基于 Step 1 的"卷功能定位" + Step 2 的"人物弧光总图"+"暗线递进"生成该卷的约束卡片：
+### 目标卡格式
 
 ```
 V{N}《{卷名}》目标卡
@@ -334,9 +450,10 @@ V{N}《{卷名}》目标卡
 ## Step4支线规划师
 
 ### 编排器操作
-1. 打包：确认后的框架+脉络 + 全部角色档案 + 世界观设定 + **术语规范全套** → 传给 Agent
+1. 从文件读取确认后的框架+脉络+目标卡 + 全部角色档案 + 世界观设定 + **术语规范全套** → 传给 Agent
 2. 启动 Agent，传入 `agents/subplot-planner.md`
 3. Agent 输出：支线清单 + 支线-主线交织图 + 支线弧光总图 + 支线角色管理
+4. **立即写入文件** `支线总图.md` + 更新进度文件
 
 ### 输出验证
 - [ ] 每条支线通过三检验（删除/独立阅读/主题）
@@ -395,19 +512,28 @@ V{N}《{卷名}》目标卡
 # 🔒 每个 MCP 调用后必须检查返回值，失败时中止并提示
 errors = []
 
-# 卷级目标 → volume_update
+# 1. 卷级目标 → volume_update
 for card in volume_target_cards:
-    result = volume_update(novel_name=NOVEL_NAME, number=card.volume_id, main_plotlines=card.targets)
+    result = volume_update(novel_name=NOVEL_NAME, number=card.volume_id, notes=card.notes)
     if '"ok": false' in result or '"error"' in result:
         errors.append(f"volume_update V{card.volume_id} 失败: {result}")
 
-# 伏笔 → foreshadow_plant
+# 2. 新角色入库（从支线总图提取）
+for npc in subplot_new_characters:
+    result = character_create(
+        novel_name=NOVEL_NAME, name=npc.name, role="npc",
+        background=npc.function, first_appearance_chapter=npc.appearance_volume
+    )
+    if '"ok": false' in result or '"error"' in result:
+        errors.append(f"character_create {npc.name} 失败: {result}")
+
+# 3. 伏笔 → foreshadow_plant
 for f in cross_volume_foreshadows:
     result = foreshadow_plant(novel_name=NOVEL_NAME, description=f.desc, planned_recall_chapter=f.recall)
     if '"ok": false' in result or '"error"' in result:
         errors.append(f"foreshadow_plant 失败: {result}")
 
-# 支线 → world_upsert
+# 4. 支线 → world_upsert
 for s in subplots:
     result = world_upsert(novel_name=NOVEL_NAME, category='subplot', name=s.name, data={...})
     if '"ok": false' in result or '"error"' in result:

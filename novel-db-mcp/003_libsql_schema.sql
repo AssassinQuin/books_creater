@@ -26,6 +26,29 @@ CREATE TABLE IF NOT EXISTS volumes (
     title TEXT DEFAULT '',
     main_plotlines TEXT DEFAULT '[]',  -- JSON stored as TEXT
     notes TEXT DEFAULT '',
+    -- 元信息组（高频查询的平文字段）
+    core_emotion TEXT DEFAULT '',
+    pov_anchor TEXT DEFAULT '',
+    time_span TEXT DEFAULT '',
+    voice_mapping TEXT DEFAULT '',
+    -- 叙事结构组（JSON TEXT）
+    causal_chain TEXT DEFAULT '',
+    act_intro TEXT DEFAULT '{}',       -- 起: {prose, events[], feibi_notes[]}
+    act_rise TEXT DEFAULT '{}',        -- 承
+    act_twist TEXT DEFAULT '{}',       -- 转
+    act_resolution TEXT DEFAULT '{}',  -- 合
+    next_volume_bridge TEXT DEFAULT '[]',
+    -- 质量约束组（JSON TEXT）
+    character_arcs TEXT DEFAULT '[]',
+    interaction_matrix TEXT DEFAULT '[]',
+    boundaries TEXT DEFAULT '[]',
+    suspense_anchors TEXT DEFAULT '{}',
+    key_dialogues TEXT DEFAULT '[]',
+    writing_priorities TEXT DEFAULT '{}',
+    hard_constraints TEXT DEFAULT '{}',
+    -- 可选扩展组（V2+才有数据）
+    info_pacing TEXT DEFAULT '[]',
+    rhythm_allocation TEXT DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(novel_id, number)
@@ -88,6 +111,9 @@ CREATE TABLE IF NOT EXISTS character_relations (
     chapter_established INTEGER DEFAULT NULL,
     intensity INTEGER DEFAULT 5,
     status TEXT DEFAULT 'active',
+    dialogue_adjustment TEXT DEFAULT '{}',
+    micro_expressions TEXT DEFAULT '{}',
+    subtext_design TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -174,6 +200,24 @@ CREATE TABLE IF NOT EXISTS foreshadows (
     related_foreshadows TEXT DEFAULT '[]'
 );
 
+-- ─── Echoes（回响 — 大事件余波的自然回溯）──────────────
+-- 与伏笔的区别：伏笔是"先埋后收"（向前看），回响是"先发生后回声"（向后看）。
+-- 密度规则：普通回响≤2次/卷，强相关不限，跨卷≤1次/间隔。
+-- 融入方式：必须融入世界呼吸或角色日常动作，不能是独立段落。
+CREATE TABLE IF NOT EXISTS echoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+    source_chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE SET NULL,
+    echo_chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE SET NULL,
+    volume_id INTEGER REFERENCES volumes(id) ON DELETE SET NULL,
+    source_event TEXT NOT NULL,          -- 被回溯的原始事件/人/物品/地点/梗
+    echo_type TEXT NOT NULL,             -- character_habit/physical_trace/catchphrase/location_change/item/memory
+    echo_description TEXT DEFAULT '',    -- 回响的具体写法（一句话）
+    strong_related INTEGER DEFAULT 0,    -- BOOLEAN: 1=强相关（不受密度限制）
+    tags TEXT DEFAULT '[]',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ─── Timeline ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS timeline_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -249,6 +293,10 @@ CREATE INDEX IF NOT EXISTS idx_characters_novel ON characters(novel_id);
 CREATE INDEX IF NOT EXISTS idx_relations_novel ON character_relations(novel_id);
 CREATE INDEX IF NOT EXISTS idx_world_novel ON world_settings(novel_id);
 CREATE INDEX IF NOT EXISTS idx_foreshadows_novel ON foreshadows(novel_id);
+CREATE INDEX IF NOT EXISTS idx_echoes_novel ON echoes(novel_id);
+CREATE INDEX IF NOT EXISTS idx_echoes_volume ON echoes(volume_id);
+CREATE INDEX IF NOT EXISTS idx_echoes_source ON echoes(source_chapter_id);
+CREATE INDEX IF NOT EXISTS idx_echoes_chapter ON echoes(echo_chapter_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_novel ON timeline_events(novel_id);
 CREATE INDEX IF NOT EXISTS idx_scene_chapter ON scene_outlines(chapter_id);
 CREATE INDEX IF NOT EXISTS idx_dimension_novel ON dimension_changes(novel_id);

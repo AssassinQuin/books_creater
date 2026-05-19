@@ -3,6 +3,19 @@ import json
 from .db import mcp, query
 from .resolvers import _resolve_novel_id
 
+# JSON-type fields that need json.dumps serialization
+_JSON_FIELDS = {
+    'main_plotlines', 'act_intro', 'act_rise', 'act_twist', 'act_resolution',
+    'character_arcs', 'interaction_matrix', 'boundaries', 'suspense_anchors',
+    'key_dialogues', 'writing_priorities', 'hard_constraints',
+    'next_volume_bridge', 'info_pacing', 'rhythm_allocation',
+}
+# Plain text fields — empty string means "no update"
+_TEXT_FIELDS = {
+    'title', 'notes', 'core_emotion', 'pov_anchor',
+    'time_span', 'voice_mapping', 'causal_chain',
+}
+
 
 @mcp.tool
 def volume_create(novel_name: str, number: int, title: str = "",
@@ -52,13 +65,20 @@ def _volume_get_by_id(volume_id: int) -> str:
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
-def _volume_update_by_id(volume_id: int, title: str = "",
-                  main_plotlines: list = None, notes: str = "") -> str:
+def _volume_update_by_id(volume_id: int, **kwargs) -> str:
     fields = {}
-    if title: fields["title"] = title
-    if main_plotlines is not None:
-        fields["main_plotlines"] = json.dumps(main_plotlines, ensure_ascii=False)
-    if notes: fields["notes"] = notes
+    for key, val in kwargs.items():
+        if key in _JSON_FIELDS:
+            if val is None:
+                continue
+            fields[key] = json.dumps(val, ensure_ascii=False)
+        elif key in _TEXT_FIELDS:
+            if not val:
+                continue
+            fields[key] = val
+        else:
+            continue
+
     if not fields:
         return json.dumps({"ok": False, "error": "no valid fields"}, ensure_ascii=False)
     sets = [f"{k} = %s" for k in fields]
@@ -82,13 +102,53 @@ def volume_get(novel_name: str, number: int) -> str:
 
 @mcp.tool
 def volume_update(novel_name: str, number: int, title: str = "",
-                            main_plotlines: list = None, notes: str = "") -> str:
-    """按卷号更新卷信息（无需volume_id）。传入需要修改的字段，空值会被忽略。
+                  main_plotlines: list = None, notes: str = "",
+                  core_emotion: str = "", pov_anchor: str = "",
+                  time_span: str = "", voice_mapping: str = "",
+                  causal_chain: str = "",
+                  act_intro: dict = None, act_rise: dict = None,
+                  act_twist: dict = None, act_resolution: dict = None,
+                  character_arcs: list = None, interaction_matrix: list = None,
+                  boundaries: list = None, suspense_anchors: dict = None,
+                  key_dialogues: list = None, writing_priorities: dict = None,
+                  hard_constraints: dict = None,
+                  next_volume_bridge: list = None, info_pacing: list = None,
+                  rhythm_allocation: list = None) -> str:
+    """按卷号更新卷信息（无需volume_id）。传入需要修改的字段，空值会被忽略。支持富数据字段（因果链/四幕/人物弧光等）。
       novel_name: 小说名称
       number: 卷号
+      core_emotion: 核心情绪（如"紧迫——妹妹要死了"）
+      causal_chain: 卷级因果链（纯文本段落）
+      act_intro: 起段数据 {"prose":"","events":[],"feibi_notes":[]}
+      act_rise: 承段数据
+      act_twist: 转段数据
+      act_resolution: 合段数据
+      character_arcs: 人物弧光表 [{"角色":"","卷初状态":"","触发事件":"","卷末状态":""}]
+      interaction_matrix: 人物互动矩阵
+      boundaries: "不做的"边界清单 ["...",...]
+      suspense_anchors: 悬念锚点 {"answered":[],"new_questions":[]}
+      key_dialogues: 核心对话锚点
+      writing_priorities: 写作优先级 {"P0":[],"P1":[],"P2":[]}
+      hard_constraints: 硬约束自检数据
+      next_volume_bridge: 下卷衔接表
+      info_pacing: 信息投放节奏
+      rhythm_allocation: 节奏分配
     """
     novel_id = _resolve_novel_id(novel_name)
     vol = query("SELECT id FROM volumes WHERE novel_id=%s AND number=%s", (novel_id, number), fetch="one")
     if not vol:
         return json.dumps({"error": f"卷 {number} 不存在"}, ensure_ascii=False)
-    return _volume_update_by_id(vol["id"], title, main_plotlines, notes)
+    return _volume_update_by_id(vol["id"],
+        title=title, main_plotlines=main_plotlines, notes=notes,
+        core_emotion=core_emotion, pov_anchor=pov_anchor,
+        time_span=time_span, voice_mapping=voice_mapping,
+        causal_chain=causal_chain,
+        act_intro=act_intro, act_rise=act_rise,
+        act_twist=act_twist, act_resolution=act_resolution,
+        character_arcs=character_arcs, interaction_matrix=interaction_matrix,
+        boundaries=boundaries, suspense_anchors=suspense_anchors,
+        key_dialogues=key_dialogues, writing_priorities=writing_priorities,
+        hard_constraints=hard_constraints,
+        next_volume_bridge=next_volume_bridge, info_pacing=info_pacing,
+        rhythm_allocation=rhythm_allocation,
+    )

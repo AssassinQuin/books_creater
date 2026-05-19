@@ -74,7 +74,7 @@ get_chapter_context(novel_name="NOVEL_NAME", chapter_number) → 全部写作上
 
 **一次调用返回**：章节信息 + 卷级大纲 + 前3章摘要 + 全部角色深度信息（外观/性格/说话风格/能力/状态/关系）+ 未回收伏笔 + 活跃线索 + 世界观全分类数据 + 人物关系 + 时间线 + 质量历史 + 写作提示词（含规则+作者DNA）
 
-**无需再单独调用**：~~writing_start~~ / ~~volume_get~~ / ~~foreshadow_list~~ / ~~character_detail~~ / ~~relation_list~~ / ~~world_query~~ / ~~timeline_query~~ — 全部已聚合。
+**无需再单独调用**：`volume_get` / `foreshadow_list` / `character_detail` / `relation_list` / `world_query` / `timeline_query` — 全部已聚合（`writing_start` 已移除，使用 `get_chapter_context` 替代）。
 
 **如 world_settings 某分类为空**：说明大纲阶段未同步到DB，编排器回退读取设定文件。
 
@@ -225,28 +225,15 @@ consistency_guard(novel_name="NOVEL_NAME", auto_sync=True)
 
 **阶段指令**：`skill_loader("novel-chapter-writer", "phase", "b2-chapter")` — 编排器在 Step 2 启动前加载，注入当前上下文。
 
-**引擎按需加载**：Agent 3 根据场面类型调用 `skill_loader` 加载对应引擎；Agent 4 写作前加载 `skill_loader("novel-chapter-writer", "engine", "anti-ai")`。
+**引擎按需加载**：Agent 3 在创意蓝图中为每个场面标注 AES 类型标签。编排器收到蓝图后调用 `resolve_engines(AES_tags)`，自动从 `ENGINE_MATRIX` 按场面类型匹配引擎文件并加载内容。
 
-**叙事声音统一性**：建议所有场面加载 `skill_loader("novel-chapter-writer", "engine", "author-voice")` — 叙事声音指纹（视角/句式/比喻/信息投放/留白/词汇）。这是为了确保跨场次的作者声音一致性，避免不同 Agent 生成的场面出现语调断裂。若某场面有特殊声音需求（如回忆片段、书信体），可在此基础上叠加变体引擎。
+**叙事声音统一性**：`resolve_engines` 始终注入 `author-voice` 引擎（在 `_always` 桶中），确保跨场次的作者声音一致性。若某场面有特殊声音需求（如回忆片段、书信体），Agent 3 可标注 `AES:emotion` 或 `AES:mystery` 来叠加变体。
 
 ### 引擎加载映射表
 
-| 场面类型 | 加载引擎 |
-|---------|---------|
-| **所有场面** | `skill_loader("novel-chapter-writer", "engine", "author-voice")` |
-| 环境描写 | `skill_loader("novel-chapter-writer", "engine", "environment")` |
-| 对话博弈 | `skill_loader("novel-chapter-writer", "engine", "dialogue")` |
-| 动作/战斗 | `skill_loader("novel-chapter-writer", "engine", "action")` + `skill_loader("novel-chapter-writer", "engine", "battle")` + `skill_loader("novel-chapter-writer", "engine", "author-voice-battle")` |
-| 情感高潮 | `skill_loader("novel-chapter-writer", "engine", "author-voice-emotion")` |
-| 日常/世界呼吸 | `skill_loader("novel-chapter-writer", "engine", "author-voice-daily")` |
-| 悬疑/揭秘 | `skill_loader("novel-chapter-writer", "engine", "author-voice-mystery")` |
-| 物品使用 | `skill_loader("novel-chapter-writer", "engine", "item")` |
-| 多人物互动 | `skill_loader("novel-chapter-writer", "engine", "scene-composition")` |
-| 需要深化 | `skill_loader("novel-chapter-writer", "engine", "scene-deepening")` |
-| 世界观元素 | `skill_loader("novel-chapter-writer", "engine", "world-element-registry")` |
-| 读者视角审查 | `skill_loader("novel-chapter-writer", "engine", "reader-perspective-agent")` |
-| 作者视角审查 | `skill_loader("novel-chapter-writer", "engine", "author-perspective-agent")` |
-| 人物视角审查 | `skill_loader("novel-chapter-writer", "engine", "character-perspective-agent")` |
+场面类型→引擎映射由 `ENGINE_MATRIX`（`tools_writing.py`）硬编码管理，编排器层自动解析，不交给模型选择。详见 `ENGINE_MATRIX` 定义。`resolve_engines` 调用即自动加载匹配引擎，无需人为猜测。
+
+在 SKILL.md 手写此映射表是旧模式。映射表的权威源已迁移到 `ENGINE_MATRIX`。
 
 ## 子 Agent 启动模板
 

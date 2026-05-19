@@ -144,7 +144,12 @@ def get_chapter_context(novel_name: str, chapter_number: int,
         if vol:
             volume_str = f"V{vol['number']}"
             result["volume"] = {"number": vol["number"], "title": vol["title"],
-                                "main_plotlines": vol["main_plotlines"], "notes": vol.get("notes", "")}
+                                "main_plotlines": vol["main_plotlines"], "notes": vol.get("notes", ""),
+                                "core_emotion": vol.get("core_emotion", ""),
+                                "pov_anchor": vol.get("pov_anchor", ""),
+                                "causal_chain": vol.get("causal_chain", ""),
+                                "character_arcs": vol.get("character_arcs", "[]"),
+                                "writing_priorities": vol.get("writing_priorities", "{}")}
 
     # Recent chapter summaries (with full data)
     prev_summaries = query(
@@ -164,6 +169,17 @@ def get_chapter_context(novel_name: str, chapter_number: int,
 
     threads = query("SELECT * FROM plot_threads WHERE novel_id = %s AND status = 'active'", (novel_id,))
     result["active_threads"] = [dict(r) for r in threads]
+
+    # Echoes available for this chapter (from previous major events)
+    echoes = query(
+        "SELECT e.source_event, e.echo_type, e.echo_description, e.strong_related, "
+        "c1.number as source_ch, c2.number as echo_ch "
+        "FROM echoes e "
+        "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
+        "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
+        "WHERE e.novel_id = %s AND e.echo_chapter_id = %s "
+        "ORDER BY e.id", (novel_id, ch["id"]))
+    result["active_echoes"] = [dict(r) for r in echoes]
 
     all_chars = query("SELECT * FROM characters WHERE novel_id = %s AND is_active = TRUE", (novel_id,))
     char_details = []
@@ -239,6 +255,7 @@ def get_chapter_context(novel_name: str, chapter_number: int,
                       for w in items] if isinstance(result.get("world_settings"), dict) else [],
         vol=result.get("volume", {}),
         quality_history=quality_history,
+        echoes=result.get("active_echoes", []),
     )
 
     return json.dumps(result, ensure_ascii=False, default=str)

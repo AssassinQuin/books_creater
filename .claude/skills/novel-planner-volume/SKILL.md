@@ -79,10 +79,10 @@ world_query(novel_name="NOVEL_NAME", volume="V{N}")  # 按卷过滤，减少无�
 
 **分发原则**：编排器加载完的文件直接打包传 Agent，Agent 自主使用。但对 Step 3 审查 Agent 采用**精简分发**——编排器预提取关键信息（术语禁止列表+势力字根表），作为字符串直接注入 Agent 指令，Agent **不再自主加载任何引擎或 lorecraft 文件**。
 
-- **Step 1** (事件架构师)：causality, relationship, shared-constraints, lorecraft四件套, world-element-registry
+- **Step 1** (事件架构师)：causality, relationship, shared-constraints, lorecraft四件套, world-element-registry, **spiral-structure, plot-density**
 - **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-quickref, shared-constraints, lorecraft四件套, world-element-registry
   + 声音层：编排器不从引擎文件全量加载 author-voice×5（详见 §0.4.5 声音层头部提取），而是用 Read(limit=5) 提取每个变体的**头部摘要**（标题+加载时机行），编译为速查表注入 Agent
-- **Step 3** (三视角审查)：reader/author/character-perspective-agent + **精简分发**（只给 quickref 禁止术语+势力字根摘要，不给全量）
+- **Step 3** (三视角审查)：reader/author/character-perspective-agent + **精简分发**（只给 quickref 需替换术语+势力字根摘要，不给全量）
   - ❌已移除：world-element-registry, shared-constraints, lorecraft-core-principles, term-map
 
 完整清单详见 supporting-info §引擎加载清单。
@@ -125,12 +125,12 @@ for variant, path in files.items():
 
 ## Step 1: Agent — 事件架构师
 
-**Agent指令**: `agents/event-architect.md` | **引擎**: causality.md + relationship.md
+**Agent指令**: `agents/event-architect.md` | **引擎**: causality.md + relationship.md + **spiral-structure.md + plot-density.md**
 
 ### 编排器操作
-1. 收集并打包传给 Agent：本卷大纲、全书骨架、活跃角色列表+蒸馏卡、未回收伏笔、上卷末角色状态、卷定位、🔒术语规范、🔒世界元素索引、引擎内容
+1. 收集并打包传给 Agent：本卷大纲、全书骨架、活跃角色列表+蒸馏卡、未回收伏笔、上卷末角色状态、卷定位、🔒术语规范、🔒世界元素索引、引擎内容（含 spiral-structure + plot-density）
 2. 启动 Agent（subagent_type: "general-purpose"），传入数据 + agent 指令
-3. Agent 输出事件架构（因果链+起承转合+人物弧光+悬念锚点+伏笔操作）
+3. Agent 输出事件架构（因果链+起承转合+人物弧光+悬念锚点+伏笔操作+**螺旋结构+情节密度**）
 
 ### Agent 硬约束
 - 每章至少3个可辨识事件
@@ -140,10 +140,12 @@ for variant, path in files.items():
 - 因果链每个关键事件有显式前因
 - 巧合计≤1次/卷且必须有伏笔支撑
 - **🔒术语规范**：产出中的世界观术语有文化根脉、与根隐喻字根一致
+- **🔒螺旋结构**：三层信息矩阵完整（L1/L2/L3）+ 翻新型揭示 ≥1次/卷 + 回旋镖决策 ≥3个/卷
+- **🔒情节密度**：并行活跃链 ≥3条 + 每章≥2条链推进 + NPC议程追踪表完整 + 复杂化每章≥1次
 
 ### 共享约束
 
-Agent 必须遵守六类规则（POV时间线铁律、内容密度、伏笔冰山理论、人物互动、巧合计、🔒术语规范约束），编排器通过 skill_loader 传入 `shared-constraints.md`。详细规则表见 supporting-info §共享约束详细规则。
+Agent 必须遵守七类规则（事件驱动节奏铁律、内容密度、伏笔冰山理论、人物互动、巧合计、🔒术语规范约束、回响规则），编排器通过 skill_loader 传入 `shared-constraints.md`。详细规则表见 supporting-info §共享约束详细规则。
 
 ## 🔒检查点A: 确认事件架构
 
@@ -194,7 +196,7 @@ Ch{N+1}: [事件D→事件E→事件F→事件G] | 功能: {起/承/转/合}
 
 展示逐章大纲（含每章场景序列+伏笔操作+声音适配）+ 硬约束自检。显示模板详见 supporting-info §检查点A2显示模板。
 
-**硬约束自检项**：事件密度≥4/章、费笔配额≥总章数×1.0、罕见组合≥1/卷、伏笔场景化、主角在场≥半数章、时间线连续、🔒术语规范。
+**硬约束自检项**：事件密度≥4/章、费笔配额≥总章数×1.0、罕见组合≥1/卷、伏笔场景化、主角在场≥半数章、事件弧节奏、🔒术语规范。
 
 **修改循环**：用户提修改意见 → 编排器局部修改指定章节 → 重新展示 → 确认OK → 进入三视角审查。
 
@@ -207,11 +209,11 @@ Ch{N+1}: [事件D→事件E→事件F→事件G] | 功能: {起/承/转/合}
 | **Agent-人物** | 弧光对齐/动机充分/选择必然/代价明确/OOC检测 | 独立并行 | 逐章大纲+角色蒸馏卡+🔒术语速查摘要 |
 
 ### 编排器操作
-1. 打包逐章大纲 + 🔒**术语精简摘要**（编排器预提取 quickref 中的禁止术语清单+势力字根表，直接注入）
+1. 打包逐章大纲 + 🔒**术语精简摘要**（编排器预提取 quickref 中的需替换术语清单+势力字根表，直接注入）
 2. 3Agent 同时启动（并行），各自加载视角引擎
 3. 等待全部返回 → 交叉检查(读者vs作者/读者vs人物/作者vs人物) → 🔒术语交叉扫描 → 输出审计报告
 
-> 📌 **精简分发原则**：编排器在 Step 0.4 已加载完整的术语规范文件。Step 3 启动 Agent 时，编排器将 quickref 中最关键的部分——**禁止术语列表（§6.1）和势力字根表（§6.3）**——提取为一段摘要字符串直接注入 Agent 指令。Step 3 Agent **不自主加载** world-element-registry、shared-constraints、lorecraft-core-principles、term-map 或任何其他文件。**这是强制约束——审查 Agent 只需要做术语验证，不需要知道命名方法论。**
+> 📌 **精简分发原则**：编排器在 Step 0.4 已加载完整的术语规范文件。Step 3 启动 Agent 时，编排器将 quickref 中最关键的部分——**需替换术语列表（§6.1）和势力字根表（§6.3）**——提取为一段摘要字符串直接注入 Agent 指令。Step 3 Agent **不自主加载** world-element-registry、shared-constraints、lorecraft-core-principles、term-map 或任何其他文件。**这是强制约束——审查 Agent 只需要做术语验证，不需要知道命名方法论。**
 
 ### 交叉检查 & 问题分级
 **核心原则**：人物 > 读者 > 作者
@@ -309,7 +311,7 @@ Step 3: 保存 → git commit
 **Step 2.5 P0 检查清单**（增量模式下必须全部通过，否则阻断保存）：
 - [ ] **角色OOC检测**：修改章中每个出场角色的行为/对话是否符合其角色蒸馏卡（character_detail）
 - [ ] **因果链断裂检测**：修改引入的事件是否与前后章因果链连贯？是否有"因为剧情需要"式的无前因事件？
-- [ ] **时间线连续性**：修改章与前后章的时间戳是否递增、无跳跃？
+- [ ] **时间节奏合理性**：修改章是否按事件驱动组织？同一事件弧内时间连续，事件弧结束后允许跳跃？
 - [ ] **新实体一致性**：新增的角色/地点/物品是否已调MCP注册（character_create/world_upsert）？
 - [ ] **🔒术语质量**：修改章中世界观数术语是否有文化根脉？与 term-map 一致？
 
@@ -349,14 +351,16 @@ print(f"审计模式: {mode} | 范围: {scope}")
 
 ## 引擎加载清单（Step 0.4 完整列表）
 
-编排器按步骤加载并分发，**Step 3 采用精简分发**——编排器预提取 quickref 的禁止术语+势力字根，直接注入指令，Agent 不自主加载任何引擎文件。
+编排器按步骤加载并分发，**Step 3 采用精简分发**——编排器预提取 quickref 的需替换术语+势力字根，直接注入指令，Agent 不自主加载任何引擎文件。
 
 ```
 Step 1 (事件架构师) 需要：
   skill_loader("novel-planner-volume", "engine", "causality")
   skill_loader("novel-planner-volume", "engine", "relationship")
+  skill_loader("novel-planner-volume", "engine", "spiral-structure")
+  skill_loader("novel-planner-volume", "engine", "plot-density")
   skill_loader("novel-planner-volume", "agent", "shared-constraints")
-  Read(".claude/skills/lorecraft/references/core-principles.md")   # 核心原则+禁止术语+四步法
+  Read(".claude/skills/lorecraft/references/core-principles.md")   # 核心原则+需替换术语+四步法
   Read(".claude/skills/lorecraft/references/term-map.md")          # 现代→灵能术语映射表
   Read(".claude/skills/lorecraft/references/quickref.md")           # 速查卡
   Read(".claude/skills/engines/world-element-registry.md")         # 已注册元素索引
@@ -381,7 +385,7 @@ Step 3 (三视角审查) 需要：
   skill_loader("novel-planner-volume", "engine", "reader-perspective-agent")
   skill_loader("novel-planner-volume", "engine", "author-perspective-agent")
   skill_loader("novel-planner-volume", "engine", "character-perspective-agent")
-  # 📌 精简分发：编排器预提取 quickref 的禁止术语清单+势力字根表，作为字符串注入指令。
+  # 📌 精简分发：编排器预提取 quickref 的需替换术语清单+势力字根表，作为字符串注入指令。
   # ❌ 不加载：world-element-registry, shared-constraints, lorecraft-core-principles, term-map
   # Step 3 Agent 收到的术语约束仅为精简摘要，禁止自行加载文件。
 ```
@@ -396,6 +400,8 @@ loaded_resources = {
     # Step 1 引擎
     "Step1-因果链(causality)": causality_loaded,
     "Step1-关系(relationship)": relationship_loaded,
+    "Step1-螺旋结构(spiral-structure)": spiral_structure_loaded,
+    "Step1-情节密度(plot-density)": plot_density_loaded,
     # Step 2 引擎
     "Step2-场景类型(scene-type)": scene_type_loaded,
     "Step2-场面合成(scene-composition)": scene_composition_loaded,
@@ -454,16 +460,17 @@ if mode == "增量审计":
 
 ## 共享约束详细规则
 
-Agent 必须遵守以下六类规则，详见 `shared-constraints.md`：
+Agent 必须遵守以下七类规则，详见 `shared-constraints.md`：
 
 | 规则集 | 核心内容 | 查阅文件 |
 |--------|---------|---------|
-| POV时间线铁律 | 主角时间线锚定、暗面标注、连续性、时间标注 | `agents/shared-constraints.md §1` |
-| 内容密度规则 | 事件→字数映射、每章事件数、微事件、世界观展开 | `agents/shared-constraints.md §2` |
+| 事件驱动节奏铁律 | 章节=事件单元、非主角暗面标注、时间跳跃合法、场景时间标注、主角戏份保底 | `agents/shared-constraints.md §1` |
+| 内容密度规则 | 事件→字数映射、每章事件数、微事件、世界观展开、弹性事件储备 | `agents/shared-constraints.md §2` |
 | 伏笔自然设计（冰山理论） | 表面动机、先果后因、场景自检 | `agents/shared-constraints.md §3` |
 | 人物互动规则 | 组合多样性、罕见组合、费笔配额 | `agents/shared-constraints.md §4` |
 | 巧合计规则 | ≤1次/卷、必须有伏笔支撑 | `agents/shared-constraints.md §5` |
 | **🔒术语规范约束** | 文化根脉+字根一致性+势力区分+新术语四步法+已注册元素+层级区分 | `agents/shared-constraints.md §6` |
+| 回响规则（Echo） | 大事件余波自然回溯、密度控制（≤2次/卷）、融入世界呼吸、可跨卷 | `agents/shared-constraints.md §7` |
 
 编排器在 Step 0.4 加载 shared-constraints.md，在 Step 1/2 启动 Agent 时作为输入传入。Agent 在 `## 输入` 部分可见"共享约束"条目，**必须逐条遵守**。
 
@@ -489,6 +496,16 @@ Agent 必须遵守以下六类规则，详见 `shared-constraints.md`：
   {角色B}: 不变（理由：{ }）
 
 悬念: 回答了[?] / 新提出[?]
+
+螺旋结构:
+  信息矩阵: L1[?] L2[?] L3[?] ✅/❌
+  翻新型揭示: {模式} {翻新事件} ✅/❌
+  回旋镖: ≥3个 ✅/❌
+
+情节密度:
+  并行活跃链: {N}条 (需≥3) ✅/❌
+  NPC议程: {已追踪NPC数} ✅/❌
+  复杂化: 每章≥1次 ✅/❌
 
 🔒术语自检: 术语有文化根脉 ✅/❌
 
@@ -536,8 +553,10 @@ Ch{末}: {标题} | {场景数}个场景 | {章末钩子}
 - 罕见组合: ≥1个/卷 ✅/❌
 - 伏笔场景化: 全部有具体场景 ✅/❌
 - 主角在场: 占全卷章节数的一半以上 ✅/❌
-- 时间线连续: 无跳跃 ✅/❌
-- 🔒术语规范: 无禁止术语 ✅/❌
+- 事件弧节奏: 高潮事件多章展开，日常压缩，无按天填充 ✅/❌
+- 🔒术语规范: 无需替换术语 ✅/❌
+- 🔒螺旋结构: 信息钩子Lv2/Lv3≥60% ✅/❌ | 回旋锚已标注 ✅/❌
+- 🔒情节密度: 每章≥2条链推进 ✅/❌ | 每章≥1次复杂化 ✅/❌
 
 输入"OK"进入验证，或提修改意见（可指定某章修改）。
 ```

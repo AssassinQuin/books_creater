@@ -2,7 +2,7 @@
 name: novel-qa
 description: 小说全链路质量保障。支持大纲审阅、正文审阅、设定审查、健康诊断、级联更新五种模式。触发词：审阅大纲/审阅正文/审设定/诊断/卡文/OOC/检查/改设定
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, skill_loader
-depends_on: novel-planner, novel-chapter-writer, lorecraft, engines/outline-review, engines/causality, engines/anti-ai, engines/reader-perspective-agent, engines/author-perspective-agent, engines/character-perspective-agent
+depends_on: novel-planner, novel-chapter-writer, lorecraft, engines/outline-review, engines/causality, engines/anti-ai, engines/reader-perspective-agent, engines/author-perspective-agent, engines/character-perspective-agent, engines/spiral-structure, engines/plot-density
 lifecycle: quality
 version: "1.3.0"
 ---
@@ -34,7 +34,7 @@ version: "1.3.0"
 | 级别 | 判定标准 | 处理要求 |
 |------|---------|---------|
 | P0-致命 | 因果链断裂/人物OOC/设定矛盾/违禁词/术语违规 | 必须修复，阻断发布 |
-| P1-严重 | 伏笔未回收/节奏断层/质量波动/新术语无文化出处 | 必须修复，限1轮内 |
+| P1-严重 | 伏笔未回收/节奏断层/质量波动/新术语无文化出处/**螺旋结构缺失(纯线性)/情节密度不足(只有主线)** | 必须修复，限1轮内 |
 | P2-中等 | 描写冗余/对话平淡/爽点不足 | 应当修复，可延期 |
 | P3-轻微 | 标点不均/用词重复/格式不统一 | 批量处理，不阻塞 |
 
@@ -44,7 +44,7 @@ version: "1.3.0"
 
 ```
 Step 1: 加载 skill_loader("novel-qa", "engine", "outline-review")
-Step 2: 10维度Agent审计（结构/起承转合/伏笔密度/人物弧光/支线检验/情绪曲线/悬念密度/世界观一致性/因果链/可读性）
+Step 2: 12维度Agent审计（结构/起承转合/伏笔密度/人物弧光/支线检验/情绪曲线/悬念密度/世界观一致性/因果链/可读性/**螺旋结构/情节密度**）
 Step 3: 因果链问题 → 加载 causality 引擎，自动判P0
 Step 4: 🔒 评分卡 → P0/P1修复（每问题3方案+代价评估）
 Step 5: 重评（最多3轮迭代）
@@ -71,7 +71,7 @@ Step 6: 输出到 novels/{NOVEL_NAME}/审阅报告/大纲审计-{date}.md
 > 从8+ Agent同时并行改为"基础组→深度组→交叉组"三级串行。
 
 - **第一组（串行，必须全部通过）**：Agent-A人物(OOC/知识/风格/关系) + Agent-B逻辑(时间线/经济/伏笔/物品) + Agent-C术语(term-map合规扫描)
-- **第二组（并行，基于第一组结果）**：Agent-D质量(战斗/结构/爽点/AI指纹) + Agent-E支线(节点/交织/出场) + Agent-F三视角(3子Agent并行)
+- **第二组（并行，基于第一组结果）**：Agent-D质量(战斗/结构/爽点/AI指纹) + Agent-E支线(节点/交织/出场) + Agent-F三视角(3子Agent并行) + **Agent-G螺旋+密度(信息矩阵/翻新/回旋锚/并行链/NPC议程/复杂化)**
 - **第三组（编排器汇总）**：读者vs作者/读者vs人物/作者vs人物交叉检测
 
 > 第一组发现P0 → **中止第二组**，直接修复。分组详情见 supporting-info §正文审阅分组详情。
@@ -162,6 +162,7 @@ Step 6: 输出级联报告
   - Agent-F1 读者视角（`engines/reader-perspective-agent.md`）
   - Agent-F2 作者视角（`engines/author-perspective-agent.md`）
   - Agent-F3 人物视角（`engines/character-perspective-agent.md`）
+- **Agent-G 螺旋+密度**：三层信息矩阵完整性 / 翻新型揭示≥1次/卷 / 回旋锚≥3个/卷 / 并行链≥3条 / NPC议程完整 / 复杂化每章≥1次 / 信息钩子Lv2/Lv3≥60%（参考 `engines/spiral-structure.md` + `engines/plot-density.md`）
 
 ### 第三组：交叉检查（编排器汇总后执行）
 
@@ -248,6 +249,8 @@ Step 6: 输出级联报告
 | author-voice | 作者声音定义 | skill_loader("novel-qa", "engine", "author-voice") |
 | term-map | 术语合规映射 | lorecraft/references/term-map.md（强制） |
 | 三视角Agent | 读者/作者/人物审查 | engines/reader-perspective-agent.md 等 |
+| spiral-structure | 螺旋结构审计 | skill_loader("novel-qa", "engine", "spiral-structure") |
+| plot-density | 情节密度审计 | skill_loader("novel-qa", "engine", "plot-density") |
 
 ## 与 novel-reviser 的数据交接
 

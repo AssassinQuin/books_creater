@@ -42,7 +42,7 @@ Current project: **《这次不一样了》** — 14卷+尾声, 百万字级玄�
 ### Data Architecture
 
 Three-layer data architecture:
-- **novel-db MCP** (PostgreSQL): Structured data — world-building, characters, chapters, foreshadowing, timelines, dimensions. Server at `novel-db-mcp/server.py` (project-relative), connects to `DATABASE_URL` env var (default: `postgresql:///fcli`)
+- **novel-db MCP** (SQLite): Structured data — world-building, characters, chapters, foreshadowing, timelines, dimensions. Server at `novel-db-mcp/server.py` (project-relative), stores data in `data/novel.db`
 - **Memory MCP** (16 tools): Unstructured creative data — inspiration, writing experience, cross-project materials, anti-AI pattern blacklist. **需要先加载 memory skill 再调用任何 memory_memory_* 工具**。详见 [Memory Skill](#memory-integration)
 - **Git files**: Human-readable content — novel text, setting docs, review reports in `novels/{小说名}/`
 
@@ -258,6 +258,8 @@ Priority on conflict: C3 > B2 > others.
 | 人物关系 | `relationship.md` | 关系动态+对话风格 |
 | 能力系统 | `ability.md` | 能力全链路 |
 | 因果链 | `causality.md` | 因果逻辑校验 |
+| 螺旋结构 | `spiral-structure.md` | 三层信息矩阵+翻新型揭示+回旋镖决策+大事件信息层+信息钩子 |
+| 情节密度 | `plot-density.md` | 并行因果链+NPC议程+复杂化引擎+事件密度升级 |
 | 快照 | `snapshot.md` | 场景/事件/人物快照 |
 | 加载协议 | `loading.md` | 三级上下文加载协议 |
 | 反AI | `anti-ai.md` / `anti-ai-patterns.md` / `anti-ai-quickref.md` | 反AI指纹消除（quickref为写作时速查卡，替代全量SENTENCE-PATTERNS.md） |

@@ -186,13 +186,40 @@
 }
 ```
 
-> **动态内容已分离**：`current_snapshot`（当前快照）和 `growth_trajectory`（成长轨迹）为动态演化数据，不在静态档案中维护。
->
-> 动态追踪见：
-> - `character_state_snapshots` — 每章状态快照（位置、情绪、身体、能力、物品、知识）
-> - `character_distillation_evolution` — 蒸馏模型演化（决策变化、信息获取、信念转变、关系演变、声音变化、能力变化、弧线推进、关键抉择）
->
-> 查询工具：`character_get_latest` / `distillation_get` / `distillation_timeline` / `distillation_compare`
+### 当前快照 (`current_snapshot`)
+
+```json
+{
+  "identity": "终局身份定位",
+  "goal": "终局目标（V14尾声）",
+  "knows": "终局已知信息",
+  "ability_end_state": "能力终局状态（不可逆代价等）",
+  "core_discovery": "核心发现/顿悟",
+  "relationships_end": [
+    "角色A（终局关系描述）",
+    "角色B（终局关系描述）"
+  ],
+  "journey_summary": [
+    { "stage": "V1起点", "summary": "起点描述" },
+    { "stage": "V14", "summary": "终局描述" }
+  ]
+}
+```
+
+> **与动态追踪的区别**：`current_snapshot` 是全书的终局定稿（V14尾声），属于静态档案。
+> 每章的实时状态变化由 `character_state_snapshots` 维护。
+
+---
+
+## 动态追踪说明
+
+| 维度 | DB表 | 查询工具 | 说明 |
+|------|------|----------|------|
+| 每章状态快照 | `character_state_snapshots` | `character_get_latest` | 位置/情绪/身体/能力/物品/知识 |
+| 蒸馏演化 | `character_distillation_evolution` | `distillation_get` / `distillation_timeline` / `distillation_compare` | 决策变化/信念转变/关系演变/声音变化/能力变化/弧线推进 |
+| 成长轨迹 | `growth_trajectory` JSONB | `character_detail` | 角色成长设计（含 relationships_end） |
+
+> **不在静态档案中维护**：`character_state_snapshots`（逐章）和 `character_distillation_evolution`（逐章）为纯动态数据。
 
 ---
 
@@ -239,6 +266,9 @@
 ## 行为模式
 - **behavior_pattern**: {JSON}
 
+## 当前快照（终局）
+- **current_snapshot**: {JSON}
+
 ## 动态追踪（不在此文件维护）
 
 > 人物动态状态见 DB：
@@ -246,6 +276,11 @@
 > - `character_distillation_evolution` — 蒸馏模型演化记录
 >
 > 文件只保留静态档案，动态内容通过 MCP 工具查询。
+
+## 关系
+- **{relation_type}** ({from} → {to}, 强度{N}): {描述}
+    - **弦外之音**: {subtext_design}
+    - **对话调整**: {dialogue_adjustment JSON}
 
 ## 扩展维度
 <!-- 预留：未来新增维度在此追加，格式为 ## {维度名} + - **{field}**: {JSON/TEXT} -->

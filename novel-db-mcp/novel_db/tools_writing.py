@@ -1,67 +1,12 @@
 import json
+from pathlib import Path
 
-from .db import mcp, query
+from .db import mcp, query, PROJECT_ROOT
 from .resolvers import _resolve_novel_id, _resolve_chapter_id
 from .tools_chapter import _save_chapter_summary_internal
 from .constraints import validate_chapter_text, _get_constraints, _enrichment_level
 from .prompts import _build_event_checklist
 from .sync import _record_db_hash
-
-
-@mcp.tool
-def writing_start(novel_name: str, chapter_number: int) -> str:
-    """写章前一键注入上下文：章节信息+前3章摘要+活跃人物索引+未回收伏笔+当前卷规划+硬约束+质量历史。
-      novel_name: 小说名称
-    """
-    novel_id = _resolve_novel_id(novel_name)
-
-    result = {}
-
-    ch = query("SELECT * FROM chapters WHERE novel_id = %s AND number = %s",
-               (novel_id, chapter_number), fetch="one")
-    if not ch:
-        return json.dumps({"error": f"chapter {chapter_number} not found"}, ensure_ascii=False)
-    result["chapter"] = dict(ch)
-
-    prev = query(
-        "SELECT cs.summary, cs.dimension_snapshot FROM chapter_summaries cs "
-        "JOIN chapters c ON cs.chapter_id = c.id "
-        "WHERE c.novel_id = %s AND c.number < %s ORDER BY c.number DESC LIMIT 3",
-        (novel_id, chapter_number)
-    )
-    result["recent_summaries"] = [dict(r) for r in prev]
-
-    chars = query("SELECT id, name, role FROM characters "
-                  "WHERE novel_id = %s AND is_active = TRUE", (novel_id,))
-    result["active_characters"] = [dict(r) for r in chars]
-
-    foreshadows = query(
-        "SELECT id, description, planted_chapter_id, importance FROM foreshadows "
-        "WHERE novel_id = %s AND status = 'planted' ORDER BY id", (novel_id,))
-    result["unresolved_foreshadows"] = [dict(r) for r in foreshadows]
-
-    world = query("SELECT category, name FROM world_settings WHERE novel_id = %s", (novel_id,))
-    result["world_settings_index"] = [dict(r) for r in world]
-
-    if ch.get("volume_id"):
-        vol = query("SELECT * FROM volumes WHERE id = %s", (ch["volume_id"],), fetch="one")
-        if vol:
-            result["current_volume"] = dict(vol)
-
-    quality_history = _get_quality_history(novel_id, chapter_number)
-    result["quality_history"] = quality_history
-
-    result["writing_prompt"] = _build_writing_prompt(
-        ch=result["chapter"],
-        summaries=result["recent_summaries"],
-        chars=result["active_characters"],
-        foreshadows=result["unresolved_foreshadows"],
-        world_index=result["world_settings_index"],
-        vol=result.get("current_volume", {}),
-        quality_history=quality_history,
-    )
-
-    return json.dumps(result, ensure_ascii=False, default=str)
 
 
 @mcp.tool
@@ -440,4 +385,230 @@ def foreshadow_update(novel_name: str, foreshadow_id: int,
     _record_db_hash(novel_id, "foreshadow", str(foreshadow_id), json.dumps(fields, ensure_ascii=False))
     return json.dumps({"ok": True, "foreshadow_id": foreshadow_id, "updated_fields": list(fields.keys()), "reason": reason},
                       ensure_ascii=False)
+
+
+# ─── Echoes（回响 — 大事件余波的自然回溯）──────────────────
+
+
+@mcp.tool
+def echo_create(novel_name: str, source_chapter_id: int, echo_chapter_id: int,
+                source_event: str, echo_type: str,
+                echo_description: str = "", strong_related: bool = False,
+                tags: list = None) -> str:
+    """创建回响记录。回响是大事件后在日常场景中自然回溯的人/物/地点/梗。
+      密度规则：普通回响≤2次/卷，强相关不限，跨卷≤1次/间隔。
+      融入方式：必须融入世界呼吸或角色日常动作，不能是独立段落。
+
+      参数:
+        novel_name: 小说名称
+        source_chapter_id: 原始事件发生章节ID（被回溯的源）
+        echo_chapter_id: 回响出现章节ID
+        source_event: 被回溯的原始事件/人/物品/地点/梗（一句话描述）
+        echo_type: 回响类型 — character_habit/physical_trace/catchphrase/location_change/item/memory
+        echo_description: 回响的具体写法（一句话，如"沈野翻背包碰到缺角铁壶，停了一下"）
+        strong_related: 是否强相关（True=不受密度限制，如角色死亡影响后续所有资源分配场景）
+        tags: 标签列表
+    """
+    novel_id = _resolve_novel_id(novel_name)
+
+    # Resolve volume_id from echo_chapter
+    vol_id = None
+    ch = query("SELECT volume_id FROM chapters WHERE id = %s AND novel_id = %s",
+               (echo_chapter_id, novel_id), fetch="one")
+    if ch:
+        vol_id = ch.get("volume_id")
+
+    r = query(
+        "INSERT INTO echoes (novel_id, source_chapter_id, echo_chapter_id, volume_id, "
+        "source_event, echo_type, echo_description, strong_related, tags) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        (novel_id, source_chapter_id, echo_chapter_id, vol_id,
+         source_event, echo_type, echo_description,
+         1 if strong_related else 0,
+         tags or []), fetch="one"
+    )
+    _record_db_hash(novel_id, "echo", str(r["id"]),
+                    json.dumps({"source_event": source_event, "echo_type": echo_type}, ensure_ascii=False))
+    return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
+
+
+@mcp.tool
+def echo_list(novel_name: str, volume_id: int = 0, echo_chapter_id: int = 0) -> str:
+    """列出回响记录。可按卷或章节过滤，用于检查密度是否超标（普通回响≤2次/卷）。
+      novel_name: 小说名称
+      volume_id: 按卷过滤（0=全部）
+      echo_chapter_id: 按回响出现章节过滤（0=全部）
+    """
+    novel_id = _resolve_novel_id(novel_name)
+
+    if volume_id:
+        rows = query("SELECT e.*, c1.number as source_ch, c2.number as echo_ch "
+                     "FROM echoes e "
+                     "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
+                     "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
+                     "WHERE e.novel_id = %s AND e.volume_id = %s ORDER BY e.id",
+                     (novel_id, volume_id))
+    elif echo_chapter_id:
+        rows = query("SELECT e.*, c1.number as source_ch, c2.number as echo_ch "
+                     "FROM echoes e "
+                     "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
+                     "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
+                     "WHERE e.novel_id = %s AND e.echo_chapter_id = %s ORDER BY e.id",
+                     (novel_id, echo_chapter_id))
+    else:
+        rows = query("SELECT e.*, c1.number as source_ch, c2.number as echo_ch "
+                     "FROM echoes e "
+                     "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
+                     "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
+                     "WHERE e.novel_id = %s ORDER BY e.id", (novel_id,))
+
+    # Density check: count non-strong echoes per volume
+    density_warn = []
+    if not volume_id:
+        vol_counts = query(
+            "SELECT e.volume_id, COUNT(*) as cnt FROM echoes e "
+            "WHERE e.novel_id = %s AND e.strong_related = 0 AND e.volume_id IS NOT NULL "
+            "GROUP BY e.volume_id", (novel_id,))
+        for vc in vol_counts:
+            if vc["cnt"] > 2:
+                density_warn.append(f"V{vc['volume_id']}有{vc['cnt']}次普通回响（上限2次）")
+
+    result = {
+        "echoes": [dict(r) for r in rows],
+        "density_warnings": density_warn
+    }
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+@mcp.tool
+def echo_density_check(novel_name: str, volume_id: int) -> str:
+    """检查某卷的回响密度。返回普通回响/强相关回响/跨卷回响的数量和具体列表。
+      novel_name: 小说名称
+      volume_id: 要检查的卷ID
+    """
+    novel_id = _resolve_novel_id(novel_name)
+
+    normal = query(
+        "SELECT e.*, c1.number as source_ch, c2.number as echo_ch "
+        "FROM echoes e "
+        "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
+        "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
+        "WHERE e.novel_id = %s AND e.volume_id = %s AND e.strong_related = 0 "
+        "ORDER BY e.id",
+        (novel_id, volume_id))
+
+    strong = query(
+        "SELECT e.*, c1.number as source_ch, c2.number as echo_ch "
+        "FROM echoes e "
+        "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
+        "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
+        "WHERE e.novel_id = %s AND e.volume_id = %s AND e.strong_related = 1 "
+        "ORDER BY e.id",
+        (novel_id, volume_id))
+
+    # Cross-volume echoes: source from different volume
+    cross_vol = query(
+        "SELECT e.*, c1.number as source_ch, c2.number as echo_ch, "
+        "cv.number as source_vol "
+        "FROM echoes e "
+        "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
+        "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
+        "LEFT JOIN chapters cv ON e.source_chapter_id = cv.id "
+        "LEFT JOIN volumes v ON cv.volume_id = v.id "
+        "WHERE e.novel_id = %s AND e.volume_id = %s "
+        "AND cv.volume_id != %s "
+        "ORDER BY e.id",
+        (novel_id, volume_id, volume_id))
+
+    exceeded = len(normal) > 2
+    return json.dumps({
+        "volume_id": volume_id,
+        "normal_echoes": {"count": len(normal), "limit": 2, "exceeded": exceeded,
+                         "items": [dict(r) for r in normal]},
+        "strong_echoes": {"count": len(strong), "limit": "unlimited",
+                          "items": [dict(r) for r in strong]},
+        "cross_volume_echoes": {"count": len(cross_vol), "limit": 1,
+                                "items": [dict(r) for r in cross_vol]},
+        "status": "exceeded" if exceeded else "ok"
+    }, ensure_ascii=False, default=str)
+
+
+# ──────────────────────────────────────────
+# ENGINE_MATRIX: 场面类型 → 引擎映射表
+# 硬编码在编排器层，不交给模型选——防偷懒/错选。
+# 新增引擎 → 先放 engines/*.md，再加一行映射。无其他配置。
+# ──────────────────────────────────────────
+
+ENGINE_MATRIX: dict[str, list[str]] = {
+    "_always": [
+        "author-voice",
+        "anti-ai-quickref",
+        "writing-style",
+        "world-element-registry",
+    ],
+    "atmosphere": ["environment"],
+    "dialogue": ["dialogue"],
+    "battle": ["action", "battle", "author-voice-battle"],
+    "emotion": ["author-voice-emotion"],
+    "daily": ["author-voice-daily"],
+    "mystery": ["author-voice-mystery"],
+    "item_use": ["item"],
+    "multi_char": ["scene-composition"],
+    "deepening": ["scene-deepening"],
+}
+
+
+@mcp.tool
+def resolve_engines(scene_types: list[str]) -> str:
+    """根据 Agent 3 标注的场面 AES 类型，自动解析需加载的引擎文件内容。
+
+    编排器在收到 Agent 3 的场面类型标签后调用此工具。
+    返回所有匹配引擎的完整内容（_always 引擎始终包含）。
+    Agent 3 不再负责读文件——只标类型，编排器自动 resolve。
+
+    参数:
+      scene_types: 场面类型列表，由 Agent 3 从 AES 标签提取。
+                   如 ["atmosphere", "dialogue"] 或 Agent 3 输出的原始标签。
+
+    用法:
+      resolve_engines(["atmosphere", "dialogue"])
+      resolve_engines(["battle", "emotion", "daily"])
+
+    返回:
+      JSON 对象，key=引擎名，value=引擎文件完整内容
+    """
+    # 收集需加载的引擎名（去重+保持顺序）
+    seen: set[str] = set()
+    ordered: list[str] = []
+
+    def _add(names: list[str]) -> None:
+        for n in names:
+            if n not in seen:
+                seen.add(n)
+                ordered.append(n)
+
+    _add(ENGINE_MATRIX.get("_always", []))
+    for st in scene_types:
+        key = st.removeprefix("AES:").strip()
+        _add(ENGINE_MATRIX.get(key, []))
+
+    # 读取引擎文件
+    engine_dir = Path(PROJECT_ROOT) / ".claude" / "skills" / "engines"
+    result: dict[str, str] = {}
+    missing: list[str] = []
+
+    for eng in ordered:
+        fp = engine_dir / f"{eng}.md"
+        if fp.exists():
+            result[eng] = fp.read_text(encoding="utf-8")
+        else:
+            result[eng] = f"[engine file not found: {eng}.md]"
+            missing.append(eng)
+
+    payload = {"engines": result, "scene_types": scene_types}
+    if missing:
+        payload["missing"] = missing
+
+    return json.dumps(payload, ensure_ascii=False)
+
 

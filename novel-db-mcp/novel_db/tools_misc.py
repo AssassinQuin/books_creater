@@ -1,14 +1,15 @@
 import json
 import os
 import re
+from pathlib import Path
 
 from .db import mcp, query, PROJECT_ROOT
 from .resolvers import _resolve_novel_id
 from .sync import (
     _ensure_data_hashes_table, _compute_hash, _record_db_hash, _record_file_hash,
-    _db_row_to_hashable, _sync_world_to_file, _sync_character_to_file,
-    _sync_foreshadow_to_file, _sync_volume_to_file, _NOVELS_BASE,
+    _db_row_to_hashable, _NOVELS_BASE,
 )
+from .sync_engine import engine as _sync_engine
 
 
 @mcp.tool
@@ -245,20 +246,70 @@ def db_search(novel_name: str, keyword: str) -> str:
 
 
 @mcp.tool
+def engine_list() -> str:
+    """罗列可用写作引擎文件，自动解析 # Title + > Summary。
+
+    引擎文件是权威源——新增引擎只需放入 engines/ 目录即被自动发现。
+    编排器不将引擎元数据存 DB，避免双源同步。
+
+    用法:
+      engine_list()  # 返回全部引擎的名称、标题、摘要
+    """
+    engine_dir = Path(PROJECT_ROOT) / ".claude" / "skills" / "engines"
+    if not engine_dir.exists():
+        return json.dumps({"error": f"引擎目录不存在: {engine_dir}"}, ensure_ascii=False)
+
+    engines = []
+    for f in sorted(engine_dir.glob("*.md")):
+        content = f.read_text(encoding="utf-8")
+        lines = content.strip().split("\n")
+        title = ""
+        summary = ""
+        for line in lines:
+            if line.startswith("# ") and not title:
+                title = line[2:].strip()
+            elif line.startswith(">") and not summary:
+                summary = line[1:].strip()
+            if title and summary:
+                break
+
+        engines.append({
+            "file": f.name,
+            "name": f.stem,
+            "title": title or f.stem,
+            "summary": summary or "",
+        })
+
+    # 检测未注册引擎：磁盘有但 ENGINE_MATRIX 无映射
+    from .tools_writing import ENGINE_MATRIX
+    registered = set()
+    for names in ENGINE_MATRIX.values():
+        registered.update(names)
+    on_disk = {e["name"] for e in engines}
+    unregistered = sorted(on_disk - registered)
+
+    result = {"engines": engines}
+    if unregistered:
+        result["unregistered"] = unregistered
+
+    return json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool
 def sync_startup(novel_name: str, data_type: str = "") -> str:
     """启动时双向对比DB与文件状态，检测冲突，返回差异报告供用户确认。
     新数据流：skill→DB直接操作，文件为可选副本。启动时对比两端，冲突默认以DB为准。
     参数:
       novel_name: 小说名称
-      data_type: 校验范围，空=全部，可选: world/character/foreshadow/volume/chapter
+      data_type: 校验范围，空=全部，可选: world/character/foreshadow/volume/echo
     返回:
       差异报告，含: db_only(DB有文件无), file_only(文件有DB无), conflict(两端都有但不同)
-      每个冲突项标记默认解决方案(以DB为准)
+      每个冲突项标记默认解决方案(以权威源为准)
     用法:
       sync_startup(novel_name="这次不一样了")
       sync_startup(novel_name="这次不一样了", data_type="world")
+      sync_startup(novel_name="这次不一样了", data_type="echo")
     """
-    novel_id = _resolve_novel_id(novel_name)
     _ensure_data_hashes_table()
     results = {
         "db_only": [],
@@ -267,26 +318,36 @@ def sync_startup(novel_name: str, data_type: str = "") -> str:
         "consistent": [],
         "summary": {}
     }
-    types_to_check = [data_type] if data_type else ["world", "character", "foreshadow", "volume"]
+    # 获取引擎已注册的类型列表，YAML manifest 可动态扩展
+    default_types = [t for t in _sync_engine.available_types if t != "world"]
+    types_to_check = [data_type] if data_type else default_types
 
-    if "world" in types_to_check:
+    for etype in types_to_check:
+        try:
+            diff = _sync_engine.diff(novel_name, etype)
+            for item in diff.get("db_only", []):
+                item["note"] = item.get("note", "文件不存在")
+                results["db_only"].append(item)
+            results["file_only"].extend(diff.get("file_only", []))
+            results["conflict"].extend(diff.get("conflict", []))
+            results["consistent"].extend(diff.get("consistent", []))
+        except Exception as e:
+            results["errors"] = results.get("errors", [])
+            results["errors"].append({"type": etype, "error": str(e)})
+
+    # 世界观使用专用diff逻辑（many→one 聚合文件）
+    if (not data_type or data_type == "world") and "world" in _sync_engine.available_types:
+        novel_id = _resolve_novel_id(novel_name)
         db_rows = query(
             "SELECT * FROM world_settings WHERE novel_id = %s",
             (novel_id,)
         )
-        db_map = {}
+        from .sync_engine import _resolve_category_file
         for row in db_rows:
             key = f"{row['category']}:{row['name']}"
-            db_map[key] = row
             db_hash = _compute_hash(_db_row_to_hashable(dict(row)))
-            file_path = os.path.join(
-                _NOVELS_BASE, novel_name, "设定", "世界观",
-                {"core_setting": "核心设定.md", "bestiary": "异灵图鉴.md",
-                 "ability": "能力体系.md", "item": "物品装备.md",
-                 "economy": "经济体系.md", "daily_life": "日常生活.md",
-                 "history": "历史事件.md", "location": "地图.md",
-                 "faction": "势力.md", "race": "种族.md"}.get(row["category"], f"{row['category']}.md")
-            )
+            cat_file = _resolve_category_file(row['category'], row)
+            file_path = os.path.join(_NOVELS_BASE, novel_name, "设定", "世界观", f"{cat_file}.md")
             if os.path.exists(file_path):
                 with open(file_path, "r", encoding="utf-8") as f:
                     file_content = f.read()
@@ -296,7 +357,6 @@ def sync_startup(novel_name: str, data_type: str = "") -> str:
                     if db_hash != file_hash:
                         results["conflict"].append({
                             "type": "world", "key": key,
-                            "db_updated": str(row.get("updated_at", "")),
                             "resolution": "DB→file"
                         })
                     else:
@@ -307,80 +367,9 @@ def sync_startup(novel_name: str, data_type: str = "") -> str:
                 results["db_only"].append({"type": "world", "key": key, "note": "文件不存在"})
             _record_db_hash(novel_id, "world", key, db_hash)
 
-    if "character" in types_to_check:
-        db_rows = query(
-            "SELECT * FROM characters WHERE novel_id = %s AND is_active = TRUE",
-            (novel_id,)
-        )
-        for row in db_rows:
-            key = row["name"]
-            db_hash = _compute_hash(_db_row_to_hashable(dict(row)))
-            file_path = os.path.join(_NOVELS_BASE, novel_name, "设定", "人物", f"{key}.md")
-            if os.path.exists(file_path):
-                with open(file_path, "r", encoding="utf-8") as f:
-                    file_content = f.read()
-                file_hash = _compute_hash(file_content)
-                if db_hash != file_hash:
-                    results["conflict"].append({
-                        "type": "character", "key": key,
-                        "db_updated": str(row.get("updated_at", "")),
-                        "resolution": "DB→file"
-                    })
-                else:
-                    results["consistent"].append({"type": "character", "key": key})
-            else:
-                results["db_only"].append({"type": "character", "key": key, "note": "文件不存在"})
-            _record_db_hash(novel_id, "character", key, db_hash)
-
-    if "foreshadow" in types_to_check:
-        db_rows = query(
-            "SELECT id, description, status, importance, planned_recall_chapter, updated_at "
-            "FROM foreshadows WHERE novel_id = %s",
-            (novel_id,)
-        )
-        for row in db_rows:
-            key = str(row["id"])
-            db_hash = _compute_hash(_db_row_to_hashable(dict(row)))
-            _record_db_hash(novel_id, "foreshadow", key, db_hash)
-            results["consistent"].append({"type": "foreshadow", "key": key, "desc": row["description"][:40]})
-
-    if "volume" in types_to_check:
-        outline_dir = os.path.join(_NOVELS_BASE, novel_name, "设定", "大纲")
-        if os.path.isdir(outline_dir):
-            for fname in sorted(os.listdir(outline_dir)):
-                if not fname.endswith(".md") or fname in ("伏笔清单.md", "附录.md", "兄妹心结-渐进弧线.md"):
-                    continue
-                fpath = os.path.join(outline_dir, fname)
-                with open(fpath, "r", encoding="utf-8") as f:
-                    content = f.read()
-                file_hash = _compute_hash(content)
-                key = fname.replace(".md", "")
-                _record_file_hash(novel_id, "volume", key, content)
-                vol_match = re.match(r"V(\d+)", fname)
-                if vol_match:
-                    vol_num = int(vol_match.group(1))
-                    vol = query(
-                        "SELECT id, notes, updated_at FROM volumes WHERE novel_id = %s AND number = %s",
-                        (novel_id, vol_num), fetch="one"
-                    )
-                    if vol:
-                        db_hash = _compute_hash(str(vol.get("notes", "")))
-                        if db_hash != file_hash:
-                            results["conflict"].append({
-                                "type": "volume", "key": key,
-                                "db_updated": str(vol.get("updated_at", "")),
-                                "resolution": "file→DB"
-                            })
-                        else:
-                            results["consistent"].append({"type": "volume", "key": key})
-                    else:
-                        results["file_only"].append({"type": "volume", "key": key, "note": "DB中无此卷记录"})
-                else:
-                    results["file_only"].append({"type": "volume", "key": key, "note": "非标准卷号"})
-
     results["summary"] = {
-        "novel_id": novel_id,
         "novel_name": novel_name,
+        "engine_types": _sync_engine.available_types,
         "total_checked": len(results["consistent"]) + len(results["conflict"]) + len(results["db_only"]) + len(results["file_only"]),
         "consistent": len(results["consistent"]),
         "conflict": len(results["conflict"]),
@@ -393,74 +382,39 @@ def sync_startup(novel_name: str, data_type: str = "") -> str:
 @mcp.tool
 def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = False) -> str:
     """将DB数据同步到文件（单向：DB→file）。skill操作只写DB，用户选择何时同步到文件。
+    通过 SyncEngine 模板驱动，支持 YAML manifest 扩展的实体类型。
     参数:
       novel_name: 小说名称
-      data_type: 同步范围，空=全部，可选: world/character/foreshadow/volume/chapter
+      data_type: 同步范围，空=全部，可选: world/character/foreshadow/volume/echo
       overwrite: True=强制覆盖所有文件，False=只同步有差异的
     用法:
-      sync_db_to_files(novel_name="这次不一样了")                    # 同步全部有差异的
+      sync_db_to_files(novel_name="这次不一样了")                    # 同步全部
       sync_db_to_files(novel_name="这次不一样了", data_type="world")  # 只同步世界观
+      sync_db_to_files(novel_name="这次不一样了", data_type="echo")   # 只同步回响
       sync_db_to_files(novel_name="这次不一样了", overwrite=True)     # 强制全量覆盖
     注: file→DB方向请使用 sync_files_to_db()
     """
-    novel_id = _resolve_novel_id(novel_name)
     results = {"synced": [], "skipped": [], "errors": []}
-    types_to_sync = [data_type] if data_type else ["world", "character", "foreshadow", "volume"]
+    types_to_sync = [data_type] if data_type else _sync_engine.available_types
 
-    if "world" in types_to_sync:
-        rows = query(
-            "SELECT * FROM world_settings WHERE novel_id = %s",
-            (novel_id,)
-        )
-        for row in rows:
-            key = f"{row['category']}:{row['name']}"
-            try:
-                _sync_world_to_file(novel_id, novel_name, dict(row))
-                results["synced"].append({"type": "world", "key": key, "direction": "DB→file"})
-            except Exception as e:
-                results["errors"].append({"type": "world", "key": key, "error": str(e)})
-
-    if "character" in types_to_sync:
-        rows = query(
-            "SELECT * FROM characters WHERE novel_id = %s AND is_active = TRUE",
-            (novel_id,)
-        )
-        for row in rows:
-            try:
-                _sync_character_to_file(novel_id, novel_name, dict(row))
-                results["synced"].append({"type": "character", "key": row["name"], "direction": "DB→file"})
-            except Exception as e:
-                results["errors"].append({"type": "character", "key": row["name"], "error": str(e)})
-
-    if "foreshadow" in types_to_sync:
-        rows = query(
-            "SELECT * FROM foreshadows WHERE novel_id = %s",
-            (novel_id,)
-        )
-        for row in rows:
-            try:
-                _sync_foreshadow_to_file(novel_id, novel_name, dict(row))
-                results["synced"].append({"type": "foreshadow", "key": str(row["id"]), "direction": "DB→file"})
-            except Exception as e:
-                results["errors"].append({"type": "foreshadow", "key": str(row["id"]), "error": str(e)})
-
-    if "volume" in types_to_sync:
-        vol_rows = query(
-            "SELECT * FROM volumes WHERE novel_id = %s ORDER BY number",
-            (novel_id,)
-        )
-        for vol in vol_rows:
-            key = f"V{vol['number']}"
-            try:
-                created = _sync_volume_to_file(novel_id, novel_name, dict(vol))
-                direction = "DB→file (新建)" if created else "file已存在,跳过"
-                results["synced"].append({"type": "volume", "key": key, "direction": direction})
-            except Exception as e:
-                results["errors"].append({"type": "volume", "key": key, "error": str(e)})
+    for etype in types_to_sync:
+        if etype not in _sync_engine.available_types:
+            results["errors"].append({"type": etype, "error": f"未注册的同步类型: {etype}"})
+            continue
+        try:
+            r = _sync_engine.db_to_files(novel_name, etype, overwrite=overwrite)
+            for item in r.get("errors", []):
+                results["errors"].append(item)
+            for _ in range(r.get("synced", 0)):
+                results["synced"].append({"type": etype, "direction": "DB→file"})
+            for _ in range(r.get("skipped", 0)):
+                results["skipped"].append({"type": etype, "direction": "跳过（skip_existing）"})
+        except Exception as e:
+            results["errors"].append({"type": etype, "error": str(e)})
 
     summary = {
-        "novel_id": novel_id,
         "novel_name": novel_name,
+        "engine_types": _sync_engine.available_types,
         "synced_count": len(results["synced"]),
         "skipped_count": len(results["skipped"]),
         "error_count": len(results["errors"]),
@@ -471,51 +425,85 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
 
 
 @mcp.tool
-def sync_files_to_db(novel_name: str) -> str:
-    """将文件数据同步回DB（单向：file→DB）。当前支持卷级大纲文件→volumes.notes。
+def sync_files_to_db(novel_name: str, data_type: str = "") -> str:
+    """将文件数据结构化解析后同步回DB（单向：file→DB，无损转换）。
+
+    通过 SyncEngine 模板驱动，按字段映射写入对应 DB 列（无截断）。
+    支持: volume(完整17段解析), character(全部字段+JSONB), world(聚合解析), foreshadow, echo
+
     参数:
       novel_name: 小说名称
+      data_type: 同步范围，空=全部，可选: world/character/foreshadow/volume/echo
     用法:
-      sync_files_to_db(novel_name="这次不一样了")  # 读取设定/大纲/V*.md → 更新volumes表
+      sync_files_to_db(novel_name="这次不一样了")                      # 全部实体类型
+      sync_files_to_db(novel_name="这次不一样了", data_type="volume")  # 只同步卷级大纲
+      sync_files_to_db(novel_name="这次不一样了", data_type="character") # 只同步人物
+    注: DB→file方向请使用 sync_db_to_files()
     """
-    novel_id = _resolve_novel_id(novel_name)
-    synced = []
-    errors = []
+    results = {"synced": [], "skipped": [], "errors": []}
+    types_to_sync = [data_type] if data_type else _sync_engine.available_types
 
-    outline_dir = os.path.join(_NOVELS_BASE, novel_name, "设定", "大纲")
-    if not os.path.isdir(outline_dir):
-        return json.dumps({"ok": True, "synced": [], "errors": [], "note": "目录不存在"}, ensure_ascii=False)
-
-    for fname in sorted(os.listdir(outline_dir)):
-        if not fname.endswith(".md"):
-            continue
-        fpath = os.path.join(outline_dir, fname)
-        vol_match = re.match(r"V(\d+)", fname)
-        if not vol_match:
-            continue
-        vol_num = int(vol_match.group(1))
-        vol = query(
-            "SELECT id FROM volumes WHERE novel_id = %s AND number = %s",
-            (novel_id, vol_num), fetch="one"
-        )
-        if not vol:
+    for etype in types_to_sync:
+        if etype not in _sync_engine.available_types:
+            results["errors"].append({"type": etype, "error": f"未注册的同步类型: {etype}"})
             continue
         try:
-            with open(fpath, "r", encoding="utf-8") as f:
-                content = f.read()
-            query(
-                "UPDATE volumes SET notes = %s, updated_at = NOW() WHERE id = %s",
-                (content[:2000], vol["id"]), fetch="none"
-            )
-            synced.append({"type": "volume", "key": fname.replace(".md", ""), "direction": "file→DB"})
+            r = _sync_engine.files_to_db(novel_name, etype)
+            if "error" in r:
+                results["errors"].append({"type": etype, "error": r["error"]})
+                continue
+            for detail in r.get("details", []):
+                results["synced"].append({"type": etype, "key": detail.get("key", "?"), "direction": "file→DB"})
+            for item in r.get("errors", []):
+                results["errors"].append({"type": etype, **item})
         except Exception as e:
-            errors.append({"type": "volume", "key": fname.replace(".md", ""), "error": str(e)})
+            results["errors"].append({"type": etype, "error": str(e)})
 
-    return json.dumps({
-        "ok": True,
+    summary = {
         "novel_name": novel_name,
-        "synced_count": len(synced),
-        "error_count": len(errors),
-        "synced": synced,
-        "errors": errors,
-    }, ensure_ascii=False)
+        "engine_types": _sync_engine.available_types,
+        "synced_count": len(results["synced"]),
+        "error_count": len(results["errors"]),
+        "synced": results["synced"],
+        "errors": results["errors"],
+    }
+    return json.dumps(summary, ensure_ascii=False, default=str)
+
+
+@mcp.tool
+def sync_roundtrip(novel_name: str, data_type: str = "") -> str:
+    """双向无损验证：File→DB→File round-trip 测试。
+
+    流程: 读取文件 → 解析写入DB → DB渲染回文件 → 对比两次文件内容
+    用于验证同步引擎的格式转换保真度。
+
+    参数:
+      novel_name: 小说名称
+      data_type: 测试范围，空=全部，可选: character/volume/foreshadow/world/echo
+    用法:
+      sync_roundtrip(novel_name="这次不一样了")                      # 全部测试
+      sync_roundtrip(novel_name="这次不一样了", data_type="volume")  # 只测试卷级大纲
+    """
+    results = {}
+    types_to_test = [data_type] if data_type else _sync_engine.available_types
+
+    for etype in types_to_test:
+        if etype not in _sync_engine.available_types:
+            results[etype] = {"error": f"未注册的同步类型: {etype}"}
+            continue
+        try:
+            r = _sync_engine.roundtrip(novel_name, etype)
+            results[etype] = r
+        except Exception as e:
+            results[etype] = {"error": str(e)}
+
+    all_lossless = all(
+        r.get("lossless", False) for r in results.values() if "error" not in r
+    ) if results else True
+
+    summary = {
+        "novel_name": novel_name,
+        "all_lossless": all_lossless,
+        "details": results,
+    }
+    return json.dumps(summary, ensure_ascii=False, default=str)

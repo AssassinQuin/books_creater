@@ -1,4 +1,4 @@
-"""Novel Writer MCP Server - FastMCP 3.x + PostgreSQL"""
+"""Novel Writer MCP Server - FastMCP 3.x + SQLite (libsql)"""
 
 from novel_db.db import mcp
 
@@ -30,12 +30,13 @@ from novel_db.tools_chapter import (  # noqa: F401
     timeline_add, timeline_query, timeline_update, timeline_delete,
 )
 from novel_db.tools_writing import (  # noqa: F401
-    writing_start, writing_finish, validate_chapter,
+    writing_finish, validate_chapter,
     rule_detail, record_new_content, event_checklist,
     foreshadow_plant, foreshadow_recall, foreshadow_list, foreshadow_update,
+    resolve_engines,
 )
 from novel_db.tools_misc import (  # noqa: F401
-    health_check, skill_loader, db_search,
+    health_check, skill_loader, db_search, engine_list,
     sync_startup, sync_db_to_files, sync_files_to_db,
 )
 
