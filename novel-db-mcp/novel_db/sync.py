@@ -350,10 +350,9 @@ def _sync_character_to_file(novel_id: int, novel_name: str, char: dict):
         sections.append("\n## 弧线\n")
         sections.extend(sec_lines)
 
-    # -- JSONB rich sections (静态档案只同步不变的基础设定) --
-    # 注意：current_snapshot / growth_trajectory 为动态演化数据
-    # 通过 character_state_snapshots / character_distillation_evolution 维护
-    # 不在静态档案文件中同步
+    # -- JSONB rich sections (静态档案：基础设定 + 终局快照) --
+    # 注意：growth_trajectory 为纯动态数据，不在文件中同步
+    # current_snapshot 为终局快照，属于静态档案的一部分
     for heading, col in [
         ("外观描写库", "appearance_detail"),
         ("决策引擎", "decision_engine"),
@@ -367,30 +366,56 @@ def _sync_character_to_file(novel_id: int, novel_name: str, char: dict):
             sections.append(f"- **{col}**:")
             sections.extend(_jsonb_to_md(val, 1))
 
+    # -- 当前快照（终局） --
+    # current_snapshot JSONB: identity, goal, knows, ability_end_state,
+    #   core_discovery, relationships_end, journey_summary 等
+    snapshot = _parse_json_field(char.get("current_snapshot"))
+    if snapshot and not _is_empty(snapshot):
+        sections.append("\n## 当前快照（终局）\n")
+        sections.append("- **current_snapshot**:")
+        sections.extend(_jsonb_to_md(snapshot, 1))
+    else:
+        # Fallback: 从基础字段和动态列拼凑简化版
+        snap_lines = []
+        for k in ["current_location", "current_arc_phase", "emotional_state",
+                  "physical_state"]:
+            v = char.get(k)
+            if not _is_empty(v):
+                snap_lines.append(f"- **{k}**: {v}")
+        for col in ["ability_progression", "inventory", "knowledge_state"]:
+            val = char.get(col)
+            if val and not _is_empty(val):
+                snap_lines.append(f"- **{col}**:")
+                snap_lines.extend(_jsonb_to_md(val, 1))
+        if snap_lines:
+            sections.append("\n## 当前快照（终局）\n")
+            sections.extend(snap_lines)
+
     # -- 动态追踪指针 --
     sections.append("\n## 动态追踪（不在此文件维护）\n")
     sections.append("> 人物动态状态见 DB：`character_state_snapshots`（状态快照） / `character_distillation_evolution`（蒸馏演化）")
 
-    # -- 当前状态 --
-    sec_lines = []
-    for k in ["current_location", "current_arc_phase", "emotional_state",
-              "physical_state"]:
-        v = char.get(k)
-        if not _is_empty(v):
-            sec_lines.append(f"- **{k}**: {v}")
-    v = char.get("last_appearance_chapter")
-    if v is not None:
-        sec_lines.append(f"- **last_appearance_chapter**: {v}")
-    for col in ["ability_progression", "inventory", "knowledge_state"]:
-        val = char.get(col)
-        if val and not _is_empty(val):
-            sec_lines.append(f"- **{col}**:")
-            sec_lines.extend(_jsonb_to_md(val, 1))
-    if sec_lines:
-        sections.append("\n## 当前状态\n")
-        sections.extend(sec_lines)
-
     # -- 关系 --
+    # 优先使用 growth_trajectory 中的 relationships_end（终局关系总结）
+    # 否则从 character_relations 表实时查询
+    growth = _parse_json_field(char.get("growth_trajectory"))
+    rels_end = None
+    if growth and isinstance(growth, dict):
+        rels_end = growth.get("relationships_end")
+
+    if rels_end and not _is_empty(rels_end):
+        # 终局关系总结：直接输出列表
+        sections.append("\n## 关系\n")
+        if isinstance(rels_end, list):
+            for item in rels_end:
+                if isinstance(item, str):
+                    sections.append(f"- {item}")
+                elif isinstance(item, dict):
+                    sections.extend(_jsonb_to_md(item, 0))
+        elif isinstance(rels_end, str):
+            sections.append(f"- {rels_end}")
+
+    # 实时关系查询（始终输出完整活跃关系）
     rels = query(
         "SELECT cr.relation_type, cr.description, cr.intensity, "
         "c1.name as from_name, c2.name as to_name, "
