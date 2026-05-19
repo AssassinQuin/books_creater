@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from pathlib import Path
 
 from .db import mcp, query, PROJECT_ROOT
 from .resolvers import _resolve_novel_id
@@ -242,6 +243,56 @@ def db_search(novel_name: str, keyword: str) -> str:
     if foreshadows:
         result["foreshadows"] = [dict(r) for r in foreshadows]
     return json.dumps(result, ensure_ascii=False, default=str)
+
+
+@mcp.tool
+def engine_list() -> str:
+    """罗列可用写作引擎文件，自动解析 # Title + > Summary。
+
+    引擎文件是权威源——新增引擎只需放入 engines/ 目录即被自动发现。
+    编排器不将引擎元数据存 DB，避免双源同步。
+
+    用法:
+      engine_list()  # 返回全部引擎的名称、标题、摘要
+    """
+    engine_dir = Path(PROJECT_ROOT) / ".claude" / "skills" / "engines"
+    if not engine_dir.exists():
+        return json.dumps({"error": f"引擎目录不存在: {engine_dir}"}, ensure_ascii=False)
+
+    engines = []
+    for f in sorted(engine_dir.glob("*.md")):
+        content = f.read_text(encoding="utf-8")
+        lines = content.strip().split("\n")
+        title = ""
+        summary = ""
+        for line in lines:
+            if line.startswith("# ") and not title:
+                title = line[2:].strip()
+            elif line.startswith(">") and not summary:
+                summary = line[1:].strip()
+            if title and summary:
+                break
+
+        engines.append({
+            "file": f.name,
+            "name": f.stem,
+            "title": title or f.stem,
+            "summary": summary or "",
+        })
+
+    # 检测未注册引擎：磁盘有但 ENGINE_MATRIX 无映射
+    from .tools_writing import ENGINE_MATRIX
+    registered = set()
+    for names in ENGINE_MATRIX.values():
+        registered.update(names)
+    on_disk = {e["name"] for e in engines}
+    unregistered = sorted(on_disk - registered)
+
+    result = {"engines": engines}
+    if unregistered:
+        result["unregistered"] = unregistered
+
+    return json.dumps(result, ensure_ascii=False)
 
 
 @mcp.tool

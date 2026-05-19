@@ -1,6 +1,7 @@
 import json
+from pathlib import Path
 
-from .db import mcp, query
+from .db import mcp, query, PROJECT_ROOT
 from .resolvers import _resolve_novel_id, _resolve_chapter_id
 from .tools_chapter import _save_chapter_summary_internal
 from .constraints import validate_chapter_text, _get_constraints, _enrichment_level
@@ -530,5 +531,84 @@ def echo_density_check(novel_name: str, volume_id: int) -> str:
                                 "items": [dict(r) for r in cross_vol]},
         "status": "exceeded" if exceeded else "ok"
     }, ensure_ascii=False, default=str)
+
+
+# ──────────────────────────────────────────
+# ENGINE_MATRIX: 场面类型 → 引擎映射表
+# 硬编码在编排器层，不交给模型选——防偷懒/错选。
+# 新增引擎 → 先放 engines/*.md，再加一行映射。无其他配置。
+# ──────────────────────────────────────────
+
+ENGINE_MATRIX: dict[str, list[str]] = {
+    "_always": [
+        "author-voice",
+        "anti-ai-quickref",
+        "writing-style",
+        "world-element-registry",
+    ],
+    "atmosphere": ["environment"],
+    "dialogue": ["dialogue"],
+    "battle": ["action", "battle", "author-voice-battle"],
+    "emotion": ["author-voice-emotion"],
+    "daily": ["author-voice-daily"],
+    "mystery": ["author-voice-mystery"],
+    "item_use": ["item"],
+    "multi_char": ["scene-composition"],
+    "deepening": ["scene-deepening"],
+}
+
+
+@mcp.tool
+def resolve_engines(scene_types: list[str]) -> str:
+    """根据 Agent 3 标注的场面 AES 类型，自动解析需加载的引擎文件内容。
+
+    编排器在收到 Agent 3 的场面类型标签后调用此工具。
+    返回所有匹配引擎的完整内容（_always 引擎始终包含）。
+    Agent 3 不再负责读文件——只标类型，编排器自动 resolve。
+
+    参数:
+      scene_types: 场面类型列表，由 Agent 3 从 AES 标签提取。
+                   如 ["atmosphere", "dialogue"] 或 Agent 3 输出的原始标签。
+
+    用法:
+      resolve_engines(["atmosphere", "dialogue"])
+      resolve_engines(["battle", "emotion", "daily"])
+
+    返回:
+      JSON 对象，key=引擎名，value=引擎文件完整内容
+    """
+    # 收集需加载的引擎名（去重+保持顺序）
+    seen: set[str] = set()
+    ordered: list[str] = []
+
+    def _add(names: list[str]) -> None:
+        for n in names:
+            if n not in seen:
+                seen.add(n)
+                ordered.append(n)
+
+    _add(ENGINE_MATRIX.get("_always", []))
+    for st in scene_types:
+        key = st.removeprefix("AES:").strip()
+        _add(ENGINE_MATRIX.get(key, []))
+
+    # 读取引擎文件
+    engine_dir = Path(PROJECT_ROOT) / ".claude" / "skills" / "engines"
+    result: dict[str, str] = {}
+    missing: list[str] = []
+
+    for eng in ordered:
+        fp = engine_dir / f"{eng}.md"
+        if fp.exists():
+            result[eng] = fp.read_text(encoding="utf-8")
+        else:
+            result[eng] = f"[engine file not found: {eng}.md]"
+            missing.append(eng)
+
+    payload = {"engines": result, "scene_types": scene_types}
+    if missing:
+        payload["missing"] = missing
+
+    return json.dumps(payload, ensure_ascii=False)
 
 
