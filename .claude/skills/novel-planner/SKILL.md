@@ -72,15 +72,15 @@ world_query(novel_name=NOVEL_NAME)        # 世界观全部数据
 character_list(novel_name=NOVEL_NAME)     # 角色列表（含主角/反派/关键配角）
 foreshadow_list(novel_name=NOVEL_NAME)    # 全局伏笔（如有）
 
-# ─── 已有卷信息（DB查询，不读大纲文件）───
-# ❌ 不要用 ctx_batch_execute 读取15卷大纲文件（603K/~150K tokens 浪费）
-# ✅ 用 volume_get 获取每卷 notes 字段（结构化摘要，~5K tokens）
+# ─── 已有卷信息（通过 volume_get 获取结构化摘要）───
+# ✅ volume_get 每卷 notes 字段 = 结构化摘要（~5K tokens）
+#    对比：读卷大纲原文 = 平均40K/卷 × 15卷 ≈ 600K/150K tokens（volume_get 省 97%）
 volume_list(novel_name=NOVEL_NAME)        # 卷列表（获取卷号和标题）
 for v in volumes:
     volume_get(novel_name=NOVEL_NAME, number=v.number)  # 每卷notes（含目标/角色变化/暗线）
 ```
 
-**🔒 禁止读卷大纲原文**：已有卷级大纲文件（V1-V15）是 novel-planner-volume 的产物，文件体积大（平均40K/卷）。novel-planner 只需要知道"这卷定位是什么"，不需要读完整大纲。`volume_get` 返回的 `notes` 字段已包含结构化摘要。
+**🔒 卷级信息用 volume_get 获取**：卷大纲原文（V01-V15 .md 文件）是 novel-planner-volume 的产物，平均 40K/卷。novel-planner 需要的是"这卷定位是什么"的结构化摘要，`volume_get` 返回的 `notes` 字段已包含。当 notes 为空时，回退读文件。
 
 **🔒 上下文预算管理**：编排器在加载前**必须**执行 token 预算估算，超限时启用分层加载策略。详见 supporting-info §Token预算估算。
 

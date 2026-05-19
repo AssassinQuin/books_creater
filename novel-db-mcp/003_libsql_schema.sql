@@ -26,6 +26,29 @@ CREATE TABLE IF NOT EXISTS volumes (
     title TEXT DEFAULT '',
     main_plotlines TEXT DEFAULT '[]',  -- JSON stored as TEXT
     notes TEXT DEFAULT '',
+    -- 元信息组（高频查询的平文字段）
+    core_emotion TEXT DEFAULT '',
+    pov_anchor TEXT DEFAULT '',
+    time_span TEXT DEFAULT '',
+    voice_mapping TEXT DEFAULT '',
+    -- 叙事结构组（JSON TEXT）
+    causal_chain TEXT DEFAULT '',
+    act_intro TEXT DEFAULT '{}',       -- 起: {prose, events[], feibi_notes[]}
+    act_rise TEXT DEFAULT '{}',        -- 承
+    act_twist TEXT DEFAULT '{}',       -- 转
+    act_resolution TEXT DEFAULT '{}',  -- 合
+    next_volume_bridge TEXT DEFAULT '[]',
+    -- 质量约束组（JSON TEXT）
+    character_arcs TEXT DEFAULT '[]',
+    interaction_matrix TEXT DEFAULT '[]',
+    boundaries TEXT DEFAULT '[]',
+    suspense_anchors TEXT DEFAULT '{}',
+    key_dialogues TEXT DEFAULT '[]',
+    writing_priorities TEXT DEFAULT '{}',
+    hard_constraints TEXT DEFAULT '{}',
+    -- 可选扩展组（V2+才有数据）
+    info_pacing TEXT DEFAULT '[]',
+    rhythm_allocation TEXT DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(novel_id, number)

@@ -479,10 +479,42 @@ def _sync_foreshadow_to_file(novel_id: int, novel_name: str, fs: dict):
     _record_file_hash(novel_id, "foreshadow", str(fs["id"]), content)
 
 
-def _sync_volume_to_file(novel_id: int, novel_name: str, vol: dict):
+def _render_md_table(rows: list[dict], columns: list[str] | None = None) -> list[str]:
+    """Render a list of dicts as a markdown table."""
+    if not rows:
+        return []
+    if columns is None:
+        columns = list(rows[0].keys())
+    lines = ['| ' + ' | '.join(columns) + ' |']
+    lines.append('|' + '|'.join(['------' for _ in columns]) + '|')
+    for row in rows:
+        cells = [str(row.get(c, '')).replace('|', '\\|') for c in columns]
+        lines.append('| ' + ' | '.join(cells) + ' |')
+    return lines
+
+
+def _parse_json_field(val) -> any:
+    """Parse a JSON text field, returning the parsed object or None."""
+    if val is None:
+        return None
+    if isinstance(val, (dict, list)):
+        return val
+    if isinstance(val, str):
+        val = val.strip()
+        if not val or val in ('{}', '[]', ''):
+            return None
+        try:
+            return json.loads(val)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
+
+
+def _sync_volume_to_file(novel_id: int, novel_name: str, vol: dict,
+                         overwrite: bool = False):
     """Sync a volume from DB to file.
-    For existing files (rich manual content), only record hash — never overwrite.
-    For new volumes without files, generate a starter file from DB data."""
+    For existing files: skip unless overwrite=True.
+    For new volumes or overwrite: generate full template from DB rich data."""
     base = os.path.join(_NOVELS_BASE, novel_name, "设定", "大纲")
     os.makedirs(base, exist_ok=True)
 
@@ -491,31 +523,158 @@ def _sync_volume_to_file(novel_id: int, novel_name: str, vol: dict):
     fname = f"V{num}-{title}.md" if title else f"V{num}.md"
     fpath = os.path.join(base, fname)
 
-    if os.path.exists(fpath):
+    if os.path.exists(fpath) and not overwrite:
         with open(fpath, "r", encoding="utf-8") as f:
             content = f.read()
         _record_file_hash(novel_id, "volume", fname.replace(".md", ""), content)
         return False  # did not create/overwrite
 
-    # Generate new file from DB data
-    lines = [f"# V{num} {title}\n"]
+    lines = [f"# V{num}：{title}\n"]
+
+    # ── 卷级信息 ──
     lines.append("\n## 卷级信息\n")
     lines.append(f"- **number**: {num}")
     lines.append(f"- **title**: {title}")
-    main_plotlines = vol.get("main_plotlines")
-    if main_plotlines and not _is_empty(main_plotlines):
-        for pl in main_plotlines:
+    mp = _parse_json_field(vol.get("main_plotlines"))
+    if mp:
+        for pl in mp:
             lines.append(f"- **main_plotlines**: {pl}")
+    # Blockquote fields
+    for label, key in [("核心情绪", "core_emotion"), ("POV锚点", "pov_anchor"),
+                        ("时间跨度", "time_span"), ("声音适配", "voice_mapping")]:
+        val = vol.get(key, "")
+        if val:
+            lines.append(f"> **{label}**：{val}")
 
-    if vol.get("notes"):
+    # ── 卷级因果链 ──
+    chain = vol.get("causal_chain", "")
+    if chain:
+        lines.append(f"\n## 卷级因果链\n")
+        lines.append(chain)
+
+    # ── 故事脉络（四幕）──
+    act_labels = [("起", "act_intro"), ("承", "act_rise"),
+                  ("转", "act_twist"), ("合", "act_resolution")]
+    has_acts = any(_parse_json_field(vol.get(k)) for _, k in act_labels)
+    if has_acts:
+        lines.append("\n## 故事脉络\n")
+        for label, key in act_labels:
+            act = _parse_json_field(vol.get(key))
+            if not act:
+                continue
+            lines.append(f"\n### {label}\n")
+            prose = act.get("prose", "")
+            if prose:
+                lines.append(prose)
+            events = act.get("events", [])
+            if events:
+                lines.append("\n事件清单：")
+                for i, evt in enumerate(events, 1):
+                    lines.append(f"- E{i}：{evt}")
+            feibi = act.get("feibi_notes", [])
+            if feibi:
+                lines.append("\n费笔清单：")
+                for i, fb in enumerate(feibi, 1):
+                    lines.append(f"- 费笔{i}：{fb}")
+            list_items = act.get("list_items", [])
+            if list_items:
+                for item in list_items:
+                    lines.append(f"- {item}")
+
+    # ── 下卷衔接表 ──
+    bridge = _parse_json_field(vol.get("next_volume_bridge"))
+    if bridge:
+        lines.append("\n## 下卷衔接\n")
+        lines.extend(_render_md_table(bridge))
+
+    # ── 人物弧光 ──
+    arcs = _parse_json_field(vol.get("character_arcs"))
+    if arcs:
+        lines.append("\n## 人物弧光\n")
+        cols = list(arcs[0].keys()) if arcs else []
+        lines.extend(_render_md_table(arcs, cols))
+
+    # ── 人物互动矩阵 ──
+    matrix = _parse_json_field(vol.get("interaction_matrix"))
+    if matrix:
+        lines.append("\n## 人物互动矩阵\n")
+        cols = list(matrix[0].keys()) if matrix else []
+        lines.extend(_render_md_table(matrix, cols))
+
+    # ── 不做的 ──
+    bounds = _parse_json_field(vol.get("boundaries"))
+    if bounds:
+        lines.append("\n## 不做的\n")
+        for b in bounds:
+            lines.append(f"- {b}")
+
+    # ── 悬念锚点 ──
+    suspense = _parse_json_field(vol.get("suspense_anchors"))
+    if suspense:
+        lines.append("\n## 悬念锚点\n")
+        answered = suspense.get("answered", [])
+        if answered:
+            lines.append("### 本卷回答了什么疑问\n")
+            for a in answered:
+                lines.append(f"- {a}")
+        new_q = suspense.get("new_questions", [])
+        if new_q:
+            lines.append("\n### 本卷新提出的疑问\n")
+            cols = list(new_q[0].keys()) if new_q else []
+            lines.extend(_render_md_table(new_q, cols))
+
+    # ── 核心对话锚点 ──
+    dialogues = _parse_json_field(vol.get("key_dialogues"))
+    if dialogues:
+        lines.append("\n## 核心对话锚点\n")
+        cols = list(dialogues[0].keys()) if dialogues else []
+        lines.extend(_render_md_table(dialogues, cols))
+
+    # ── 写作优先级 ──
+    priorities = _parse_json_field(vol.get("writing_priorities"))
+    if priorities:
+        lines.append("\n## 写作优先级\n")
+        for level in ["P0", "P1", "P2"]:
+            items = priorities.get(level, [])
+            if items:
+                desc = {"P0": "不可删减", "P1": "强烈建议保留", "P2": "可压缩但建议保留"}.get(level, "")
+                lines.append(f"\n### {level}（{desc}）\n")
+                for i, item in enumerate(items, 1):
+                    lines.append(f"{i}. {item}")
+
+    # ── 硬约束自检 ──
+    constraints = _parse_json_field(vol.get("hard_constraints"))
+    if constraints:
+        lines.append("\n## 硬约束自检\n")
+        raw = constraints.get("raw", "")
+        if raw:
+            lines.append(raw)
+
+    # ── 信息投放节奏 ──
+    pacing = _parse_json_field(vol.get("info_pacing"))
+    if pacing:
+        lines.append("\n## 信息投放节奏\n")
+        cols = list(pacing[0].keys()) if pacing else []
+        lines.extend(_render_md_table(pacing, cols))
+
+    # ── 节奏分配 ──
+    rhythm = _parse_json_field(vol.get("rhythm_allocation"))
+    if rhythm:
+        lines.append("\n## 节奏分配\n")
+        cols = list(rhythm[0].keys()) if rhythm else []
+        lines.extend(_render_md_table(rhythm, cols))
+
+    # ── 备注 ──
+    notes = vol.get("notes", "")
+    if notes:
         lines.append(f"\n## 备注\n")
-        lines.append(vol["notes"])
+        lines.append(notes)
 
     content = "\n".join(lines) + "\n"
     with open(fpath, "w", encoding="utf-8") as f:
         f.write(content)
     _record_file_hash(novel_id, "volume", fname.replace(".md", ""), content)
-    return True  # created new file
+    return True  # created/overwrote file
 
 
 # ============================================================================

@@ -503,8 +503,8 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
         for vol in vol_rows:
             key = f"V{vol['number']}"
             try:
-                created = _sync_volume_to_file(novel_id, novel_name, dict(vol))
-                direction = "DB→file (新建)" if created else "file已存在,跳过"
+                created = _sync_volume_to_file(novel_id, novel_name, dict(vol), overwrite=overwrite)
+                direction = "DB→file (新建/覆盖)" if created else "file已存在,跳过"
                 results["synced"].append({"type": "volume", "key": key, "direction": direction})
             except Exception as e:
                 results["errors"].append({"type": "volume", "key": key, "error": str(e)})

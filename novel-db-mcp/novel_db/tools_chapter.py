@@ -144,7 +144,12 @@ def get_chapter_context(novel_name: str, chapter_number: int,
         if vol:
             volume_str = f"V{vol['number']}"
             result["volume"] = {"number": vol["number"], "title": vol["title"],
-                                "main_plotlines": vol["main_plotlines"], "notes": vol.get("notes", "")}
+                                "main_plotlines": vol["main_plotlines"], "notes": vol.get("notes", ""),
+                                "core_emotion": vol.get("core_emotion", ""),
+                                "pov_anchor": vol.get("pov_anchor", ""),
+                                "causal_chain": vol.get("causal_chain", ""),
+                                "character_arcs": vol.get("character_arcs", "[]"),
+                                "writing_priorities": vol.get("writing_priorities", "{}")}
 
     # Recent chapter summaries (with full data)
     prev_summaries = query(
