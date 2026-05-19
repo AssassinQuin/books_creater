@@ -30,3 +30,8 @@ __pycache__/
 
 # 临时测试脚本
 test_*.py
+
+# 嵌套仓库（本机开发残留）
+books_creater/
+hs_analysis/
+download/hs_analysis_repo/
