@@ -174,6 +174,24 @@ CREATE TABLE IF NOT EXISTS foreshadows (
     related_foreshadows TEXT DEFAULT '[]'
 );
 
+-- ─── Echoes（回响 — 大事件余波的自然回溯）──────────────
+-- 与伏笔的区别：伏笔是"先埋后收"（向前看），回响是"先发生后回声"（向后看）。
+-- 密度规则：普通回响≤2次/卷，强相关不限，跨卷≤1次/间隔。
+-- 融入方式：必须融入世界呼吸或角色日常动作，不能是独立段落。
+CREATE TABLE IF NOT EXISTS echoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+    source_chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE SET NULL,
+    echo_chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE SET NULL,
+    volume_id INTEGER REFERENCES volumes(id) ON DELETE SET NULL,
+    source_event TEXT NOT NULL,          -- 被回溯的原始事件/人/物品/地点/梗
+    echo_type TEXT NOT NULL,             -- character_habit/physical_trace/catchphrase/location_change/item/memory
+    echo_description TEXT DEFAULT '',    -- 回响的具体写法（一句话）
+    strong_related INTEGER DEFAULT 0,    -- BOOLEAN: 1=强相关（不受密度限制）
+    tags TEXT DEFAULT '[]',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ─── Timeline ──────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS timeline_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -249,6 +267,10 @@ CREATE INDEX IF NOT EXISTS idx_characters_novel ON characters(novel_id);
 CREATE INDEX IF NOT EXISTS idx_relations_novel ON character_relations(novel_id);
 CREATE INDEX IF NOT EXISTS idx_world_novel ON world_settings(novel_id);
 CREATE INDEX IF NOT EXISTS idx_foreshadows_novel ON foreshadows(novel_id);
+CREATE INDEX IF NOT EXISTS idx_echoes_novel ON echoes(novel_id);
+CREATE INDEX IF NOT EXISTS idx_echoes_volume ON echoes(volume_id);
+CREATE INDEX IF NOT EXISTS idx_echoes_source ON echoes(source_chapter_id);
+CREATE INDEX IF NOT EXISTS idx_echoes_chapter ON echoes(echo_chapter_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_novel ON timeline_events(novel_id);
 CREATE INDEX IF NOT EXISTS idx_scene_chapter ON scene_outlines(chapter_id);
 CREATE INDEX IF NOT EXISTS idx_dimension_novel ON dimension_changes(novel_id);

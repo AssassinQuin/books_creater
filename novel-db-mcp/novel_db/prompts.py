@@ -108,7 +108,8 @@ def _build_rules_prompt() -> str:
 
 def _build_writing_prompt(ch: dict, summaries: list, chars: list,
                           foreshadows: list, world_index: list,
-                          vol: dict, quality_history: list) -> str:
+                          vol: dict, quality_history: list,
+                          echoes: list = None) -> str:
     lines = []
     cn = ch.get("number", "?")
 
@@ -158,6 +159,13 @@ def _build_writing_prompt(ch: dict, summaries: list, chars: list,
             lines.append(f"- {imp} {f.get('description','')[:80]}")
         if len(foreshadows) > 5:
             lines.append(f"  …还有{len(foreshadows)-5}条")
+
+    if echoes:
+        lines.append(f"\n## 🔁 本章回响（{len(echoes)}处）")
+        for e in echoes[:5]:
+            rel = "（强相关）" if e.get("strong_related") else ""
+            lines.append(f"- {e.get('source_event','')[:50]} ← Ch{e.get('source_ch','?')}{rel}")
+        lines.append("⚠️ 融入世界呼吸/日常动作，不要独立段落。普通回响≤2次/卷。")
 
     if quality_history:
         lines.append("\n## 质量趋势")

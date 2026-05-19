@@ -47,11 +47,16 @@
 ## 角色行为弧线
 {每个出场角色的行为设计}
 
+## 回响（Echo）
+- 回响1: {source_event} ← Ch{source_ch} → {echo_description}
+- 回响2: {source_event} ← Ch{source_ch} → {echo_description}
+
 ## 已创建的实体
 - 新人物: {name} (ID={id})
 - 新地点: {name}
 - 新物品: {name}
 - 新伏笔: {id}
+- 新回响: echo_{id}（source_ch→echo_ch, type）
 ```
 
 ---
