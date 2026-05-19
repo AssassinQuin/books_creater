@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS character_relations (
     description TEXT DEFAULT '',
     chapter_established INTEGER DEFAULT NULL,
     intensity INTEGER DEFAULT 5,
+    status TEXT DEFAULT 'active',
+    dialogue_adjustment TEXT DEFAULT '{}',
+    micro_expressions TEXT DEFAULT '{}',
+    subtext_design TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT NOW()
 );
 
