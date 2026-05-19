@@ -134,5 +134,6 @@ transforms:
 
 # --- File→DB 反向同步 ---
 file_to_db:
-  enabled: false
-  note: "人物以DB为权威源，不需要反向同步。动态数据通过MCP工具直接写入DB。"
+  enabled: true
+  note: "人物以DB为权威源，但支持文件→DB反向解析用于round-trip验证和应急恢复。通过引擎结构化解析全部字段。"
+  strategy: full_parse

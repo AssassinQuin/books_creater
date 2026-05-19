@@ -35,6 +35,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -208,6 +209,7 @@ class SyncTemplate:
     # --- Manifest 扩展字段 ---
     category_file_map: dict[str, str] | None = None  # 世界观：category → 中文文件名
     manifest_path: str | None = None  # 来源 YAML 路径（调试用）
+    composite_id_fields: list[str] | None = None  # 复合主键（如 world 的 [category, name]）
 
 
 # ============================================================================
@@ -379,6 +381,7 @@ class SyncEngine:
             header_template=data.get("header_template"),
             skip_existing=data.get("skip_existing", False),
             category_file_map=data.get("category_file_map"),
+            composite_id_fields=data.get("composite_id_fields"),
         )
         return tpl
 
@@ -604,11 +607,17 @@ class SyncEngine:
         if not renderer:
             return None
 
+        # 替换 heading 中的模板变量（如 {category}: {name}）
+        heading = sec.heading
+        for col, val in row.items():
+            if val is not None and f"{{{col}}}" in heading:
+                heading = heading.replace(f"{{{col}}}", str(val))
+
         lines = renderer(tpl, sec, row)
         if not lines:
             return None
 
-        return [f"\n## {sec.heading}\n"] + lines
+        return [f"\n## {heading}\n"] + lines
 
     def _render_fields(self, tpl: SyncTemplate, sec: SectionDef, row: dict) -> list[str]:
         """type=fields: 从行字段渲染 bullet 列表。"""
@@ -634,7 +643,7 @@ class SyncEngine:
         val = row.get(col)
         if _is_empty(val):
             # 尝试 fallback columns
-            if hasattr(sec, 'fallback_columns') and sec.fallback_columns:
+            if sec.fallback_columns:
                 lines = []
                 for fc in sec.fallback_columns:
                     v = row.get(fc)
@@ -740,15 +749,17 @@ class SyncEngine:
         将文件结构化解析后同步回DB（真正的反向同步，非截断dump）。
 
         通过模板的 sections 定义逆向解析 MD 文件，按字段映射写入对应 DB 列。
-        支持: character, world, foreshadow, volume, echo
+        需要 manifest 中 file_to_db.enabled = true。
         """
         from .md_parser import (
             split_sections, find_section, parse_bullet_fields,
             parse_jsonb_bullets, parse_md_table, parse_blockquotes,
-            parse_acts, parse_relations,
+            parse_acts,
         )
 
         tpl = self.get(entity_type)
+        if not tpl.file_to_db_enabled:
+            return {"error": f"{entity_type} 未启用 File→DB 同步（file_to_db.enabled 未设置）", "synced": 0}
         novel_id = self._resolve_novel_id(novel_name)
         base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
         if not os.path.isdir(base):
@@ -763,6 +774,11 @@ class SyncEngine:
         for fname in sorted(os.listdir(base)):
             if not fname.endswith(".md"):
                 continue
+
+            # 文件名模式过滤：只处理匹配模板 file_pattern 的文件
+            if not self._match_file_pattern(tpl, fname):
+                continue
+
             fpath = os.path.join(base, fname)
             try:
                 with open(fpath, "r", encoding="utf-8") as f:
@@ -873,105 +889,177 @@ class SyncEngine:
         """
         聚合文件的 File→DB 解析（section_replace 模式）。
         多行DB记录共享一个文件，每个段落对应一行。
+
+        支持: foreshadow, echo（按id标识）, world（按category:name标识）
         """
         from .md_parser import (
             split_sections, find_section, parse_bullet_fields,
-            parse_jsonb_bullets, parse_relations,
+            parse_jsonb_bullets, parse_md_table,
+            parse_blockquotes, parse_acts,
         )
 
-        # 查找匹配的文件
-        target_file = None
-        for fname in os.listdir(base):
-            if not fname.endswith(".md"):
-                continue
-            if tpl.file_pattern.replace("{", "").replace("}", "") in fname:
-                target_file = os.path.join(base, fname)
-                break
+        # 查找匹配的文件（支持两种模式）
+        target_files = []
+        pattern = tpl.file_pattern
 
-        if not target_file:
-            return {"error": f"找不到匹配文件: {tpl.file_pattern}"}
+        # 模式1：固定文件名（如 "伏笔清单.md"）
+        if "{" not in pattern:
+            fpath = os.path.join(base, pattern)
+            if os.path.isfile(fpath):
+                target_files.append(fpath)
+        else:
+            # 模式2：含变量的文件名（如 "{category_file}.md"）
+            # 扫描目录下所有 .md 文件
+            for fname in sorted(os.listdir(base)):
+                if not fname.endswith(".md"):
+                    continue
+                target_files.append(os.path.join(base, fname))
 
-        with open(target_file, "r", encoding="utf-8") as f:
-            content = f.read()
+        if not target_files:
+            return {"error": f"找不到匹配文件: {tpl.file_pattern} (目录: {base})"}
 
-        sections = split_sections(content)
         result = {"synced": 0, "errors": [], "details": []}
 
-        # 遍历所有段落，找匹配的
-        for sec in sections:
-            heading = sec["heading"]
-            if not sec["body"]:
-                continue
-
-            # 解析字段
-            fields = parse_bullet_fields(sec["body"])
-            if not fields:
-                continue
-
-            row = {"novel_id": novel_id}
-
-            # 确定实体标识
-            # foreshadow: "foreshadow: 123" → id=123
-            # echo: "echo: 456" → id=456
-            if tpl.name in ("foreshadow", "echo"):
-                m = re.match(rf"{tpl.name}:\s*(\d+)", heading)
-                if m:
-                    row[tpl.id_field] = int(m.group(1))
-                else:
-                    continue
-
-            # 将 fields 映射到 DB 列
-            for sec_def in tpl.sections:
-                if sec_def.type != "fields":
-                    continue
-                for fd in sec_def.fields or []:
-                    col = fd.column
-                    val = fields.get(fd.md_key) if fd.md_key else None
-                    if val is None:
-                        val = fields.get(col)
-                    if val is not None:
-                        row[col] = val
-
-            if not row.get(tpl.id_field):
-                continue
-
+        for target_file in target_files:
             try:
-                self._upsert_row(tpl, row)
-                key = str(row[tpl.id_field])
-                result["synced"] += 1
-                result["details"].append({"key": key})
+                with open(target_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+
+                sections = split_sections(content)
+
+                for sec in sections:
+                    heading = sec["heading"]
+                    if not sec["body"]:
+                        continue
+
+                    row = {"novel_id": novel_id}
+
+                    # ── 确定实体标识 ──
+                    if tpl.name in ("foreshadow", "echo"):
+                        # "foreshadow: 123" → id=123
+                        m = re.match(rf"{tpl.name}:\s*(\d+)", heading)
+                        if m:
+                            row[tpl.id_field] = int(m.group(1))
+                        else:
+                            continue
+
+                    elif tpl.name == "world":
+                        # "core_setting: 某个设定" → category=core_setting, name=某个设定
+                        m = re.match(r'^(\w+):\s*(.+)$', heading)
+                        if m:
+                            row["category"] = m.group(1)
+                            row["name"] = m.group(2).strip()
+                        else:
+                            continue
+
+                    else:
+                        # 通用：尝试从模板 heading 提取
+                        continue
+
+                    # ── 解析段落内容 ──
+                    fields = parse_bullet_fields(sec["body"])
+
+                    # 将 fields 映射到 DB 列
+                    for sec_def in tpl.sections:
+                        if sec_def.type == "fields":
+                            for fd in sec_def.fields or []:
+                                col = fd.column
+                                val = fields.get(fd.md_key) if fd.md_key else None
+                                if val is None:
+                                    val = fields.get(col)
+                                if val is not None:
+                                    row[col] = val
+
+                        elif sec_def.type == "jsonb":
+                            # JSONB 段落：尝试从嵌套 bullet 解析
+                            parsed = parse_jsonb_bullets(sec["body"])
+                            if parsed is not None:
+                                row[sec_def.jsonb_column] = json.dumps(parsed, ensure_ascii=False)
+
+                        elif sec_def.type == "table":
+                            parsed = parse_md_table(sec["body"])
+                            if parsed is not None:
+                                row[sec_def.table_column] = json.dumps(parsed, ensure_ascii=False)
+
+                        elif sec_def.type == "blockquote":
+                            bq = parse_blockquotes(sec["body"])
+                            for bqf in sec_def.blockquotes or []:
+                                col = bqf.column
+                                label = bqf.label or col
+                                if label in bq:
+                                    row[col] = bq[label]
+
+                        elif sec_def.type == "raw":
+                            row[sec_def.raw_column] = sec["body"]
+
+                        elif sec_def.type == "acts":
+                            act_labels = [a[0] for a in (sec_def.acts or [])]
+                            parsed = parse_acts(sec["body"], act_labels)
+                            if parsed:
+                                for label, col_name in (sec_def.acts or []):
+                                    if col_name in parsed:
+                                        row[col_name] = json.dumps(parsed[col_name], ensure_ascii=False)
+
+                    if not row.get(tpl.id_field) and tpl.name != "world":
+                        continue
+                    if tpl.name == "world" and not row.get("name"):
+                        continue
+
+                    try:
+                        self._upsert_row(tpl, row)
+                        if tpl.name == "world":
+                            key = f"{row.get('category', '?')}:{row.get('name', '?')}"
+                        else:
+                            key = str(row[tpl.id_field])
+                        result["synced"] += 1
+                        result["details"].append({"key": key, "file": os.path.basename(target_file)})
+                    except Exception as e:
+                        log.error(f"聚合解析失败 [{heading}]: {e}", exc_info=True)
+                        result["errors"].append({"key": heading, "error": str(e)})
+
             except Exception as e:
-                result["errors"].append({"key": str(row.get(tpl.id_field)), "error": str(e)})
+                result["errors"].append({"file": os.path.basename(target_file), "error": str(e)})
 
         return result
 
     def _upsert_row(self, tpl: SyncTemplate, row: dict):
         """
-        通用 upsert: 按 id_field 查找，存在则 UPDATE，不存在则 INSERT。
+        通用 upsert: 按 id_field（或 composite_id_fields）查找，
+        存在则 UPDATE，不存在则 INSERT。
         """
-        id_val = row.get(tpl.id_field)
-        if not id_val:
-            raise ValueError(f"缺少主标识字段 {tpl.id_field}")
+        # 确定主键字段列表
+        if tpl.composite_id_fields:
+            pk_fields = tpl.composite_id_fields
+            pk_vals = [row.get(f) for f in pk_fields]
+            if any(v is None for v in pk_vals):
+                raise ValueError(f"缺少复合主键字段 {pk_fields}, row keys={list(row.keys())}")
+        else:
+            id_val = row.get(tpl.id_field)
+            if not id_val:
+                raise ValueError(f"缺少主标识字段 {tpl.id_field}")
+            pk_fields = [tpl.id_field]
+            pk_vals = [id_val]
+
+        # 构建 WHERE 条件
+        where_parts = ["novel_id = %s"] + [f"{f} = %s" for f in pk_fields]
+        where_clause = " AND ".join(where_parts)
+        where_params = [row["novel_id"]] + pk_vals
 
         # 检查是否已存在
         existing = query(
-            f"SELECT id FROM {tpl.db_table} WHERE novel_id = %s AND {tpl.id_field} = %s",
-            (row["novel_id"], id_val), fetch="one"
+            f"SELECT id FROM {tpl.db_table} WHERE {where_clause}",
+            tuple(where_params), fetch="one"
         )
 
-        # 分离 id_field 和 novel_id
+        # 收集 SET/INSERT 列（排除主键和 novel_id）
+        exclude_cols = {"novel_id", "id"} | set(pk_fields)
         set_cols = []
         set_vals = []
-        insert_cols = ["novel_id", tpl.id_field]
-        insert_vals = [row["novel_id"], id_val]
-
         for col, val in row.items():
-            if col in ("novel_id", tpl.id_field, "id"):
+            if col in exclude_cols:
                 continue
             set_cols.append(col)
             set_vals.append(val if val is not None else None)
-            insert_cols.append(col)
-            insert_vals.append(val if val is not None else None)
 
         if existing:
             # UPDATE
@@ -980,6 +1068,8 @@ class SyncEngine:
             params = set_vals + [existing["id"]]
         else:
             # INSERT
+            insert_cols = ["novel_id"] + pk_fields + set_cols
+            insert_vals = [row["novel_id"]] + pk_vals + set_vals
             cols_str = ", ".join(insert_cols)
             placeholders = ", ".join(["%s"] * len(insert_vals))
             sql = f"INSERT INTO {tpl.db_table} ({cols_str}, created_at, updated_at) VALUES ({placeholders}, NOW(), NOW())"
@@ -1038,186 +1128,139 @@ class SyncEngine:
 
     # ── 内部工具 ────────────────────────────────────────────────
 
+    def roundtrip(self, novel_name: str, entity_type: str) -> dict:
+        """
+        双向无损验证：File→DB→File round-trip 测试。
+
+        流程:
+          1. 读取原始文件内容（hash_original）
+          2. files_to_db() — 文件解析写入DB
+          3. db_to_files(overwrite=True) — DB渲染写回文件
+          4. 读取新文件内容（hash_roundtrip）
+          5. 对比两个hash
+
+        Returns:
+          {"lossless": bool, "tested": int, "mismatches": [...]}
+        """
+        from .sync import _compute_hash
+
+        tpl = self.get(entity_type)
+        novel_id = self._resolve_novel_id(novel_name)
+        base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
+
+        if not os.path.isdir(base):
+            return {"error": f"目录不存在: {base}"}
+
+        # Phase 1: 收集所有待测文件的原始 hash
+        original_hashes: dict[str, str] = {}
+        for fname in sorted(os.listdir(base)):
+            if not fname.endswith(".md"):
+                continue
+            if not self._match_file_pattern(tpl, fname):
+                continue
+            fpath = os.path.join(base, fname)
+            with open(fpath, "r", encoding="utf-8") as f:
+                original_hashes[fname] = _compute_hash(f.read())
+
+        if not original_hashes:
+            return {"lossless": True, "tested": 0, "mismatches": [], "entity_type": entity_type}
+
+        # Phase 2: File→DB→File（全局只执行一次）
+        try:
+            self.files_to_db(novel_name, entity_type)
+            self.db_to_files(novel_name, entity_type, overwrite=True)
+        except Exception as e:
+            return {"lossless": False, "tested": 0, "error": str(e),
+                    "mismatches": [], "entity_type": entity_type}
+
+        # Phase 3: 逐文件对比 hash
+        result = {"lossless": True, "tested": 0, "mismatches": [], "entity_type": entity_type}
+
+        for fname, hash_original in sorted(original_hashes.items()):
+            fpath = os.path.join(base, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    roundtrip_content = f.read()
+                hash_roundtrip = _compute_hash(roundtrip_content)
+
+                result["tested"] += 1
+                if hash_original != hash_roundtrip:
+                    result["lossless"] = False
+                    result["mismatches"].append({
+                        "file": fname,
+                        "hash_original": hash_original,
+                        "hash_roundtrip": hash_roundtrip,
+                    })
+            except Exception as e:
+                result["mismatches"].append({"file": fname, "error": str(e)})
+                result["lossless"] = False
+
+        return result
+
+    def _match_file_pattern(self, tpl: SyncTemplate, fname: str) -> bool:
+        """检查文件名是否匹配模板的 file_pattern。
+
+        支持:
+          - 固定模式: "伏笔清单.md" → 精确匹配
+          - 变量模式: "V{number}-{title}.md" → 转为正则匹配
+          - "{name}.md" → 匹配任意 .md 文件（兜底）
+        """
+        pattern = tpl.file_pattern
+
+        # 固定文件名（无变量占位符）
+        if "{" not in pattern:
+            return fname == pattern
+
+        # {name}.md → 匹配所有 .md 文件（宽泛模式）
+        if pattern == "{name}.md":
+            return True
+
+        # 变量模式 → 转为正则
+        # 策略: 先将 {xxx} 占位符替换为通配符，再对剩余字面部分做 re.escape
+        placeholder_map = {"{number}": r"\d+", "{title}": ".+", "{name}": ".+"}
+
+        # 按 {xxx} 切分 pattern 为 literal segments 和 placeholders
+        parts = re.split(r'(\{[^}]+\})', pattern)
+        regex_parts = []
+        for part in parts:
+            if part in placeholder_map:
+                regex_parts.append(placeholder_map[part])
+            elif part.startswith("{") and part.endswith("}"):
+                # 未知占位符 → 通配
+                regex_parts.append(".+")
+            else:
+                # 字面部分 → 转义
+                regex_parts.append(re.escape(part))
+
+        regex = "^" + "".join(regex_parts) + "$"
+
+        try:
+            return re.match(regex, fname) is not None
+        except re.error:
+            return True  # 正则错误时兜底放行
+
     def _resolve_novel_id(self, novel_name: str) -> int:
         from .resolvers import _resolve_novel_id
         return _resolve_novel_id(novel_name)
 
 
 # ============================================================================
-# 内置模板注册 — 4个已有实体类型的完整模板定义
-# ============================================================================
-
-
-# 人物模板
-_TEMPLATE_CHARACTER = SyncTemplate(
-    name="character",
-    display_name="人物",
-    db_table="characters",
-    id_field="name",
-    query_extra="AND is_active = TRUE",
-    order_by="name ASC",
-    file_dir="设定/人物",
-    file_pattern="{name}.md",
-    file_title="{name}",
-    authority="db",
-    merge_mode="overwrite",
-    sections=[
-        SectionDef(heading="基本信息", type="fields", fields=[
-            FieldDef(column="role", optional=False),
-            FieldDef(column="race", optional=True),
-            FieldDef(column="ability_level", optional=True),
-            FieldDef(column="faction_id", md_key="faction", transform="resolve_faction", optional=True),
-        ]),
-        SectionDef(heading="外观与性格", type="fields", fields=[
-            FieldDef(column="appearance", optional=False),
-            FieldDef(column="personality", optional=False),
-            FieldDef(column="speech_style", optional=False),
-            FieldDef(column="catchphrase", optional=True),
-        ]),
-        SectionDef(heading="背景与动机", type="fields", fields=[
-            FieldDef(column="background", optional=False),
-            FieldDef(column="goals", optional=False),
-            FieldDef(column="weaknesses", optional=False),
-        ]),
-        SectionDef(heading="弧线", type="fields", fields=[
-            FieldDef(column="arc_notes", optional=False),
-            FieldDef(column="first_appearance_chapter", type="int", optional=False),
-            FieldDef(column="status", optional=True),
-        ]),
-        SectionDef(heading="外观描写库", type="jsonb", jsonb_column="appearance_detail"),
-        SectionDef(heading="决策引擎", type="jsonb", jsonb_column="decision_engine"),
-        SectionDef(heading="对话声音指纹", type="jsonb", jsonb_column="voice_fingerprint"),
-        SectionDef(heading="能力体系", type="jsonb", jsonb_column="ability_system"),
-        SectionDef(heading="行为模式", type="jsonb", jsonb_column="behavior_pattern"),
-        SectionDef(heading="当前快照（终局）", type="jsonb", jsonb_column="current_snapshot"),
-        SectionDef(heading="动态追踪（不在此文件维护）", type="static",
-                   static_content="> 人物动态状态见 DB：`character_state_snapshots`（状态快照） / `character_distillation_evolution`（蒸馏演化）"),
-    ],
-    relations=RelationQueryDef(
-        sql=("SELECT cr.relation_type, cr.description, cr.intensity, "
-             "c1.name as from_name, c2.name as to_name, "
-             "cr.dialogue_adjustment, cr.micro_expressions, cr.subtext_design "
-             "FROM character_relations cr "
-             "JOIN characters c1 ON cr.from_character_id = c1.id "
-             "JOIN characters c2 ON cr.to_character_id = c2.id "
-             "WHERE cr.novel_id = %s AND (cr.from_character_id = %s OR cr.to_character_id = %s) "
-             "AND cr.status = 'active' "
-             "ORDER BY cr.intensity DESC"),
-        param_columns=["novel_id", "id", "id"],
-        heading="关系",
-    ),
-    transforms={"resolve_faction": _resolve_faction_name},
-)
-
-# 世界观模板
-_TEMPLATE_WORLD = SyncTemplate(
-    name="world",
-    display_name="世界观",
-    db_table="world_settings",
-    id_field="name",
-    order_by="category, name",
-    file_dir="设定/世界观",
-    file_pattern="{category_file}.md",
-    file_title="{category_file}",
-    authority="db",
-    merge_mode="section_replace",
-    section_marker="## {category}: {name}",
-    file_to_db_enabled=False,  # 通过 sync_lorebook 独立工具
-    sections=[
-        SectionDef(heading="{category}: {name}", type="fields", fields=[
-            FieldDef(column="keys", optional=True),
-            FieldDef(column="secondary_keys", optional=True),
-            FieldDef(column="tags", optional=True),
-            FieldDef(column="region", optional=True),
-            FieldDef(column="volume_range", optional=True),
-            FieldDef(column="faction_id", optional=True),
-            FieldDef(column="writing_guide", optional=True),
-            FieldDef(column="priority", optional=True, condition=None),
-            FieldDef(column="is_constant", md_key="is_constant", type="bool", optional=True),
-            FieldDef(column="first_appearance_chapter", md_key="首次出场", type="int", optional=True),
-        ]),
-    ],
-)
-
-# 伏笔模板
-_TEMPLATE_FORESHADOW = SyncTemplate(
-    name="foreshadow",
-    display_name="伏笔",
-    db_table="foreshadows",
-    id_field="id",
-    order_by="id ASC",
-    file_dir="设定/大纲",
-    file_pattern="伏笔清单.md",
-    file_title="伏笔清单",
-    authority="db",
-    merge_mode="section_replace",
-    section_marker="## foreshadow: {id}",
-    sections=[
-        SectionDef(heading="foreshadow: {id}", type="fields", fields=[
-            FieldDef(column="description", optional=False),
-            FieldDef(column="status", optional=False),
-            FieldDef(column="importance", optional=True),
-            FieldDef(column="related_characters", type="list", optional=True),
-            FieldDef(column="tags", type="list", optional=True),
-        ]),
-    ],
-)
-
-# 卷级大纲模板
-_TEMPLATE_VOLUME = SyncTemplate(
-    name="volume",
-    display_name="卷级大纲",
-    db_table="volumes",
-    id_field="number",
-    order_by="number ASC",
-    file_dir="设定/大纲",
-    file_pattern="V{number}-{title}.md",
-    authority="db",
-    merge_mode="overwrite",
-    skip_existing=True,
-    header_template="# V{number}：{title}",
-    sections=[
-        SectionDef(heading="卷级信息", type="fields", fields=[
-            FieldDef(column="number", type="int", optional=False),
-            FieldDef(column="title", optional=False),
-            FieldDef(column="main_plotlines", type="list", optional=True),
-        ]),
-        SectionDef(heading="元信息", type="blockquote", blockquotes=[
-            BlockquoteField(column="core_emotion", label="核心情绪"),
-            BlockquoteField(column="pov_anchor", label="POV锚点"),
-            BlockquoteField(column="time_span", label="时间跨度"),
-            BlockquoteField(column="voice_mapping", label="声音适配"),
-        ]),
-        SectionDef(heading="卷级因果链", type="raw", raw_column="causal_chain"),
-        SectionDef(heading="故事脉络", type="acts", acts=[
-            ("起", "act_intro"), ("承", "act_rise"),
-            ("转", "act_twist"), ("合", "act_resolution"),
-        ]),
-        SectionDef(heading="下卷衔接", type="table", table_column="next_volume_bridge"),
-        SectionDef(heading="人物弧光", type="table", table_column="character_arcs"),
-        SectionDef(heading="人物互动矩阵", type="table", table_column="interaction_matrix"),
-        SectionDef(heading="不做的", type="table", table_column="boundaries"),
-        SectionDef(heading="悬念锚点", type="jsonb", jsonb_column="suspense_anchors"),
-        SectionDef(heading="核心对话锚点", type="table", table_column="key_dialogues"),
-        SectionDef(heading="写作优先级", type="jsonb", jsonb_column="writing_priorities"),
-        SectionDef(heading="硬约束自检", type="jsonb", jsonb_column="hard_constraints"),
-        SectionDef(heading="信息投放节奏", type="table", table_column="info_pacing"),
-        SectionDef(heading="节奏分配", type="table", table_column="rhythm_allocation"),
-        SectionDef(heading="备注", type="raw", raw_column="notes"),
-    ],
-)
-
-# ============================================================================
-# 全局引擎实例（预注册内置模板 + 自动加载 YAML manifests）
+# 全局引擎实例 — 纯 YAML manifest 驱动
 # ============================================================================
 
 engine = SyncEngine()
-engine.register(_TEMPLATE_CHARACTER)
-engine.register(_TEMPLATE_WORLD)
-engine.register(_TEMPLATE_FORESHADOW)
-engine.register(_TEMPLATE_VOLUME)
 
-# 自动从 sync_manifests/ 加载 YAML manifests（YAML 覆盖同名内置模板）
+# 从 sync_manifests/ 加载 YAML manifests（必须成功，否则启动报错）
 _MANIFESTS_DIR = os.path.join(PROJECT_ROOT, "sync_manifests")
 if os.path.isdir(_MANIFESTS_DIR):
-    engine.load_manifests(_MANIFESTS_DIR)
+    loaded = engine.load_manifests(_MANIFESTS_DIR)
+    if not loaded:
+        raise RuntimeError(
+            f"No YAML manifests loaded from {_MANIFESTS_DIR}. "
+            "At least one manifest (character/world/foreshadow/volume/echo) is required."
+        )
+else:
+    raise FileNotFoundError(
+        f"Manifest directory not found: {_MANIFESTS_DIR}. "
+        "Please create sync_manifests/ with at least one .yaml manifest."
+    )

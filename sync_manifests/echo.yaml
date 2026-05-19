@@ -54,5 +54,6 @@ transforms:
 
 # --- File→DB 反向同步 ---
 file_to_db:
-  enabled: false
-  note: "回响以DB为权威源，通过 echo_create MCP 工具直接写入。"
+  enabled: true
+  note: "通过引擎聚合解析回响文件，按echo:id提取全部字段。"
+  strategy: aggregate_parse

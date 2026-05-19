@@ -13,6 +13,7 @@ authority: db
 # --- DB 映射 ---
 db_table: world_settings
 id_field: name
+composite_id_fields: [category, name]
 order_by: "category, name"
 
 # --- 文件映射 ---
@@ -71,8 +72,8 @@ sections:
         optional: true
 
 # --- File→DB 反向同步 ---
-# 世界观通过 sync_lorebook() 独立工具实现（完整的MD解析器）
 file_to_db:
   enabled: true
   tool: sync_lorebook
-  note: "使用独立的 sync_lorebook MCP 工具，包含完整的MD段落解析逻辑。"
+  note: "通过引擎聚合解析世界观文件，按category:name提取字段映射到DB列。"
+  strategy: aggregate_parse

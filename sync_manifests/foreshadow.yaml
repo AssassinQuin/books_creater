@@ -53,5 +53,6 @@ transforms:
 # --- File→DB 反向同步 ---
 file_to_db:
   enabled: true
-  note: "仅同步status字段变更（recalled/abandoned）。"
-  strategy: status_only
+  note: "通过引擎结构化解析全部字段（description/status/importance/planted_chapter/related_characters/tags）。"
+  strategy: full_parse
+  # 旧方案已废弃：status_only

@@ -425,51 +425,85 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
 
 
 @mcp.tool
-def sync_files_to_db(novel_name: str) -> str:
-    """将文件数据同步回DB（单向：file→DB）。当前支持卷级大纲文件→volumes.notes。
+def sync_files_to_db(novel_name: str, data_type: str = "") -> str:
+    """将文件数据结构化解析后同步回DB（单向：file→DB，无损转换）。
+
+    通过 SyncEngine 模板驱动，按字段映射写入对应 DB 列（无截断）。
+    支持: volume(完整17段解析), character(全部字段+JSONB), world(聚合解析), foreshadow, echo
+
     参数:
       novel_name: 小说名称
+      data_type: 同步范围，空=全部，可选: world/character/foreshadow/volume/echo
     用法:
-      sync_files_to_db(novel_name="这次不一样了")  # 读取设定/大纲/V*.md → 更新volumes表
+      sync_files_to_db(novel_name="这次不一样了")                      # 全部实体类型
+      sync_files_to_db(novel_name="这次不一样了", data_type="volume")  # 只同步卷级大纲
+      sync_files_to_db(novel_name="这次不一样了", data_type="character") # 只同步人物
+    注: DB→file方向请使用 sync_db_to_files()
     """
-    novel_id = _resolve_novel_id(novel_name)
-    synced = []
-    errors = []
+    results = {"synced": [], "skipped": [], "errors": []}
+    types_to_sync = [data_type] if data_type else _sync_engine.available_types
 
-    outline_dir = os.path.join(_NOVELS_BASE, novel_name, "设定", "大纲")
-    if not os.path.isdir(outline_dir):
-        return json.dumps({"ok": True, "synced": [], "errors": [], "note": "目录不存在"}, ensure_ascii=False)
-
-    for fname in sorted(os.listdir(outline_dir)):
-        if not fname.endswith(".md"):
-            continue
-        fpath = os.path.join(outline_dir, fname)
-        vol_match = re.match(r"V(\d+)", fname)
-        if not vol_match:
-            continue
-        vol_num = int(vol_match.group(1))
-        vol = query(
-            "SELECT id FROM volumes WHERE novel_id = %s AND number = %s",
-            (novel_id, vol_num), fetch="one"
-        )
-        if not vol:
+    for etype in types_to_sync:
+        if etype not in _sync_engine.available_types:
+            results["errors"].append({"type": etype, "error": f"未注册的同步类型: {etype}"})
             continue
         try:
-            with open(fpath, "r", encoding="utf-8") as f:
-                content = f.read()
-            query(
-                "UPDATE volumes SET notes = %s, updated_at = NOW() WHERE id = %s",
-                (content[:2000], vol["id"]), fetch="none"
-            )
-            synced.append({"type": "volume", "key": fname.replace(".md", ""), "direction": "file→DB"})
+            r = _sync_engine.files_to_db(novel_name, etype)
+            if "error" in r:
+                results["errors"].append({"type": etype, "error": r["error"]})
+                continue
+            for detail in r.get("details", []):
+                results["synced"].append({"type": etype, "key": detail.get("key", "?"), "direction": "file→DB"})
+            for item in r.get("errors", []):
+                results["errors"].append({"type": etype, **item})
         except Exception as e:
-            errors.append({"type": "volume", "key": fname.replace(".md", ""), "error": str(e)})
+            results["errors"].append({"type": etype, "error": str(e)})
 
-    return json.dumps({
-        "ok": True,
+    summary = {
         "novel_name": novel_name,
-        "synced_count": len(synced),
-        "error_count": len(errors),
-        "synced": synced,
-        "errors": errors,
-    }, ensure_ascii=False)
+        "engine_types": _sync_engine.available_types,
+        "synced_count": len(results["synced"]),
+        "error_count": len(results["errors"]),
+        "synced": results["synced"],
+        "errors": results["errors"],
+    }
+    return json.dumps(summary, ensure_ascii=False, default=str)
+
+
+@mcp.tool
+def sync_roundtrip(novel_name: str, data_type: str = "") -> str:
+    """双向无损验证：File→DB→File round-trip 测试。
+
+    流程: 读取文件 → 解析写入DB → DB渲染回文件 → 对比两次文件内容
+    用于验证同步引擎的格式转换保真度。
+
+    参数:
+      novel_name: 小说名称
+      data_type: 测试范围，空=全部，可选: character/volume/foreshadow/world/echo
+    用法:
+      sync_roundtrip(novel_name="这次不一样了")                      # 全部测试
+      sync_roundtrip(novel_name="这次不一样了", data_type="volume")  # 只测试卷级大纲
+    """
+    results = {}
+    types_to_test = [data_type] if data_type else _sync_engine.available_types
+
+    for etype in types_to_test:
+        if etype not in _sync_engine.available_types:
+            results[etype] = {"error": f"未注册的同步类型: {etype}"}
+            continue
+        try:
+            r = _sync_engine.roundtrip(novel_name, etype)
+            results[etype] = r
+        except Exception as e:
+            results[etype] = {"error": str(e)}
+
+    all_lossless = all(
+        r.get("lossless", False) for r in results.values() if "error" not in r
+    ) if results else True
+
+    summary = {
+        "novel_name": novel_name,
+        "all_lossless": all_lossless,
+        "details": results,
+    }
+    return json.dumps(summary, ensure_ascii=False, default=str)

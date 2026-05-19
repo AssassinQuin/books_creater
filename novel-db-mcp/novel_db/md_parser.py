@@ -26,6 +26,9 @@ def split_sections(md_text: str) -> list[dict]:
     """
     将 Markdown 文本按 ## 标题切分为段落数组。
 
+    注意：仅在 H1（#）和 H2（##）级别切分。H3（###）作为段落内部子标题，
+    不触发切分（用于 acts 起承转合、写作优先级 P0/P1/P2 等子结构）。
+
     Returns:
         [{"heading": "标题", "level": 2, "body": "段落内容", "start": 0}, ...]
     """
@@ -37,8 +40,8 @@ def split_sections(md_text: str) -> list[dict]:
     current_start = 0
 
     for i, line in enumerate(lines):
-        # 匹配 ## 标题（H2级别）
-        m = re.match(r'^(#{1,3})\s+(.+)$', line)
+        # 匹配 H1/H2 标题（不匹配 H3，H3 作为子标题保留在 body 中）
+        m = re.match(r'^(#{1,2})\s+(.+)$', line)
         if m:
             # 保存上一段
             if current_heading is not None:
@@ -501,13 +504,11 @@ def parse_acts(text: str, act_labels: list[str] | None = None) -> dict[str, dict
         if not current_act_key:
             continue
 
-        # 检测子段落标题
+        # 检测子段落标题（设置 current_section 但不 continue，让后续行被处理）
         if "事件清单" in first_line or "事件" in first_line:
             current_section = "events"
-            continue
         if "费笔清单" in first_line:
             current_section = "feibi"
-            continue
 
         # 解析内容行
         for line in lines:

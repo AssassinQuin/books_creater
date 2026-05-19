@@ -118,9 +118,9 @@ sections:
 # --- File→DB 反向同步 ---
 file_to_db:
   enabled: true
-  note: "大纲文件为权威源，反向同步将完整文件内容写入 volumes.notes（截断2000字符）。"
-  strategy: notes_truncate
-  truncate_length: 2000
+  note: "大纲文件为权威源，反向同步通过引擎结构化解析全部17段（无截断）。"
+  strategy: full_parse
+  # 旧方案已废弃：notes_truncate + truncate_length: 2000
 
 # --- 多表引用说明 ---
 # 大纲文件内包含以下数据引用（不参与自动同步，仅供skill参考）：
