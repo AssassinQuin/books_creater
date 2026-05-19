@@ -1,5 +1,7 @@
 # 场面生成引擎 — 复杂场面写作策略
 
+> **本文件职责**：场面怎么搭——密度分级、角色矩阵、镜头语言、潜台词与张力、有机场景流、缝合技术。
+> **不在本文件中的**：场景怎么深→`engines/scene-deepening.md`｜对话规则→`engines/dialogue.md`｜风格节奏→`engines/writing-style.md`
 > **定位**：场面密度分级（轻/中/重/大场面）+ 多人场景动力学 + 注意力分配规则。
 > 解决的核心问题：多人物同场、多事件并发、对话/日常/心理场景的镜头语言、有机场景流。
 > **配合文件**: 场景类型基础 →见 [scene-type.md](./scene-type.md)；场景深化 →见 [scene-deepening.md](./scene-deepening.md)

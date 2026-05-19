@@ -1,5 +1,7 @@
 # 场景深化指南（反注水）
 
+> **本文件职责**：场景怎么深——密度原则、扩写技法、分层模型、注水识别。
+> **不在本文件中的**：场面怎么搭→`engines/scene-composition.md`｜对话规则→`engines/dialogue.md`｜风格节奏→`engines/writing-style.md`
 > **定位**：场景写完后怎么丰富不注水——给层次+意义+深度，不是加字。
 > **配合文件**: 先定类型 → `scene-type.md`；再定密度 → `scene-composition.md`；最后深化 → 本文件。三步递进。
 > 具体案例见 `reference-deepening-examples.md`
