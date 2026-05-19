@@ -304,7 +304,7 @@
     │                                          │
     │ 引用                                      │ 加载
     ▼                                          ▼
-设定/角色属性          引擎(6个子系统) ←── 上下文注入(writing_start)
+设定/角色属性          引擎(6个子系统) ←── 上下文注入(get_chapter_context)
     │                  + 反AI句式系统 ←── SENTENCE-PATTERNS.md
     │ 存于                                      │ 产出
     ▼                                          ▼
