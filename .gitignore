@@ -33,7 +33,7 @@ __pycache__/
 # 临时测试脚本（根目录级别，novel-db-mcp/tests/ 目录下的正式测试除外）
 test_*.py
 start*.bat
-!novel-db-mcp/tests/
+!novel-db-mcp/tests/test_*.py
 
 # 下载/临时文件（与项目无关）
 download/

@@ -251,6 +251,16 @@ def _get_indent(line: str) -> int:
 _INNER_KV_RE = re.compile(r'^\*\*(.+?)\*\*:\s*(.*)$')
 # 匹配 **key**: 格式（无值，子行跟随）
 _INNER_KEY_ONLY_RE = re.compile(r'^\*\*(.+?)\*\*:\s*$')
+# 匹配 **value**: <!-- title_key --> 格式 — list[dict] 的 HTML 注释标注
+# 例如: **沈野**: <!-- name --> → title_val="沈野", title_key="name"
+# 使用 HTML 注释而非行内标注，对人类读者不可见，对解析器可识别
+_TITLE_HTML_COMMENT_RE = re.compile(
+    r'^\*\*(.+?)\*\*:\s*<!--\s*([\w\u4e00-\u9fff]+)\s*-->\s*$'
+)
+# 匹配 **value**: <!-- title_key --> (旧格式兼容: **value** (title_key):)
+_TITLE_PAREN_ANNOTATION_RE = re.compile(
+    r'^\*\*(.+?)\*\*\s+\(([\w\u4e00-\u9fff]+)\)\s*:\s*$'
+)
 
 
 def _parse_nested_bullets(lines: list[str], base_indent: int) -> dict | list:
@@ -261,7 +271,9 @@ def _parse_nested_bullets(lines: list[str], base_indent: int) -> dict | list:
     `**key**: value` 格式，而非 _FIELD_LINE_RE（后者要求行首有 `- `），
     从而正确提取键名和值。
 
-    策略：
+    策略（优先级从高到低）：
+      0. 如果任一顶层 bullet 匹配 `**value**: <!-- title_key -->` 标注格式
+         → list_of_dicts 模式，还原 list[dict] 结构
       1. 如果所有顶层 bullet 都是 `**key**: value` 或 `**key**:` 格式 → dict
       2. 如果所有顶层 bullet 都是纯文本或 `- **title**:` (list-of-dict 模式) → list
       3. 混合情况 → dict
@@ -309,6 +321,60 @@ def _parse_nested_bullets(lines: list[str], base_indent: int) -> dict | list:
 
     if not items:
         return {}
+
+    # ── 检测 list_of_dicts 标注模式 ──
+    # 任一项匹配 `**value**: <!-- title_key -->` 即视为 list[dict]
+    # 同时兼容旧格式 `**value** (title_key):`
+    has_annotation = any(
+        _TITLE_HTML_COMMENT_RE.match(item["content"]) or
+        _TITLE_PAREN_ANNOTATION_RE.match(item["content"])
+        for item in items
+    )
+
+    if has_annotation:
+        # ── List-of-dicts 标注模式 ──
+        # 还原 list[dict]：从 HTML 注释或旧格式中提取 title_key
+        result: list = []
+        for item in items:
+            m_html = _TITLE_HTML_COMMENT_RE.match(item["content"])
+            m_paren = _TITLE_PAREN_ANNOTATION_RE.match(item["content"])
+
+            if m_html:
+                title_val = m_html.group(1).strip()
+                title_key = m_html.group(2).strip()
+            elif m_paren:
+                title_val = m_paren.group(1).strip()
+                title_key = m_paren.group(2).strip()
+            else:
+                # 未匹配标注的项：降级为普通 KV 或纯文本
+                # 尝试作为 KV 解析，如果失败则作为纯字符串
+                m_kv = _INNER_KV_RE.match(item["content"])
+                if m_kv:
+                    sub_dict = {m_kv.group(1).strip(): _parse_value(m_kv.group(2).strip())}
+                else:
+                    sub_dict = {"_text": item["content"].strip().strip("*")}
+                if item["children"]:
+                    child_indent = _get_indent(item["children"][0]) if item["children"] else item["indent"] + 4
+                    child_val = _parse_nested_bullets(item["children"], child_indent)
+                    if isinstance(child_val, dict):
+                        sub_dict.update(child_val)
+                result.append(sub_dict)
+                continue
+
+            # 构建子 dict：title_key 回注为 dict 的键
+            sub_dict = {title_key: title_val}
+
+            if item["children"]:
+                child_indent = _get_indent(item["children"][0]) if item["children"] else item["indent"] + 4
+                child_val = _parse_nested_bullets(item["children"], child_indent)
+                if isinstance(child_val, dict):
+                    sub_dict.update(child_val)
+                elif child_val is not None:
+                    # child_val 是纯列表（如 list[str]），用 "items" 作为键名
+                    sub_dict["items"] = child_val
+
+            result.append(sub_dict)
+        return result
 
     # ── 判断是 dict 还是 list ──
     # 使用 _INNER_KV_RE 匹配去掉 "- " 前缀后的 **key**: value 格式

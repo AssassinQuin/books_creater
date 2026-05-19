@@ -37,6 +37,23 @@ from novel_db.md_parser import (
 from novel_db.sync import _is_empty, _jsonb_to_md, _md_bullet, _render_md_table, _parse_json_field
 
 
+def roundtrip(data, jsonb_key="content", indent=1, title_key=None):
+    """
+    模拟实际 DB→MD→DB 往返流程。
+
+    _render_jsonb 的渲染逻辑:
+      [f"- **{jsonb_key}**:"]
+      + _jsonb_to_md(parsed, indent, title_key=sec.title_key)
+
+    parse_jsonb_bullets 的解析逻辑:
+      跳过首行 `- **jsonb_key**:`，然后解析嵌套 bullets
+    """
+    md_lines = [f"- **{jsonb_key}**:"]
+    md_lines.extend(_jsonb_to_md(data, indent, title_key=title_key))
+    md_text = "\n".join(md_lines)
+    return parse_jsonb_bullets(md_text)
+
+
 # ============================================================================
 # Fixtures
 # ============================================================================
@@ -774,10 +791,8 @@ class TestMDParserRoundTrip:
     def test_jsonb_round_trip(self):
         """JSONB 嵌套结构渲染→解析→比较。
 
-        注意：_jsonb_to_md 对 list[dict] 使用 title_key 渲染，
-        导致 list[dict] 在 round-trip 后变为 dict（以 title 值为 key）。
-        这是已知的格式局限——dict 类型的 list 无法在 MD bullet 中完美还原。
-        此测试验证 dict 和简单值能正确往返，并记录 list[dict] 的行为。
+        通过 roundtrip() 辅助函数模拟实际 DB→MD→DB 流程，
+        验证 list[dict] 通过 HTML 注释标注实现无损往返。
         """
         original = {
             "core_conflict": "安全 vs 真相",
@@ -787,22 +802,17 @@ class TestMDParserRoundTrip:
             ]
         }
 
-        # 渲染
-        rendered_lines = _jsonb_to_md(original, indent=0)
-        md_text = "\n".join(rendered_lines)
-
-        # 解析
-        parsed = parse_jsonb_bullets(md_text)
+        # 使用 roundtrip 模拟实际 DB→MD→DB 流程
+        parsed = roundtrip(original)
 
         assert parsed is not None
         assert parsed["core_conflict"] == "安全 vs 真相"
         assert parsed["daily_state"] == "谨慎观察"
-        # list[dict] 在 round-trip 后变为 dict（以 title_key 值为键）
-        # 这是 MD bullet 格式的已知局限：list 中的 dict 元素无法保持 list 顺序
+        # list[dict] 通过 HTML 注释标注正确保持 list 结构
         assert "rules" in parsed
-        # 验证内容不丢失，只是结构从 list 变为 dict
-        assert isinstance(parsed["rules"], dict)
-        assert "保护弱者" in parsed["rules"]
+        assert isinstance(parsed["rules"], list), f"期望 list，实际 {type(parsed['rules']).__name__}: {parsed['rules']}"
+        assert len(parsed["rules"]) == 1
+        assert parsed["rules"][0]["name"] == "保护弱者"
 
     def test_md_table_round_trip(self):
         """MD 表格渲染→解析→比较。"""
@@ -862,9 +872,8 @@ class TestMDParserRoundTrip:
     def test_deeply_nested_jsonb_round_trip(self):
         """深度嵌套 JSONB 往返测试（3+ 层嵌套）。
 
-        注意：list[dict] 渲染时使用 title_key（如 stage/name）作为 bullet 标题，
-        解析时被还原为 dict 而非 list。这是已知的 MD 格式局限。
-        测试验证数据内容不丢失，但结构可能有变化。
+        通过 roundtrip() 验证 list[dict] 在嵌套结构中通过 HTML 注释标注
+        正确还原为 list，数据内容无损。
         """
         original = {
             "appearance_changes": [
@@ -886,19 +895,18 @@ class TestMDParserRoundTrip:
             }
         }
 
-        rendered = _jsonb_to_md(original, indent=0)
-        md_text = "\n".join(rendered)
-
-        parsed = parse_jsonb_bullets(md_text)
+        parsed = roundtrip(original)
 
         assert parsed is not None
-        # appearance_changes: list[dict] → round-trip 后变为 dict（以 title_key 值为键）
-        # 数据内容不丢失，但结构从 list 变为 dict
-        assert "appearance_changes" in parsed or "V1起点" in parsed, \
+        # appearance_changes: list[dict] 通过 HTML 注释标注正确还原为 list
+        assert "appearance_changes" in parsed, \
             "appearance_changes 数据在 round-trip 中丢失"
-        # 如果键是 title_key 值而非原始键名，验证内容仍然存在
-        if "V1起点" in parsed:
-            assert parsed["V1起点"]["change"] == "手臂出现灵纹"
+        assert isinstance(parsed["appearance_changes"], list), \
+            f"期望 list，实际 {type(parsed['appearance_changes']).__name__}"
+        assert len(parsed["appearance_changes"]) == 2
+        assert parsed["appearance_changes"][0]["stage"] == "V1起点"
+        assert parsed["appearance_changes"][0]["change"] == "手臂出现灵纹"
+        assert parsed["appearance_changes"][1]["stage"] == "V5"
         # dialogue_generation 是纯 dict，应完美还原
         assert "dialogue_generation" in parsed
         assert parsed["dialogue_generation"]["step1"] == "识别情绪状态"

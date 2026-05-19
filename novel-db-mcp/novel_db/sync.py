@@ -109,7 +109,8 @@ def _is_empty(v) -> bool:
     return False
 
 
-_TITLE_KEYS = ['name', 'stage', 'volume', 'target', 'scene', 'context', 'type']
+_TITLE_KEYS = ['name', 'stage', 'volume', 'target', 'scene', 'context', 'type',
+               '角色', '互动对', '章', '#', 'question']
 
 
 def _find_title_key(obj: dict) -> tuple:
@@ -122,7 +123,7 @@ def _find_title_key(obj: dict) -> tuple:
     return None, None
 
 
-def _jsonb_to_md(data, indent=0) -> list:
+def _jsonb_to_md(data, indent=0, title_key: str | None = None) -> list:
     prefix = "    " * indent
     lines = []
 
@@ -146,13 +147,18 @@ def _jsonb_to_md(data, indent=0) -> list:
     elif isinstance(data, list):
         for item in data:
             if isinstance(item, dict):
-                title_key, title_val = _find_title_key(item)
-                if title_key:
-                    lines.append(f"{prefix}- **{title_val}**:")
+                found_key, title_val = _find_title_key(item)
+                # 优先使用调用方指定的 title_key，其次用自动检测的
+                effective_key = title_key or found_key
+                if effective_key and effective_key in item:
+                    title_val = str(item[effective_key])
+                    # 使用 HTML 注释标注 title_key，对人类不可见，对解析器可识别
+                    # 例如: - **沈野**: <!-- name -->
+                    lines.append(f"{prefix}- **{title_val}**: <!-- {effective_key} -->")
                     sub_indent = indent + 1
                     sub_prefix = "    " * sub_indent
                     for k, v in item.items():
-                        if k == title_key:
+                        if k == effective_key:
                             continue
                         if _is_empty(v):
                             if isinstance(v, list) and len(v) == 0:

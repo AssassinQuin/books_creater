@@ -77,22 +77,27 @@ sections:
   - heading: 外观描写库
     type: jsonb
     jsonb_column: appearance_detail
+    # 无 title_key: 顶层是 dict，内部 list[dict] 用自动检测
 
   - heading: 决策引擎
     type: jsonb
     jsonb_column: decision_engine
+    # 无 title_key: 顶层是 dict
 
   - heading: 对话声音指纹
     type: jsonb
     jsonb_column: voice_fingerprint
+    # 无 title_key: 顶层是 dict
 
   - heading: 能力体系
     type: jsonb
     jsonb_column: ability_system
+    # stages 是 dict（key=阶段名），非 list[dict]; 自动检测即可
 
   - heading: 行为模式
     type: jsonb
     jsonb_column: behavior_pattern
+    # 无 title_key: 顶层是 dict
 
   # ---- 终局快照 ----
   - heading: "当前快照（终局）"
