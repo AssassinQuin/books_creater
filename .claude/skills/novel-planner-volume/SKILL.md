@@ -143,7 +143,7 @@ for variant, path in files.items():
 
 ### 共享约束
 
-Agent 必须遵守六类规则（事件驱动节奏铁律、内容密度、伏笔冰山理论、人物互动、巧合计、🔒术语规范约束），编排器通过 skill_loader 传入 `shared-constraints.md`。详细规则表见 supporting-info §共享约束详细规则。
+Agent 必须遵守七类规则（事件驱动节奏铁律、内容密度、伏笔冰山理论、人物互动、巧合计、🔒术语规范约束、回响规则），编排器通过 skill_loader 传入 `shared-constraints.md`。详细规则表见 supporting-info §共享约束详细规则。
 
 ## 🔒检查点A: 确认事件架构
 
@@ -454,16 +454,17 @@ if mode == "增量审计":
 
 ## 共享约束详细规则
 
-Agent 必须遵守以下六类规则，详见 `shared-constraints.md`：
+Agent 必须遵守以下七类规则，详见 `shared-constraints.md`：
 
 | 规则集 | 核心内容 | 查阅文件 |
 |--------|---------|---------|
-| POV时间线铁律 | 主角时间线锚定、暗面标注、连续性、时间标注 | `agents/shared-constraints.md §1` |
-| 内容密度规则 | 事件→字数映射、每章事件数、微事件、世界观展开 | `agents/shared-constraints.md §2` |
+| 事件驱动节奏铁律 | 章节=事件单元、非主角暗面标注、时间跳跃合法、场景时间标注、主角戏份保底 | `agents/shared-constraints.md §1` |
+| 内容密度规则 | 事件→字数映射、每章事件数、微事件、世界观展开、弹性事件储备 | `agents/shared-constraints.md §2` |
 | 伏笔自然设计（冰山理论） | 表面动机、先果后因、场景自检 | `agents/shared-constraints.md §3` |
 | 人物互动规则 | 组合多样性、罕见组合、费笔配额 | `agents/shared-constraints.md §4` |
 | 巧合计规则 | ≤1次/卷、必须有伏笔支撑 | `agents/shared-constraints.md §5` |
 | **🔒术语规范约束** | 文化根脉+字根一致性+势力区分+新术语四步法+已注册元素+层级区分 | `agents/shared-constraints.md §6` |
+| 回响规则（Echo） | 大事件余波自然回溯、密度控制（≤2次/卷）、融入世界呼吸、可跨卷 | `agents/shared-constraints.md §7` |
 
 编排器在 Step 0.4 加载 shared-constraints.md，在 Step 1/2 启动 Agent 时作为输入传入。Agent 在 `## 输入` 部分可见"共享约束"条目，**必须逐条遵守**。
 
