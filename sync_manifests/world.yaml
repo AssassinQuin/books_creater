@@ -19,23 +19,30 @@ order_by: "category, name"
 # --- 文件映射 ---
 # category → 文件名 映射表
 file_dir: "设定/世界观"
+# file_pattern 行为：
+#   - category_file_map 值以 "/" 结尾 → 子目录，sync 为该 category 下每条记录生成独立文件
+#   - category_file_map 值不以 "/" 结尾 → 单文件，所有记录按 section 聚合到一个文件
 file_pattern: "{category_file}.md"
 merge_mode: section_replace
 section_marker: "## {category}: {name}"
 file_to_db_enabled: false
 
 # --- 分类文件名映射 ---
+# 以 "/" 结尾 = 子目录模式（每条记录一个文件）；无 "/" = 单文件模式（聚合到一个文件）
 category_file_map:
-  core_setting: 核心设定
-  bestiary: 异灵图鉴
-  ability: 能力体系
-  item: 物品装备
-  economy: 经济体系
-  daily_life: 日常生活
-  history: 历史事件
-  location: 地图
-  faction: 势力
-  race: 种族
+  core_setting: "核心设定/"    # 已拆分为子目录，24个文件
+  bestiary: "异灵/"            # 已拆分为子目录，4个文件
+  ability: "能力/"             # 已拆分为子目录，含角色能力+体系文件
+  item: "物品/"                # 已拆分为子目录，4个文件
+  location: "地点/"            # 已拆分为子目录，17个文件
+  faction: "势力/"             # 已拆分为子目录，3个文件
+  economy: 经济体系            # 扁平文件，未拆分
+  daily_life: 日常生活         # 扁平文件，未拆分
+  history: 历史事件            # 扁平文件，未拆分
+  race: 种族                   # 扁平文件，未拆分
+  building: 建筑               # 原 building.md 重命名
+  culture: 文化                 # 原 culture.md 重命名
+  plant: 植物                   # 原 plant.md 重命名
 
 # --- 段落定义 ---
 # 世界观使用动态 heading（包含 category 和 name）
