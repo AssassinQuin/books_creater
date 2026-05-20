@@ -8,7 +8,7 @@ CONSTRAINTS_FILE = os.environ.get(
             "NOVEL_PROJECT_ROOT",
             os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         ),
-        ".claude", "skills", "writing-constraints.md"
+        ".claude", "skills", "engines", "writing-constraints.md"
     )
 )
 

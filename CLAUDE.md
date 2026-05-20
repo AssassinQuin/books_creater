@@ -100,6 +100,33 @@ Agent 2 直接调 MCP 创建新人物/地点/物品/势力/伏笔，无需编排
 
 ### Skill System
 
+#### 三层技能架构（SkillX 启发）
+
+Skill 按**规划/功能/原子**三层组织，模型每次只加载当前 Step 需要的约束和方法：
+
+| 层级 | 载体 | 职责 | 加载时机 |
+|------|------|------|---------|
+| **规划技能** | SKILL.md `<what-to-do>` | "先做什么后做什么"+硬约束+检查点 | skill 触发时 |
+| **功能技能** | `agents/*.md` + `shared/*.md` | "如何完成子任务"+工具组合+共享协议 | 执行对应 Step 时 |
+| **原子技能** | `engines/*.md` + MCP 工具 | "某个约束/工具怎么用"+参数+失败模式 | 按需加载 |
+
+原子技能三级加载策略：
+- **Tier 0（铁律层）**：writing-constraints + anti-ai + anti-ai-patterns + causality — 始终注入
+- **Tier 1（基础层）**：writing-style + author-voice + world-element-registry — skill 触发时加载
+- **Tier 2（按需层）**：其余 32 个引擎 — 执行对应 Step 时按需加载
+
+#### 共享协议层（`.claude/skills/shared/`）
+
+跨 skill 重复的功能技能，提取为共享模块：
+
+| 协议 | 用途 | 被 skill 引用 |
+|------|------|-------------|
+| `engine-loading-protocol.md` | 引擎加载→验证→失败处理 | planner/planner-volume/chapter-writer |
+| `db-save-protocol.md` | MCP调用→结果校验→错误中止 | planner/planner-volume/chapter-writer |
+| `checkpoint-protocol.md` | 展示→确认→修改循环 | planner/planner-volume/chapter-writer |
+| `three-perspective-protocol.md` | 三视角审查+红蓝对抗 | planner/planner-volume/qa |
+| `consistency-protocol.md` | consistency_guard 调用规范 | planner-volume/chapter-writer |
+
 #### Project Skills (`.claude/skills/`)
 
 | Skill | 触发词 | 核心功能 | 强制检查点 |
@@ -110,8 +137,11 @@ Agent 2 直接调 MCP 创建新人物/地点/物品/势力/伏笔，无需编排
 | **novel-planner** | 规划卷/大纲 | 全书总纲、逐卷环境先行设计 | 🔒 每卷确认后才能进入场景 |
 | **novel-planner-volume** | 卷大纲/章节规划/事件设计 | 卷级章节设计（场景+事件+支线） | 🔒 场景清单确认后才能进入正文 |
 | **novel-chapter-writer** | 写第N章/继续写/写一章 | Multi-Agent Pipeline 编排器 | 🔒 writing_finish 不可跳过 |
+| **novel-creative-analyze** | 创意分析/评好/惊喜度/创意评估 | 创意质量评估（惊喜度/情感/节奏） | 🔒 评分卡确认 |
 | **novel-qa** | 审阅/检查/诊断/OOC | 三视角审查+AI指纹检测 | 🔒 P0/P1问题必须修复 |
 | **novel-reviser** | 修复/去重/修文/润色 | 文本修订、润色 | - |
+
+> **novel-qa vs novel-creative-analyze**：qa 找错（OOC/因果断裂/术语违规），creative-analyze 评好（惊喜度/情感冲击/节奏）。先过 qa（无P0），再过 creative-analyze（提升质量）。
 
 #### External Skills (`/home/z/my-project/skills/`)
 
@@ -129,7 +159,7 @@ Agent 2 直接调 MCP 创建新人物/地点/物品/势力/伏笔，无需编排
 
 | Bucket | Skills | Auto-routed |
 |--------|--------|-------------|
-| **core** | novel-writer, novel-setup, novel-character, novel-planner, novel-planner-volume, novel-chapter-writer | Yes |
+| **core** | novel-writer, novel-setup, novel-character, novel-planner, novel-planner-volume, novel-chapter-writer, novel-creative-analyze | Yes |
 | **quality** | novel-qa, novel-reviser | Yes |
 | **experimental** | darwin-skill | No |
 | **meta** | novel-skill-creator | No |
@@ -211,7 +241,7 @@ Priority on conflict: C3 > B2 > others. 阶段指令文件位于 `.claude/skills
 
 ### 规则 1: 全部强制
 
-- `writing-constraints.md` 中所有约束**全部强制**，不通过则拒绝存盘
+- `engines/writing-constraints.md` 中所有约束**全部强制**，不通过则拒绝存盘
 - `validate_chapter` 将所有约束作为 violations 返回，有 violations 必须修复后才能存盘
 
 ### 规则 2: 审计强制
@@ -274,6 +304,7 @@ L3 加事件（>50%）     → 强制从大纲找事件或加微事件
 - 创意蓝图 Ch1-8 已完成（存于 `创意决策/`）
 - DB 数据：28角色、200+世界观条、53伏笔、15卷大纲
 - 设定目录已完成重组（人物/世界观/大纲/锁定/参考/写作 分层）
+- Skill 体系重构完成：三层架构（规划/功能/原子）+ shared/ 共享协议层 + novel-creative-analyze 新增
 - 下一步：正文生成（B2），从 V1 开始
 
 ## Anti-AI Writing System (Critical)
