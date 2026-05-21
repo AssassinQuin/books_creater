@@ -80,8 +80,9 @@ world_query(novel_name="NOVEL_NAME", volume="V{N}")  # 按卷过滤，减少无�
 **分发原则**：编排器加载完的文件直接打包传 Agent，Agent 自主使用。但对 Step 3 审查 Agent 采用**精简分发**——编排器预提取关键信息（术语禁止列表+势力字根表），作为字符串直接注入 Agent 指令，Agent **不再自主加载任何引擎或 lorecraft 文件**。
 
 - **Step 0 额外加载（强制）**：`novels/{小说名}/设定/写作/tone-primer.md` — 项目专属基调词典，加载后传入 Step 2
+  - **fallback**：若文件不存在 → 告知用户「tone-primer.md 缺失，基调字段将使用缺省值」，chapter-designer 使用缺省基调向量枚举：[冷漠克制|突然暴力|短暂温暖|荒诞笑点|兄妹张力]；缺省世界秩序锚：「空置建筑上贴着旧告示，字迹已褪色」；不阻塞流程，但建议运行 lorecraft 生成 tone-primer.md
 - **Step 1** (事件架构师)：causality, relationship, shared-constraints, lorecraft四件套, world-element-registry, **spiral-structure, plot-density**
-- **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-quickref, shared-constraints, lorecraft四件套, world-element-registry, **tone-primer.md（Step 0 已加载，直接传入）**
+- **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-patterns, shared-constraints, lorecraft四件套, world-element-registry, **tone-primer.md（Step 0 已加载，直接传入）**
   + 声音层：编排器不从引擎文件全量加载 author-voice×5（详见 §0.4.5 声音层头部提取），而是用 Read(limit=5) 提取每个变体的**头部摘要**（标题+加载时机行），编译为速查表注入 Agent
 - **Step 3** (三视角审查)：reader/author/character-perspective-agent + **精简分发**（只给 quickref 需替换术语+势力字根摘要，不给全量）
   - ❌已移除：world-element-registry, shared-constraints, lorecraft-core-principles, term-map
@@ -315,6 +316,7 @@ Step 3: 保存 → git commit
 - [ ] **时间节奏合理性**：修改章是否按事件驱动组织？同一事件弧内时间连续，事件弧结束后允许跳跃？
 - [ ] **新实体一致性**：新增的角色/地点/物品是否已调MCP注册（character_create/world_upsert）？
 - [ ] **🔒术语质量**：修改章中世界观数术语是否有文化根脉？与 term-map 一致？
+- [ ] **🔒世界观基调字段补齐**：修改/新增的章节条目是否包含「基调向量」「世界秩序锚」「特写配额」三个字段？若旧章缺失，增量修改时必须补齐。
 
 **增量模式下 Step 2.5 是必经关卡**——即使只是"加一句对话"，也需要确认改动没有引入角色OOC或术语不一致。增量模式可以跳过完整三视角审查。
 
@@ -369,7 +371,7 @@ Step 1 (事件架构师) 需要：
 Step 2 (章节设计师) 需要：
   skill_loader("novel-planner-volume", "engine", "scene-type")
   skill_loader("novel-planner-volume", "engine", "scene-composition")
-  skill_loader("novel-planner-volume", "engine", "anti-ai-quickref")
+  skill_loader("novel-planner-volume", "engine", "anti-ai-patterns")
   skill_loader("novel-planner-volume", "agent", "shared-constraints")
   Read(".claude/skills/lorecraft/references/core-principles.md")
   Read(".claude/skills/lorecraft/references/term-map.md")
@@ -423,6 +425,8 @@ loaded_resources = {
     "Step2-术语映射(term-map)": term_map_loaded_s2,
     "Step2-术语速查(quickref)": quickref_loaded_s2,
     "Step2-世界元素索引(world-element-registry)": registry_loaded_s2,
+    # 🔒 基调词典（Step 0 强制，缺失时走 fallback 但必须标记）
+    "Step0-基调词典(tone-primer)": tone_primer_loaded,  # False 时使用缺省枚举，不阻塞
     # Step 3 引擎（只加载视角引擎，术语约束为编排器预提取的精简摘要）
     "Step3-读者视角(reader-perspective)": reader_loaded,
     "Step3-作者视角(author-perspective)": author_loaded,
@@ -558,6 +562,10 @@ Ch{末}: {标题} | {场景数}个场景 | {章末钩子}
 - 🔒术语规范: 无需替换术语 ✅/❌
 - 🔒螺旋结构: 信息钩子Lv2/Lv3≥60% ✅/❌ | 回旋锚已标注 ✅/❌
 - 🔒情节密度: 每章≥2条链推进 ✅/❌ | 每章≥1次复杂化 ✅/❌
+- 🔒世界观基调: 每章含「基调向量」字段（来自tone-primer.md §一枚举）✅/❌
+- 🔒世界观基调: 每章含「世界秩序锚」字段（来自tone-primer.md §二锚点库）✅/❌
+- 🔒世界观基调: 每章含「特写配额」字段（全卷写透场面总数=章数，其余粗放）✅/❌
+- 🔒世界观基调: 若 tone-primer.md 缺失，已切换缺省枚举并告知用户 ✅/❌
 
 输入"OK"进入验证，或提修改意见（可指定某章修改）。
 ```
@@ -739,9 +747,6 @@ Agent 2 输出每章大纲时标注 `声音层: {类型}` 字段，正文写作�
 
 ## 项目专属数据
 
-《NOVEL_NAME》的卷级数据存于：
-`references/novel-planner/project-context.md`
-
-Agent 设计时，编排器将此文件作为附加输入提供。
+《NOVEL_NAME》的卷级数据由 Step 0.3 通过 MCP 加载（character_list / foreshadow_list / world_query），不依赖静态文件。编排器打包后作为附加输入传给 Agent。
 
 </supporting-info>

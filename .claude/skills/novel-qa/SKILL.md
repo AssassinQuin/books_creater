@@ -59,12 +59,23 @@ Step 6: 输出到 novels/{NOVEL_NAME}/审阅报告/大纲审计-{date}.md
 
 ### Step 1: 加载上下文
 
+- **确定审阅范围**：用户指定"最近N章"时 → `chapter_list(novel_name=NOVEL_NAME)` 获取最新N章编号 → 展示范围供确认；指定具体章节号 → 直接使用
 - 角色状态（`character_get` + `get_chapter_context(novel_name, chapter_number, load_mode="full")`，novel_name=NOVEL_NAME）
 - 卷级大纲（`novels/{NOVEL_NAME}/设定/大纲/V{卷号}-{卷名}.md`）
 - 全书支线总图（`novels/{NOVEL_NAME}/设定/大纲/支线总图.md`）
 - 世界观数据（`world_query(novel_name=NOVEL_NAME)`；空时回退读文件）
 - 作者声音（`skill_loader("novel-qa", "engine", "author-voice")`）
 - 🔒 术语规范（`lorecraft/references/term-map.md` — 强制加载）
+
+### Step 1.5: 🔒 确认审阅范围
+
+编排器展示审阅范围和预计成本，等待用户确认：
+```
+审阅范围：Ch{起始}~Ch{结束}（共{N}章）
+预计Agent数：7+（基础组3 + 深度组4+含三视角子Agent）
+预计耗时：较长
+输入OK开始审阅，或调整范围。
+```
 
 ### Step 2: 分组扫描（串行+并行混合）
 
@@ -112,6 +123,8 @@ health_check(novel_name=NOVEL_NAME) → 6指标：
 ```
 
 低于阈值项 → 破局策略：加事件 / 减日常 / 回收伏笔 / 激活配角。
+
+🔒 **确认破局策略**：展示低于阈值的指标和推荐策略 → 用户确认或调整 → 执行。
 
 输出到 `novels/{NOVEL_NAME}/审阅报告/健康诊断-{date}.md`
 

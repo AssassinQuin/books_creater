@@ -38,3 +38,9 @@ timestamp	commit	skill	old_score	new_score	status	dimension	note	eval_mode
 2026-05-16T18:32:12+0800	b5bfac1d60c488ffcd2812a47934685739a9082a	novel-character	82.3	87.6	keep	探索性重写(Phase2.5): 全维度	修复7步列表矛盾+统一结构+添加新建人物检查点+边界条件完善+核心/NPC分级	dry_run
 2026-05-16T18:33:29+0800	862002d16b9253a4deff7c4c695edc8e6e023ce8	engines(character-design)	-	-	keep	资源整合度	废弃旧4步蒸馏法→7步统一	full_test
 2026-05-16T20:53:22+0800	6e48afb	abilitycraft	37.5	77.7	keep	探索性重写(Phase2.5): 全维度	六步法+三视角命名+4根隐喻+七势力命名母体+🔒检查点×5+边界条件×8+质量检查×11+命名速查卡+案例库	full_test
+2026-05-21T17:00:00+08:00	7f527bd	novel-planner-volume	79.0	81.0	keep	边界条件	Dim3 6→8: tone-primer fallback+验证清单+A2基调四项+增量字段补齐	dry_run
+2026-05-21T17:10:00+08:00	HEAD	novel-planner-volume	81.0	82.0	keep	资源整合度	Dim6 7→9: 修复anti-ai-quickref断裂引用+清除project-context幽灵引用	dry_run
+2026-05-21T17:20:00+08:00	baseline	novel-writer	-	72.5	baseline	-	基线评估(路由表缺口: 写小说/改设定/帮我写不在Step1.1)	dry_run
+2026-05-21T17:25:00+08:00	HEAD	novel-writer	72.5	80.0	keep	实测表现	Dim8 6→9: 补写小说/改设定/帮我写/优化人物路由+新增C3行+test-prompts重写	dry_run
+2026-05-21T17:35:00+08:00	baseline	novel-qa	-	82.0	baseline	-	基线评估(D4检查点缺失+D8审阅范围模糊)	dry_run
+2026-05-21T17:40:00+08:00	HEAD	novel-qa	82.0	87.5	keep	检查点+指令具体性+实测	D4 7→9: B3-2🔒确认+C2🔒确认; D5/D8+1: 补审阅范围逻辑	dry_run
