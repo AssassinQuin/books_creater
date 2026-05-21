@@ -57,13 +57,25 @@ Step 6 🔒 writing_finish + 存盘
 
 ## Step 1: 编排器采集原始数据
 
-### 1.1 加载卷级大纲
+### 1.1 加载卷级大纲 + 世界观基调向量
 
 ```python
 # DB 是权威源，直接调 MCP 获取卷大纲
 volume_get(novel_name="NOVEL_NAME", volume_number={卷号})
 # 如 MCP 返回不完整（notes 为空），回退读文件：Read("novels/{小说名}/设定/大纲/V{卷号}-{卷名}.md")
 # 提取本章信息：核心事件/参与角色/微事件/伏笔操作/声音适配标记
+
+# 🔒 提取本章三个基调字段（来自 chapter-designer 产出的章节大纲）
+# 在卷纲文件/DB 中，每章条目应包含：
+#   基调向量: {冷漠克制|突然暴力|短暂温暖|荒诞笑点|兄妹张力}[+辅助]
+#   世界秩序锚: {废墟秩序的1个具体细节}
+#   特写配额: 场景{N}写透（其余粗放）
+# 如果字段缺失（旧大纲未填写）：标注 ⚠️ 基调字段缺失，编排器从 tone-primer.md 提示用户补充
+# 如果字段存在：将三字段提取到 ch{N}-tone-directive.md 传递给后续 Agent
+
+# 加载项目专属基调词典（供 Agent 2 和 Agent 3 参考枚举值）
+Read("novels/{小说名}/设定/写作/tone-primer.md")
+# → 5种基调向量定义 + 废墟秩序锚点库 + 微动作特征库 + 克制美学基准
 ```
 
 ### 1.2 调用聚合 MCP（一次调用获取全部上下文）
@@ -81,9 +93,17 @@ get_chapter_context(novel_name="NOVEL_NAME", chapter_number) → 全部写作上
 将所有数据保存到临时文件，传递给 Agent 1：
 ```python
 Write("novels/{小说名}/.tmp/ch{N}-raw-data.md", raw_data)
+# 同时写入基调指令文件（独立传递，不混入 raw-data 防止压缩丢失）
+Write("novels/{小说名}/.tmp/ch{N}-tone-directive.md", {
+    "基调向量": "{从章节大纲提取，或标注⚠️缺失}",
+    "世界秩序锚": "{从章节大纲提取，或标注⚠️缺失}",
+    "特写配额": "{从章节大纲提取，或标注⚠️缺失}",
+    "tone_primer_path": "novels/{小说名}/设定/写作/tone-primer.md"
+})
 ```
 
 > **raw_data 必须包含**：本章核心事件、声音适配标记、涉及的世界元素定义、人物档案/伏笔/时间线。缺失任何一项会导致上下文压缩失真（详见 supporting-info §raw_data 内容要求）。
+> **tone-directive 独立存储**：基调字段不进入 raw-data，由编排器单独写入 `ch{N}-tone-directive.md`，Context Curator 在输出的"本章基调注入"块中原样复制，Creative Director 直接读取使用。
 
 ## Step 2: 启动 Agent 1 — Context Curator
 
@@ -109,11 +129,14 @@ subagent_type: general_purpose_task
 description: 设计第N章创意蓝图
 query: 你是 Creative Director Agent。请读取 agents/creative-director.md 了解完整职责。
 → 基于上下文包（novels/{小说名}/.tmp/ch{N}-context-package.md），做出本章全部创意决策。
+→ 🔒 加载基调指令（novels/{小说名}/.tmp/ch{N}-tone-directive.md）：包含本章基调向量/世界秩序锚/特写配额。
+→ 🔒 加载 tone-primer.md（novels/{小说名}/设定/写作/tone-primer.md）：获取基调枚举值/微动作特征库/克制美学基准。
+→ 每个场面设计必须填写4个基调字段（基调调性/写透或粗放/克制约束/微动作分配），来自 tone-primer 枚举值。
 → 阶段指令已加载；引擎指令（environment/dialogue/action/causality）由 skill_loader 预加载注入。
 → 确认因果链完整性，场面分配到起承转合（常规章2-4个，转折章5-6个），选择悬念锚点。
 → 设计密度/角色矩阵/微事件/伏笔操作/镜头序列/叙事节奏/角色弧线（含失控时刻）。
 → 识别需新建实体，直接调用 MCP 创建（见 creative-director.md 步骤 5）。
-→ 保存创意蓝图到 novels/{小说名}/创意决策/Ch{N}-创意蓝图.md，按输出格式产出（含已创建实体 ID）。
+→ 保存创意蓝图到 novels/{小说名}/创意决策/Ch{N}-创意蓝图.md，按输出格式产出（含已创建实体 ID + 基调字段）。
 ```
 
 Agent 2 返回 → 编排器验证必填字段 → 创意蓝图已由 Agent 2 保存，编排器提取元数据（已创建实体ID、伏笔操作摘要）用于 Step 6。

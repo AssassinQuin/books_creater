@@ -79,8 +79,9 @@ world_query(novel_name="NOVEL_NAME", volume="V{N}")  # 按卷过滤，减少无�
 
 **分发原则**：编排器加载完的文件直接打包传 Agent，Agent 自主使用。但对 Step 3 审查 Agent 采用**精简分发**——编排器预提取关键信息（术语禁止列表+势力字根表），作为字符串直接注入 Agent 指令，Agent **不再自主加载任何引擎或 lorecraft 文件**。
 
+- **Step 0 额外加载（强制）**：`novels/{小说名}/设定/写作/tone-primer.md` — 项目专属基调词典，加载后传入 Step 2
 - **Step 1** (事件架构师)：causality, relationship, shared-constraints, lorecraft四件套, world-element-registry, **spiral-structure, plot-density**
-- **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-quickref, shared-constraints, lorecraft四件套, world-element-registry
+- **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-quickref, shared-constraints, lorecraft四件套, world-element-registry, **tone-primer.md（Step 0 已加载，直接传入）**
   + 声音层：编排器不从引擎文件全量加载 author-voice×5（详见 §0.4.5 声音层头部提取），而是用 Read(limit=5) 提取每个变体的**头部摘要**（标题+加载时机行），编译为速查表注入 Agent
 - **Step 3** (三视角审查)：reader/author/character-perspective-agent + **精简分发**（只给 quickref 需替换术语+势力字根摘要，不给全量）
   - ❌已移除：world-element-registry, shared-constraints, lorecraft-core-principles, term-map
