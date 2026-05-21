@@ -82,7 +82,7 @@ world_query(novel_name="NOVEL_NAME", volume="V{N}")  # 按卷过滤，减少无�
 - **Step 0 额外加载（强制）**：`novels/{小说名}/设定/写作/tone-primer.md` — 项目专属基调词典，加载后传入 Step 2
   - **fallback**：若文件不存在 → 告知用户「tone-primer.md 缺失，基调字段将使用缺省值」，chapter-designer 使用缺省基调向量枚举：[冷漠克制|突然暴力|短暂温暖|荒诞笑点|兄妹张力]；缺省世界秩序锚：「空置建筑上贴着旧告示，字迹已褪色」；不阻塞流程，但建议运行 lorecraft 生成 tone-primer.md
 - **Step 1** (事件架构师)：causality, relationship, shared-constraints, lorecraft四件套, world-element-registry, **spiral-structure, plot-density**
-- **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-quickref, shared-constraints, lorecraft四件套, world-element-registry, **tone-primer.md（Step 0 已加载，直接传入）**
+- **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-patterns, shared-constraints, lorecraft四件套, world-element-registry, **tone-primer.md（Step 0 已加载，直接传入）**
   + 声音层：编排器不从引擎文件全量加载 author-voice×5（详见 §0.4.5 声音层头部提取），而是用 Read(limit=5) 提取每个变体的**头部摘要**（标题+加载时机行），编译为速查表注入 Agent
 - **Step 3** (三视角审查)：reader/author/character-perspective-agent + **精简分发**（只给 quickref 需替换术语+势力字根摘要，不给全量）
   - ❌已移除：world-element-registry, shared-constraints, lorecraft-core-principles, term-map
@@ -371,7 +371,7 @@ Step 1 (事件架构师) 需要：
 Step 2 (章节设计师) 需要：
   skill_loader("novel-planner-volume", "engine", "scene-type")
   skill_loader("novel-planner-volume", "engine", "scene-composition")
-  skill_loader("novel-planner-volume", "engine", "anti-ai-quickref")
+  skill_loader("novel-planner-volume", "engine", "anti-ai-patterns")
   skill_loader("novel-planner-volume", "agent", "shared-constraints")
   Read(".claude/skills/lorecraft/references/core-principles.md")
   Read(".claude/skills/lorecraft/references/term-map.md")
@@ -747,9 +747,6 @@ Agent 2 输出每章大纲时标注 `声音层: {类型}` 字段，正文写作�
 
 ## 项目专属数据
 
-《NOVEL_NAME》的卷级数据存于：
-`references/novel-planner/project-context.md`
-
-Agent 设计时，编排器将此文件作为附加输入提供。
+《NOVEL_NAME》的卷级数据由 Step 0.3 通过 MCP 加载（character_list / foreshadow_list / world_query），不依赖静态文件。编排器打包后作为附加输入传给 Agent。
 
 </supporting-info>
