@@ -57,8 +57,8 @@ def _get_quality_history(novel_id: int, chapter_number: int, limit: int = 3) -> 
     rows = query(
         "SELECT cq.*, ch.number as chapter_number FROM chapter_quality cq "
         "JOIN chapters ch ON cq.chapter_id = ch.id "
-        "WHERE ch.novel_id = %s AND ch.number < %s "
-        "ORDER BY ch.number DESC LIMIT %s",
+        "WHERE ch.novel_id = ? AND ch.number < ? "
+        "ORDER BY ch.number DESC LIMIT ?",
         (novel_id, chapter_number, limit)
     )
     return [dict(r) for r in rows]
@@ -109,7 +109,7 @@ def _build_rules_prompt() -> str:
 def _build_writing_prompt(ch: dict, summaries: list, chars: list,
                           foreshadows: list, world_index: list,
                           vol: dict, quality_history: list,
-                          echoes: list = None) -> str:
+                          echoes: list = None, novel_id: int = None) -> str:
     lines = []
     cn = ch.get("number", "?")
 
@@ -186,15 +186,12 @@ def _build_writing_prompt(ch: dict, summaries: list, chars: list,
         if isinstance(av_data, dict) and "content" in av_data:
             av_text = av_data["content"]
             lines.append("\n## 🎨 作者DNA")
-            dims = {
-                "## 偏执": "兄妹张力·废墟秩序",
-                "## 审美": "旧的/破的/补过的→好看，看小处不看大景",
-                "## 动作与场面": "升格慢镜头·短句加速长句拉慢·感官齐上",
-                "## 比喻": "身体感受＞文学形容，禁安全牌比喻",
-                "## 留白": "不总结不解释不升华，动作先上解释延后",
-                "## 疯劲": "情绪高潮不喘气地接，写了太过不留",
-                "## 世界呼吸": "静止的世界里角色有自己的瞬间"
-            }
+            dims = {}
+            if novel_id:
+                from .db import get_novel_config
+                dims = get_novel_config(novel_id, "author_voice", "dna_summary", {})
+            if not dims:
+                dims = {}
             for dim, essence in dims.items():
                 if dim in av_text:
                     lines.append(f"▸ {essence}")

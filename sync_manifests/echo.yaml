@@ -1,28 +1,16 @@
-# ============================================================
-# 回响同步模板 — DB↔File 桥梁定义
-# ============================================================
-# 权威源：DB echoes 表
-# 映射：多行 echoes → 回响清单.md（section_replace）
-# 基数：Many行 → 1文件
-# 状态：新增（之前无sync代码，仅有模板规格）
-# ============================================================
-
 name: echo
 display_name: 回响
 authority: db
 
-# --- DB 映射 ---
 db_table: echoes
 id_field: id
 order_by: "id ASC"
 
-# --- 文件映射 ---
 file_dir: "设定/大纲"
 file_pattern: "回响清单.md"
 merge_mode: section_replace
 section_marker: "## echo: {id}"
 
-# --- 段落定义 ---
 sections:
   - heading: "echo: {id}"
     type: fields
@@ -48,12 +36,8 @@ sections:
         type: list
         optional: true
 
-# --- 变换函数 ---
 transforms:
   resolve_chapter_number: builtin.resolve_chapter_number
 
-# --- File→DB 反向同步 ---
 file_to_db:
   enabled: true
-  note: "通过引擎聚合解析回响文件，按echo:id提取全部字段。"
-  strategy: aggregate_parse

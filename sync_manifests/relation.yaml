@@ -1,0 +1,38 @@
+name: relation
+display_name: 人物关系
+authority: db
+
+db_table: character_relations
+id_field: id
+composite_id_fields: [from_character_id, to_character_id, relation_type]
+order_by: "from_character_id, to_character_id"
+
+file_dir: "设定/人物"
+file_pattern: "关系总览.md"
+merge_mode: section_replace
+section_marker: "## {from_name} → {to_name} ({relation_type})"
+
+sections:
+  - heading: "{from_name} → {to_name} ({relation_type})"
+    type: fields
+    fields:
+      - column: from_character_id
+        md_key: from
+        transform: resolve_character_name
+      - column: to_character_id
+        md_key: to
+        transform: resolve_character_name
+      - column: relation_type
+      - column: description
+      - column: intensity
+        type: int
+        optional: true
+      - column: chapter_established
+        md_key: 建立章节
+        type: int
+        optional: true
+      - column: status
+        optional: true
+      - column: subtext_design
+        md_key: 弦外之音
+        optional: true

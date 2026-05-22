@@ -1,53 +1,32 @@
-# ============================================================
-# 世界观同步模板 — DB↔File 桥梁定义
-# ============================================================
-# 权威源：DB world_settings 表
-# 映射：多行 world_settings → 1个分类文件（section_replace）
-# 基数：Many行 → 1文件（按category聚合）
-# ============================================================
-
 name: world
 display_name: 世界观
 authority: db
 
-# --- DB 映射 ---
 db_table: world_settings
 id_field: name
 composite_id_fields: [category, name]
 order_by: "category, name"
 
-# --- 文件映射 ---
-# category → 文件名 映射表
 file_dir: "设定/世界观"
-# file_pattern 行为：
-#   - category_file_map 值以 "/" 结尾 → 子目录，sync 为该 category 下每条记录生成独立文件
-#   - category_file_map 值不以 "/" 结尾 → 单文件，所有记录按 section 聚合到一个文件
 file_pattern: "{category_file}.md"
 merge_mode: section_replace
 section_marker: "## {category}: {name}"
-file_to_db_enabled: false
 
-# --- 分类文件名映射 ---
-# 以 "/" 结尾 = 子目录模式（每条记录一个文件）；无 "/" = 单文件模式（聚合到一个文件）
 category_file_map:
-  core_setting: "核心设定/"    # 已拆分为子目录，24个文件
-  bestiary: "异灵/"            # 已拆分为子目录，4个文件
-  ability: "能力/"             # 已拆分为子目录，含角色能力+体系文件
-  item: "物品/"                # 已拆分为子目录，4个文件
-  location: "地点/"            # 已拆分为子目录，17个文件
-  faction: "势力/"             # 已拆分为子目录，3个文件
-  economy: 经济体系            # 扁平文件，未拆分
-  daily_life: 日常生活         # 扁平文件，未拆分
-  history: 历史事件            # 扁平文件，未拆分
-  race: 种族                   # 扁平文件，未拆分
-  building: 建筑               # 原 building.md 重命名
-  culture: 文化                 # 原 culture.md 重命名
-  plant: 植物                   # 原 plant.md 重命名
+  core_setting: "核心设定/"
+  bestiary: "异灵/"
+  ability: "能力/"
+  item: "物品/"
+  location: "地点/"
+  faction: "势力/"
+  economy: "经济体系/"
+  daily_life: "日常生活/"
+  history: "历史事件/"
+  race: "种族/"
+  building: "建筑/"
+  culture: "文化/"
+  plant: "植物/"
 
-# --- 段落定义 ---
-# 世界观使用动态 heading（包含 category 和 name）
-# 注意：keys/tags/secondary_keys 等字段在 DB 中同时存在于 data JSONB 和平铺列。
-# 渲染时只从平铺列输出（避免重复），data 中的 content 等独有字段通过 jsonb section 输出。
 sections:
   - heading: "{category}: {name}"
     type: fields
@@ -79,16 +58,11 @@ sections:
         md_key: 首次出场
         type: int
         optional: true
-  # data JSONB 中的 content 字段（独有数据，不在平铺列中）
   - heading: 详细内容
     type: jsonb
     jsonb_column: data
     jsonb_key: content
     condition: always
 
-# --- File→DB 反向同步 ---
 file_to_db:
   enabled: true
-  tool: sync_lorebook
-  note: "通过引擎聚合解析世界观文件，按category:name提取字段映射到DB列。"
-  strategy: aggregate_parse

@@ -70,33 +70,24 @@ skill操作 → MCP工具 → DB（直接写入）→ sync_db_to_files() → 文
 | 伏笔 | `templates/foreshadow.md` | `foreshadows` |
 | 卷级大纲 | `templates/volume.md` | `volumes` |
 
-### Chapter Writing: Multi-Agent Pipeline
+### Chapter Writing: Direct Pipeline (v2)
 
-章节写作采用 **4 子 Agent 流水线**：
+章节写作采用 **编排器直调 MCP + 模型**（v2 去掉了 4 子 Agent）：
 
 ```
-编排器 (novel-chapter-writer)
-  │  Step 1: 调 MCP 收集原始数据
+编排器 (novel-chapter-writer v2)
+  │  Step 1: get_chapter_context (MCP) → 精简上下文包（~36KB）
   ↓
-Agent 1: Context Curator     → 清洗、压缩、结构化 → 上下文包
+Step 2: 创意决策 → 创意蓝图（含新实体创建）+ 存档
+  ↓  🔒 检查点 A
+Step 3: resolve_engines (MCP) → 引擎指令
   ↓
-Agent 2: Creative Director   → 场面设计、因果链、角色弧线、创建新实体 → 创意蓝图
-  ↓
-Agent 3: Engine Coordinator  → 加载引擎、定制指令 → 引擎指令包
-  ↓
-Agent 4: Text Generator      → 逐场面写正文、自检 → 章节正文
-  ↓
-编排器: validate_chapter → writing_finish → 存盘
+Step 4: 逐场面生成正文 + 自检
+  ↓  🔒 检查点 B
+Step 5: validate_chapter → writing_finish → 存盘
 ```
 
-| Agent | 指令文件 | 职责 |
-|-------|---------|------|
-| Context Curator | `novel-chapter-writer/agents/context-curator.md` | 清洗压缩原始数据，产出上下文包 |
-| Creative Director | `novel-chapter-writer/agents/creative-director.md` | 场面设计+因果链+创建新实体，存档创意蓝图 |
-| Engine Coordinator | `novel-chapter-writer/agents/engine-coordinator.md` | 加载引擎文件，为每个场面定制指令 |
-| Text Generator | `novel-chapter-writer/agents/text-generator.md` | 逐场面生成正文+反AI自检+硬约束自检 |
-
-Agent 2 直接调 MCP 创建新人物/地点/物品/势力/伏笔，无需编排器中转。编排器负责数据采集、校验和存盘。
+v2 变更：4 子 Agent → 0；27+ 文件加载 → MCP 聚合查询；上下文 ~80KB → ~36KB；零信息损耗。
 
 ### Skill System
 
@@ -109,7 +100,7 @@ Agent 2 直接调 MCP 创建新人物/地点/物品/势力/伏笔，无需编排
 | **novel-character** | 设计人物/加人物/人物卡 | 角色蒸馏7步、外观模板、关系差异化 | 🔒 蒸馏7步+外观+对话完整 |
 | **novel-planner** | 规划卷/大纲 | 全书总纲、逐卷环境先行设计 | 🔒 每卷确认后才能进入场景 |
 | **novel-planner-volume** | 卷大纲/章节规划/事件设计 | 卷级章节设计（场景+事件+支线） | 🔒 场景清单确认后才能进入正文 |
-| **novel-chapter-writer** | 写第N章/继续写/写一章 | Multi-Agent Pipeline 编排器 | 🔒 writing_finish 不可跳过 |
+| **novel-chapter-writer** | 写第N章/继续写/写一章 | 编排器直调 MCP+模型（v2，无子Agent） | 🔒 writing_finish 不可跳过 |
 | **novel-qa** | 审阅/检查/诊断/OOC | 三视角审查+AI指纹检测 | 🔒 P0/P1问题必须修复 |
 | **novel-reviser** | 修复/去重/修文/润色 | 文本修订、润色 | - |
 

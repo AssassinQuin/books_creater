@@ -11,10 +11,10 @@ def novel_create(name: str, genre: str = "", target_platform: str = "",
     try:
         r = query(
             "INSERT INTO novels (name, genre, target_platform, notes, status) "
-            "VALUES (%s, %s, %s, %s, 'brainstorming') RETURNING id",
-            (name, genre, target_platform, notes), fetch="one"
+            "VALUES (?, ?, ?, ?, 'brainstorming')",
+            (name, genre, target_platform, notes), fetch="insert"
         )
-        return json.dumps({"ok": True, "id": r["id"], "name": name}, ensure_ascii=False)
+        return json.dumps({"ok": True, "id": r, "name": name}, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
 
@@ -33,7 +33,7 @@ def novel_get(novel_name: str) -> str:
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    r = query("SELECT * FROM novels WHERE id = %s", (novel_id,), fetch="one")
+    r = query("SELECT * FROM novels WHERE id = ?", (novel_id,), fetch="one")
     return json.dumps(dict(r) if r else {"error": "not found"}, ensure_ascii=False, default=str)
 
 
@@ -54,7 +54,7 @@ def novel_update(novel_name: str, genre: str = "", target_platform: str = "",
     if notes: fields["notes"] = notes
     if not fields:
         return json.dumps({"ok": False, "error": "no valid fields"}, ensure_ascii=False)
-    sets = [f"{k} = %s" for k in fields]
+    sets = [f"{k} = ?" for k in fields]
     vals = list(fields.values()) + [novel_id]
-    query(f"UPDATE novels SET {', '.join(sets)}, updated_at = NOW() WHERE id = %s", tuple(vals), fetch="none")
+    query(f"UPDATE novels SET {', '.join(sets)}, updated_at = datetime('now') WHERE id = ?", tuple(vals), fetch="none")
     return json.dumps({"ok": True}, ensure_ascii=False)

@@ -61,7 +61,7 @@ def _resolve_faction_name(val, row):
     """Transform: faction_id → faction display name."""
     if not val:
         return None
-    frow = query("SELECT name FROM world_settings WHERE id = %s", (val,), fetch="val")
+    frow = query("SELECT name FROM world_settings WHERE id = ?", (val,), fetch="val")
     return frow or str(val)
 
 
@@ -69,7 +69,7 @@ def _resolve_chapter_number(val, row):
     """Transform: chapter_id → Ch{number} display."""
     if not val:
         return None
-    ch = query("SELECT number FROM chapters WHERE id = %s", (val,), fetch="val")
+    ch = query("SELECT number FROM chapters WHERE id = ?", (val,), fetch="val")
     return f"Ch{ch}" if ch else str(val)
 
 
@@ -481,13 +481,13 @@ class SyncEngine:
     def _query_entities(self, tpl: SyncTemplate, novel_id: int,
                         entity_key: str | None = None) -> list[dict]:
         """根据模板查询DB实体。"""
-        sql = f"SELECT * FROM {tpl.db_table} WHERE novel_id = %s"
+        sql = f"SELECT * FROM {tpl.db_table} WHERE novel_id = ?"
         params: list[Any] = [novel_id]
 
         if tpl.query_extra:
             sql += f" {tpl.query_extra}"
         if entity_key is not None:
-            sql += f" AND {tpl.id_field} = %s"
+            sql += f" AND {tpl.id_field} = ?"
             params.append(entity_key)
         if tpl.order_by:
             sql += f" ORDER BY {tpl.order_by}"
@@ -495,14 +495,16 @@ class SyncEngine:
         return query(sql, tuple(params), fetch="all") or []
 
     def _resolve_filepath(self, tpl: SyncTemplate, novel_name: str, row: dict) -> str:
-        """根据模板和DB行解析文件路径。支持 category_file_map（世界观专用）。"""
         fname = tpl.file_pattern
 
-        # category_file_map 支持：{category_file} → 中文文件名
         if "{category_file}" in fname and "category" in row:
             cat = row["category"]
             if tpl.category_file_map and cat in tpl.category_file_map:
-                fname = fname.replace("{category_file}", tpl.category_file_map[cat])
+                mapped = tpl.category_file_map[cat]
+                if mapped.endswith("/"):
+                    fname = fname.replace("{category_file}", f"{mapped}{row.get('name', cat)}")
+                else:
+                    fname = fname.replace("{category_file}", mapped)
             elif tpl.transforms and "resolve_category_file" in tpl.transforms:
                 fname = fname.replace("{category_file}", tpl.transforms["resolve_category_file"](cat, row))
             else:
@@ -515,7 +517,8 @@ class SyncEngine:
                     fname = fname.replace(f"{{{col}}}", str(val))
 
         base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
-        os.makedirs(base, exist_ok=True)
+        full_dir = os.path.join(base, os.path.dirname(fname))
+        os.makedirs(full_dir, exist_ok=True)
         return os.path.join(base, fname)
 
     def _sync_one_to_file(self, tpl: SyncTemplate, novel_id: int,
@@ -909,25 +912,36 @@ class SyncEngine:
         target_files = []
         pattern = tpl.file_pattern
 
-        # 模式1：固定文件名（如 "伏笔清单.md"）
         if "{" not in pattern:
             fpath = os.path.join(base, pattern)
             if os.path.isfile(fpath):
-                target_files.append(fpath)
+                target_files.append((fpath, None))
         else:
-            # 模式2：含变量的文件名（如 "{category_file}.md"）
-            # 扫描目录下所有 .md 文件
-            for fname in sorted(os.listdir(base)):
-                if not fname.endswith(".md"):
-                    continue
-                target_files.append(os.path.join(base, fname))
+            if tpl.category_file_map:
+                for cat, cat_path in tpl.category_file_map.items():
+                    if cat_path.endswith("/"):
+                        subdir = os.path.join(base, cat_path)
+                        if os.path.isdir(subdir):
+                            for fname in sorted(os.listdir(subdir)):
+                                if not fname.endswith(".md"):
+                                    continue
+                                target_files.append((os.path.join(subdir, fname), cat))
+                    else:
+                        fpath = os.path.join(base, f"{cat_path}.md")
+                        if os.path.isfile(fpath):
+                            target_files.append((fpath, cat))
+            else:
+                for fname in sorted(os.listdir(base)):
+                    if not fname.endswith(".md"):
+                        continue
+                    target_files.append((os.path.join(base, fname), None))
 
         if not target_files:
             return {"error": f"找不到匹配文件: {tpl.file_pattern} (目录: {base})"}
 
         result = {"synced": 0, "errors": [], "details": []}
 
-        for target_file in target_files:
+        for target_file, file_category in target_files:
             try:
                 with open(target_file, "r", encoding="utf-8") as f:
                     content = f.read()
@@ -941,9 +955,7 @@ class SyncEngine:
 
                     row = {"novel_id": novel_id}
 
-                    # ── 确定实体标识 ──
                     if tpl.name in ("foreshadow", "echo"):
-                        # "foreshadow: 123" → id=123
                         m = re.match(rf"{tpl.name}:\s*(\d+)", heading)
                         if m:
                             row[tpl.id_field] = int(m.group(1))
@@ -951,11 +963,13 @@ class SyncEngine:
                             continue
 
                     elif tpl.name == "world":
-                        # "core_setting: 某个设定" → category=core_setting, name=某个设定
                         m = re.match(r'^(\w+):\s*(.+)$', heading)
                         if m:
                             row["category"] = m.group(1)
                             row["name"] = m.group(2).strip()
+                        elif file_category:
+                            row["category"] = file_category
+                            row["name"] = heading.strip()
                         else:
                             continue
 
@@ -1048,7 +1062,7 @@ class SyncEngine:
             pk_vals = [id_val]
 
         # 构建 WHERE 条件
-        where_parts = ["novel_id = %s"] + [f"{f} = %s" for f in pk_fields]
+        where_parts = ["novel_id = ?"] + [f"{f} = ?" for f in pk_fields]
         where_clause = " AND ".join(where_parts)
         where_params = [row["novel_id"]] + pk_vals
 
@@ -1070,16 +1084,16 @@ class SyncEngine:
 
         if existing:
             # UPDATE
-            set_clause = ", ".join(f"{c} = %s" for c in set_cols)
-            sql = f"UPDATE {tpl.db_table} SET {set_clause}, updated_at = NOW() WHERE id = %s"
+            set_clause = ", ".join(f"{c} = ?" for c in set_cols)
+            sql = f"UPDATE {tpl.db_table} SET {set_clause}, updated_at = datetime('now') WHERE id = ?"
             params = set_vals + [existing["id"]]
         else:
             # INSERT
             insert_cols = ["novel_id"] + pk_fields + set_cols
             insert_vals = [row["novel_id"]] + pk_vals + set_vals
             cols_str = ", ".join(insert_cols)
-            placeholders = ", ".join(["%s"] * len(insert_vals))
-            sql = f"INSERT INTO {tpl.db_table} ({cols_str}, created_at, updated_at) VALUES ({placeholders}, NOW(), NOW())"
+            placeholders = ", ".join(["?"] * len(insert_vals))
+            sql = f"INSERT INTO {tpl.db_table} ({cols_str}, created_at, updated_at) VALUES ({placeholders}, datetime('now'), datetime('now'))"
             params = insert_vals
 
         query(sql, tuple(params), fetch="none")

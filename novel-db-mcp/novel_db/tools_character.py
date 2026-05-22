@@ -58,10 +58,10 @@ def character_create(novel_name: str, name: str, role: str = "npc",
         all_cols = base_cols
         all_vals = base_vals
 
-    placeholders = ",".join(["%s"] * len(all_vals))
+    placeholders = ",".join(["?"] * len(all_vals))
     r = query(
-        f"INSERT INTO characters ({all_cols}) VALUES ({placeholders}) RETURNING id",
-        all_vals, fetch="one"
+        f"INSERT INTO characters ({all_cols}) VALUES ({placeholders})",
+        all_vals, fetch="insert"
     )
     _record_db_hash(novel_id, "character", name, json.dumps({"name": name, "role": role, "race": race, "appearance": appearance}, ensure_ascii=False))
     return json.dumps({"ok": True, "id": r["id"], "name": name}, ensure_ascii=False)
@@ -105,10 +105,10 @@ def _character_update_by_id(character_id: int, name: str = "", role: str = "", f
     if not distillation_tracked: fields["distillation_tracked"] = False
     if not fields:
         return json.dumps({"ok": False, "error": "no valid fields"}, ensure_ascii=False)
-    sets = [f"{k} = %s" for k in fields]
+    sets = [f"{k} = ?" for k in fields]
     vals = list(fields.values()) + [character_id]
-    query(f"UPDATE characters SET {', '.join(sets)}, updated_at = NOW() WHERE id = %s", tuple(vals), fetch="none")
-    char = query("SELECT novel_id, name FROM characters WHERE id = %s", (character_id,), fetch="one")
+    query(f"UPDATE characters SET {', '.join(sets)}, updated_at = datetime('now') WHERE id = ?", tuple(vals), fetch="none")
+    char = query("SELECT novel_id, name FROM characters WHERE id = ?", (character_id,), fetch="one")
     if char:
         _record_db_hash(char["novel_id"], "character", char["name"], json.dumps(fields, ensure_ascii=False))
     return json.dumps({"ok": True}, ensure_ascii=False)
@@ -121,21 +121,21 @@ def character_list(novel_name: str, role: str = "") -> str:
     """
     novel_id = _resolve_novel_id(novel_name)
     if role:
-        rows = query("SELECT * FROM characters WHERE novel_id = %s AND role = %s AND is_active = TRUE ORDER BY role, name",
+        rows = query("SELECT * FROM characters WHERE novel_id = ? AND role = ? AND is_active = 1 ORDER BY role, name",
                      (novel_id, role))
     else:
-        rows = query("SELECT * FROM characters WHERE novel_id = %s AND is_active = TRUE ORDER BY role, name",
+        rows = query("SELECT * FROM characters WHERE novel_id = ? AND is_active = 1 ORDER BY role, name",
                      (novel_id,))
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
 
 
 def _character_get_by_id(character_id: int) -> str:
-    r = query("SELECT * FROM characters WHERE id = %s", (character_id,), fetch="one")
+    r = query("SELECT * FROM characters WHERE id = ?", (character_id,), fetch="one")
     return json.dumps(dict(r) if r else {"error": "not found"}, ensure_ascii=False, default=str)
 
 
 def _character_detail_by_id(character_id: int, chapter_number: int = None) -> str:
-    char = query("SELECT * FROM characters WHERE id = %s", (character_id,), fetch="one")
+    char = query("SELECT * FROM characters WHERE id = ?", (character_id,), fetch="one")
     if not char:
         return json.dumps({"error": "character not found"}, ensure_ascii=False)
 
@@ -147,7 +147,7 @@ def _character_detail_by_id(character_id: int, chapter_number: int = None) -> st
         "FROM character_relations cr "
         "JOIN characters c1 ON cr.from_character_id = c1.id "
         "JOIN characters c2 ON cr.to_character_id = c2.id "
-        "WHERE cr.novel_id = %s AND (c1.id = %s OR c2.id = %s)",
+        "WHERE cr.novel_id = ? AND (c1.id = ? OR c2.id = ?)",
         (char["novel_id"], character_id, character_id)
     )
     result["relations"] = [dict(r) for r in rels]
@@ -156,7 +156,7 @@ def _character_detail_by_id(character_id: int, chapter_number: int = None) -> st
         snap = query(
             "SELECT css.* FROM character_state_snapshots css "
             "JOIN chapters c ON css.chapter_id = c.id "
-            "WHERE css.character_id = %s AND c.number <= %s "
+            "WHERE css.character_id = ? AND c.number <= ? "
             "ORDER BY c.number DESC LIMIT 1",
             (character_id, chapter_number), fetch="one"
         )
@@ -166,7 +166,7 @@ def _character_detail_by_id(character_id: int, chapter_number: int = None) -> st
         snap = query(
             "SELECT css.*, c.number as chapter_number FROM character_state_snapshots css "
             "JOIN chapters c ON css.chapter_id = c.id "
-            "WHERE css.character_id = %s ORDER BY c.number DESC LIMIT 1",
+            "WHERE css.character_id = ? ORDER BY c.number DESC LIMIT 1",
             (character_id,), fetch="one"
         )
         if snap:
@@ -183,9 +183,9 @@ def _relation_create_by_id(novel_name: str, from_character_id: int, to_character
     r = query(
         "INSERT INTO character_relations (novel_id, from_character_id, to_character_id, "
         "relation_type, description, chapter_established, intensity) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+        "VALUES (?,?,?,?,?,?,?)",
         (novel_id, from_character_id, to_character_id, relation_type,
-         description, chapter_established, intensity), fetch="one"
+         description, chapter_established, intensity), fetch="insert"
     )
     return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
 
@@ -202,7 +202,7 @@ def relation_list(novel_name: str) -> str:
         "FROM character_relations cr "
         "JOIN characters c1 ON cr.from_character_id = c1.id "
         "JOIN characters c2 ON cr.to_character_id = c2.id "
-        "WHERE cr.novel_id = %s ORDER BY cr.relation_type",
+        "WHERE cr.novel_id = ? ORDER BY cr.relation_type",
         (novel_id,)
     )
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
@@ -215,7 +215,7 @@ def character_get(novel_name: str, character_name: str) -> str:
       character_name: 角色名
     """
     novel_id = _resolve_novel_id(novel_name)
-    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
     if not char:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
     return _character_get_by_id(char["id"])
@@ -229,7 +229,7 @@ def character_detail(novel_name: str, character_name: str, chapter_number: int =
       chapter_number: 章节序号（可选，用于获取该章状态快照）
     """
     novel_id = _resolve_novel_id(novel_name)
-    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
     if not char:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
     return _character_detail_by_id(char["id"], chapter_number)
@@ -253,7 +253,7 @@ def character_update(novel_name: str, character_name: str, name: str = "", role:
       character_name: 角色名
     """
     novel_id = _resolve_novel_id(novel_name)
-    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
     if not char:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
     return _character_update_by_id(char["id"], name, role, faction_id, race, ability_level, status,
@@ -278,10 +278,10 @@ def relation_create(novel_name: str, from_name: str, to_name: str,
       intensity: 关系强度(1-10)
     """
     novel_id = _resolve_novel_id(novel_name)
-    from_char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, from_name), fetch="one")
+    from_char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, from_name), fetch="one")
     if not from_char:
         return json.dumps({"error": f"角色 '{from_name}' 不存在"}, ensure_ascii=False)
-    to_char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, to_name), fetch="one")
+    to_char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, to_name), fetch="one")
     if not to_char:
         return json.dumps({"error": f"角色 '{to_name}' 不存在"}, ensure_ascii=False)
     return _relation_create_by_id(novel_name, from_char["id"], to_char["id"], relation_type, description, chapter_established, intensity)
@@ -308,7 +308,7 @@ def relation_update(novel_name: str, from_name: str, to_name: str,
         "SELECT cr.id, cr.intensity as cur_intensity FROM character_relations cr "
         "JOIN characters c1 ON cr.from_character_id=c1.id "
         "JOIN characters c2 ON cr.to_character_id=c2.id "
-        "WHERE cr.novel_id=%s AND c1.name=%s AND c2.name=%s",
+        "WHERE cr.novel_id=? AND c1.name=? AND c2.name=?",
         (novel_id, from_name, to_name), fetch="one"
     )
     if not rel:
@@ -316,24 +316,21 @@ def relation_update(novel_name: str, from_name: str, to_name: str,
     sets = []
     vals = []
     if relation_type:
-        sets.append("relation_type = %s")
+        sets.append("relation_type = ?")
         vals.append(relation_type)
     if description:
-        sets.append("description = %s")
+        sets.append("description = ?")
         vals.append(description)
     if intensity > 0:
-        old_i = rel["cur_intensity"]
-        sets.append("intensity = %s")
+        sets.append("intensity = ?")
         vals.append(intensity)
-        sets.append("intensity_change_log = COALESCE(intensity_change_log, '[]'::jsonb) || %s::jsonb")
-        vals.append(json.dumps([{"from": old_i, "to": intensity}]))
     if status:
-        sets.append("status = %s")
+        sets.append("status = ?")
         vals.append(status)
     if not sets:
         return json.dumps({"ok": False, "error": "Nothing to update"}, ensure_ascii=False)
     vals.append(rel["id"])
-    query(f"UPDATE character_relations SET {', '.join(sets)} WHERE id = %s", tuple(vals), fetch="none")
+    query(f"UPDATE character_relations SET {', '.join(sets)} WHERE id = ?", tuple(vals), fetch="none")
     return json.dumps({"ok": True, "from": from_name, "to": to_name}, ensure_ascii=False)
 
 
@@ -360,10 +357,10 @@ def character_snapshot(novel_name: str, character_name: str, chapter_number: int
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
     if not char:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
-    ch = query("SELECT id FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_number), fetch="one")
+    ch = query("SELECT id FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_number), fetch="one")
     if not ch:
         return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
     return _character_snapshot_by_id(char["id"], ch["id"], location, arc_phase, emotional_state,
@@ -380,13 +377,13 @@ def character_get_latest(novel_name: str, character_name: str) -> str:
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
     if not char:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
     r = query(
         "SELECT css.*, c.number as chapter_number FROM character_state_snapshots css "
         "JOIN chapters c ON css.chapter_id = c.id "
-        "WHERE css.character_id = %s ORDER BY c.number DESC LIMIT 1",
+        "WHERE css.character_id = ? ORDER BY c.number DESC LIMIT 1",
         (char["id"],), fetch="one"
     )
     if not r:
@@ -416,12 +413,12 @@ def relation_snapshot(novel_name: str, from_name: str, to_name: str, chapter_num
         "SELECT cr.id FROM character_relations cr "
         "JOIN characters c1 ON cr.from_character_id=c1.id "
         "JOIN characters c2 ON cr.to_character_id=c2.id "
-        "WHERE cr.novel_id=%s AND c1.name=%s AND c2.name=%s",
+        "WHERE cr.novel_id=? AND c1.name=? AND c2.name=?",
         (novel_id, from_name, to_name), fetch="one"
     )
     if not rel:
         return json.dumps({"error": f"关系 '{from_name}'→'{to_name}' 不存在"}, ensure_ascii=False)
-    ch = query("SELECT id FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_number), fetch="one")
+    ch = query("SELECT id FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_number), fetch="one")
     if not ch:
         return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
     return _relation_snapshot_by_id(rel["id"], ch["id"], intensity, status, notes)
@@ -429,6 +426,7 @@ def relation_snapshot(novel_name: str, from_name: str, to_name: str, chapter_num
 
 @mcp.tool
 def character_increment(novel_name: str, character_name: str,
+                        chapter_number: int = 0,
                         location: str = "", arc_phase: str = "",
                         emotional_state: str = "", physical_state: str = "",
                         ability_add: str = "", inventory_add: str = "",
@@ -436,62 +434,109 @@ def character_increment(novel_name: str, character_name: str,
                         snapshot_update: str = "",
                         growth_add: str = "") -> str:
     """角色增量更新（只追加，不覆盖档案）。适用于正文写作中角色状态变化。
+    叙事状态（location/emotion等）写入 character_state_snapshots，蒸馏字段写入 characters 表。
 
     参数:
       novel_name: 小说名称
       character_name: 角色名
-      location: 新位置（空=不变）
-      arc_phase: 新弧线阶段（空=不变）
-      emotional_state: 新情绪（空=不变）
-      physical_state: 新身体状态（空=不变）
-      ability_add: 新增能力(JSON字符串, 追加到ability_progression)
-      inventory_add: 新增物品(JSON字符串, 追加到inventory)
-      knowledge_add: 新增知识(JSON字符串, 合并到knowledge_state)
-      snapshot_update: 当前快照更新(JSON字符串, 合并到current_snapshot)
-      growth_add: 成长轨迹追加(JSON字符串, 追加到growth_trajectory数组)
+      chapter_number: 章节序号（叙事状态增量时必填，用于写入快照表）
+      location: 新位置（空=沿用最新快照）
+      arc_phase: 新弧线阶段（空=沿用最新快照）
+      emotional_state: 新情绪（空=沿用最新快照）
+      physical_state: 新身体状态（空=沿用最新快照）
+      ability_add: 新增能力(JSON字符串, 追加到快照的ability_snapshot)
+      inventory_add: 新增物品(JSON字符串, 追加到快照的inventory_snapshot)
+      knowledge_add: 新增知识(JSON字符串, 合并到快照的knowledge_snapshot)
+      snapshot_update: 蒸馏快照更新(JSON字符串, 合并到characters.current_snapshot)
+      growth_add: 成长轨迹追加(JSON字符串, 追加到characters.growth_trajectory数组)
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id, current_location, current_arc_phase, emotional_state, physical_state, "
-                 "ability_progression, inventory, knowledge_state, current_snapshot, growth_trajectory "
-                 "FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    char = query("SELECT id, current_snapshot, growth_trajectory "
+                 "FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
     if not char:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+
+    updates = []
+
+    # 叙事状态 → 写入快照表
+    has_narrative_change = location or arc_phase or emotional_state or physical_state or ability_add or inventory_add or knowledge_add
+    if has_narrative_change:
+        if not chapter_number:
+            return json.dumps({"error": "叙事状态增量需要 chapter_number 参数"}, ensure_ascii=False)
+        ch = query("SELECT id FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_number), fetch="one")
+        if not ch:
+            return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
+
+        # 取最新快照作为 base
+        base = query(
+            "SELECT css.* FROM character_state_snapshots css "
+            "JOIN chapters c ON css.chapter_id = c.id "
+            "WHERE css.character_id = ? ORDER BY c.number DESC LIMIT 1",
+            (char["id"],), fetch="one"
+        )
+
+        def _parse_json(text, default):
+            if not text:
+                return default
+            try:
+                return json.loads(text)
+            except (json.JSONDecodeError, TypeError):
+                return default
+
+        # 合并增量：标量直接覆盖，数组追加，对象合并
+        base_loc = base["location"] if base else ""
+        base_arc = base["arc_phase"] if base else ""
+        base_emo = base["emotional_state"] if base else ""
+        base_phy = base["physical_state"] if base else ""
+        base_abilities = _parse_json(base["ability_snapshot"] if base else "[]", [])
+        base_inventory = _parse_json(base["inventory_snapshot"] if base else "[]", [])
+        base_knowledge = _parse_json(base["knowledge_snapshot"] if base else "{}", {})
+
+        new_loc = location or base_loc
+        new_arc = arc_phase or base_arc
+        new_emo = emotional_state or base_emo
+        new_phy = physical_state or base_phy
+        if ability_add:
+            base_abilities.extend(_parse_json(ability_add, []))
+        if inventory_add:
+            base_inventory.extend(_parse_json(inventory_add, []))
+        if knowledge_add:
+            base_knowledge.update(_parse_json(knowledge_add, {}))
+
+        _character_snapshot_by_id(
+            char["id"], ch["id"],
+            new_loc, new_arc, new_emo, new_phy,
+            json.dumps(base_abilities, ensure_ascii=False),
+            json.dumps(base_inventory, ensure_ascii=False),
+            json.dumps(base_knowledge, ensure_ascii=False),
+            ""
+        )
+        updates.append("narrative_snapshot")
+
+    # 蒸馏字段 → 更新 characters 表
     sets = []
     vals = []
-    if location:
-        sets.append("current_location = %s")
-        vals.append(location)
-    if arc_phase:
-        sets.append("current_arc_phase = %s")
-        vals.append(arc_phase)
-    if emotional_state:
-        sets.append("emotional_state = %s")
-        vals.append(emotional_state)
-    if physical_state:
-        sets.append("physical_state = %s")
-        vals.append(physical_state)
-    if ability_add:
-        sets.append("ability_progression = COALESCE(ability_progression, '[]'::jsonb) || %s::jsonb")
-        vals.append(ability_add)
-    if inventory_add:
-        sets.append("inventory = COALESCE(inventory, '[]'::jsonb) || %s::jsonb")
-        vals.append(inventory_add)
-    if knowledge_add:
-        sets.append("knowledge_state = COALESCE(knowledge_state, '{}'::jsonb) || %s::jsonb")
-        vals.append(knowledge_add)
     if snapshot_update:
-        sets.append("current_snapshot = COALESCE(current_snapshot, '{}'::jsonb) || %s::jsonb")
-        vals.append(snapshot_update)
+        cur_snap = _parse_json(char.get("current_snapshot") or "{}", {})
+        cur_snap.update(_parse_json(snapshot_update, {}))
+        sets.append("current_snapshot = ?")
+        vals.append(json.dumps(cur_snap, ensure_ascii=False))
+        updates.append("current_snapshot")
     if growth_add:
-        sets.append("growth_trajectory = COALESCE(growth_trajectory, '[]'::jsonb) || %s::jsonb")
-        vals.append(growth_add)
-    if not sets:
+        cur_growth = _parse_json(char.get("growth_trajectory") or "[]", [])
+        cur_growth.extend(_parse_json(growth_add, []))
+        sets.append("growth_trajectory = ?")
+        vals.append(json.dumps(cur_growth, ensure_ascii=False))
+        updates.append("growth_trajectory")
+    if sets:
+        sets.append("updated_at = datetime('now')")
+        vals.append(char["id"])
+        query(f"UPDATE characters SET {', '.join(sets)} WHERE id = ?", tuple(vals), fetch="none")
+
+    if not updates:
         return json.dumps({"ok": False, "error": "Nothing to update"}, ensure_ascii=False)
-    sets.append("updated_at = NOW()")
-    vals.append(char["id"])
-    query(f"UPDATE characters SET {', '.join(sets)} WHERE id = %s", tuple(vals), fetch="none")
-    return json.dumps({"ok": True, "character_name": character_name, "updated_fields": [s.split("=")[0].strip() for s in sets[:-1]]}, ensure_ascii=False)
+    return json.dumps({"ok": True, "character_name": character_name, "updated": updates}, ensure_ascii=False)
 
 
 @mcp.tool
@@ -520,16 +565,15 @@ def plot_thread_create(novel_name: str, name: str,
         "INSERT INTO plot_threads "
         "(novel_id, name, thread_type, description, start_chapter_id, "
         "volume_scope, related_characters, related_foreshadows) "
-        "VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT (novel_id, name) DO UPDATE SET "
-        "thread_type=%s, description=%s, start_chapter_id=%s, "
-        "volume_scope=%s::jsonb, related_characters=%s::jsonb, related_foreshadows=%s::jsonb, updated_at=NOW() "
-        "RETURNING id",
+        "thread_type=?, description=?, start_chapter_id=?, "
+        "volume_scope=?, related_characters=?, related_foreshadows=?, updated_at=datetime('now')",
         (novel_id, name, thread_type, description, start_chapter_id or None,
          volume_scope, related_characters, related_foreshadows,
          thread_type, description, start_chapter_id or None,
          volume_scope, related_characters, related_foreshadows),
-        fetch="one"
+        fetch="insert"
     )
     return json.dumps({"ok": True, "id": r["id"], "name": name}, ensure_ascii=False)
 
@@ -542,11 +586,11 @@ def plot_thread_list(novel_name: str, thread_type: str = "") -> str:
     novel_id = _resolve_novel_id(novel_name)
     if thread_type:
         rows = query(
-            "SELECT * FROM plot_threads WHERE novel_id = %s AND thread_type = %s ORDER BY id",
+            "SELECT * FROM plot_threads WHERE novel_id = ? AND thread_type = ? ORDER BY id",
             (novel_id, thread_type)
         )
     else:
-        rows = query("SELECT * FROM plot_threads WHERE novel_id = %s ORDER BY id", (novel_id,))
+        rows = query("SELECT * FROM plot_threads WHERE novel_id = ? ORDER BY id", (novel_id,))
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
 
 
@@ -564,27 +608,31 @@ def plot_thread_update(novel_name: str, thread_id: int, status: str = "",
       progress_notes: 进展备注(JSON数组，追加)
     """
     novel_id = _resolve_novel_id(novel_name)
-    t = query("SELECT id FROM plot_threads WHERE id = %s AND novel_id = %s",
+    t = query("SELECT id FROM plot_threads WHERE id = ? AND novel_id = ?",
               (thread_id, novel_id), fetch="one")
     if not t:
         return json.dumps({"ok": False, "error": f"thread {thread_id} not found in novel '{novel_name}'"}, ensure_ascii=False)
     sets = []
     vals = []
     if status:
-        sets.append("status = %s")
+        sets.append("status = ?")
         vals.append(status)
     if end_chapter_number:
         end_chapter_id = _resolve_chapter_id(novel_name, end_chapter_number)
-        sets.append("end_chapter_id = %s")
+        sets.append("end_chapter_id = ?")
         vals.append(end_chapter_id)
     if progress_notes and progress_notes != "[]":
-        sets.append("progress_notes = progress_notes || %s::jsonb")
-        vals.append(progress_notes)
+        new_notes = json.loads(progress_notes) if isinstance(progress_notes, str) else progress_notes
+        current = query("SELECT progress_notes FROM plot_threads WHERE id = ?", (thread_id,), fetch="val")
+        existing = json.loads(current) if current and current != "[]" else []
+        merged = json.dumps(existing + new_notes, ensure_ascii=False)
+        sets.append("progress_notes = ?")
+        vals.append(merged)
     if not sets:
         return json.dumps({"ok": False, "error": "Nothing to update"}, ensure_ascii=False)
-    sets.append("updated_at = NOW()")
+    sets.append("updated_at = datetime('now')")
     vals.append(thread_id)
-    query(f"UPDATE plot_threads SET {', '.join(sets)} WHERE id = %s", tuple(vals), fetch="none")
+    query(f"UPDATE plot_threads SET {', '.join(sets)} WHERE id = ?", tuple(vals), fetch="none")
     return json.dumps({"ok": True, "thread_id": thread_id}, ensure_ascii=False)
 
 
@@ -597,10 +645,10 @@ def _character_snapshot_by_id(character_id: int, chapter_id: int,
         "INSERT INTO character_state_snapshots "
         "(character_id, chapter_id, location, arc_phase, emotional_state, physical_state, "
         "ability_snapshot, inventory_snapshot, knowledge_snapshot, notes) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT (character_id, chapter_id) DO UPDATE SET "
-        "location=%s, arc_phase=%s, emotional_state=%s, physical_state=%s, "
-        "ability_snapshot=%s::jsonb, inventory_snapshot=%s::jsonb, knowledge_snapshot=%s::jsonb, notes=%s",
+        "location=?, arc_phase=?, emotional_state=?, physical_state=?, "
+        "ability_snapshot=?, inventory_snapshot=?, knowledge_snapshot=?, notes=?",
         (character_id, chapter_id, location, arc_phase, emotional_state, physical_state,
          ability_snapshot, inventory_snapshot, knowledge_snapshot, notes,
          location, arc_phase, emotional_state, physical_state,
@@ -616,9 +664,9 @@ def _relation_snapshot_by_id(relation_id: int, chapter_id: int,
     query(
         "INSERT INTO relation_state_snapshots "
         "(relation_id, chapter_id, intensity, status, notes) "
-        "VALUES (%s, %s, %s, %s, %s) "
+        "VALUES (?, ?, ?, ?, ?) "
         "ON CONFLICT (relation_id, chapter_id) DO UPDATE SET "
-        "intensity=%s, status=%s, notes=%s",
+        "intensity=?, status=?, notes=?",
         (relation_id, chapter_id, intensity, status, notes,
          intensity, status, notes),
         fetch="none"
@@ -636,22 +684,21 @@ def character_batch_detail(novel_name: str, character_names: list) -> str:
     if not character_names:
         return json.dumps([], ensure_ascii=False)
 
-    placeholders = ",".join(["%s"] * len(character_names))
+    placeholders = ",".join(["?"] * len(character_names))
     rows = query(
-        f"SELECT * FROM characters WHERE novel_id = %s AND is_active = TRUE AND name IN ({placeholders})",
+        f"SELECT * FROM characters WHERE novel_id = ? AND is_active = 1 AND name IN ({placeholders})",
         (novel_id, *character_names)
     )
     result = []
     for row in rows:
         char = dict(row)
-        # Resolve relations for each character
         rels = query(
             "SELECT cr.relation_type, cr.description, cr.intensity, cr.subtext_design, "
             "c1.name as from_name, c2.name as to_name "
             "FROM character_relations cr "
             "JOIN characters c1 ON cr.from_character_id = c1.id "
             "JOIN characters c2 ON cr.to_character_id = c2.id "
-            "WHERE cr.novel_id = %s AND (cr.from_character_id = %s OR cr.to_character_id = %s) "
+            "WHERE cr.novel_id = ? AND (cr.from_character_id = ? OR cr.to_character_id = ?) "
             "AND cr.status = 'active' ORDER BY cr.intensity DESC",
             (novel_id, char["id"], char["id"])
         )
@@ -689,10 +736,10 @@ def distillation_evolve(novel_name: str, character_name: str, chapter_number: in
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
     if not char:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
-    ch = query("SELECT id FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_number), fetch="one")
+    ch = query("SELECT id FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_number), fetch="one")
     if not ch:
         return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
 
@@ -701,7 +748,7 @@ def distillation_evolve(novel_name: str, character_name: str, chapter_number: in
         "(novel_id, character_id, chapter_id, decision_delta, new_knowledge, "
         "changed_beliefs, relation_shifts, voice_changes, ability_changes, "
         "arc_transition, key_decision, notes) "
-        "VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT DO NOTHING",
         (novel_id, char["id"], ch["id"],
          decision_delta, new_knowledge, changed_beliefs, relation_shifts,
@@ -722,19 +769,19 @@ def distillation_get(novel_name: str, character_name: str, chapter_number: int =
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
     if not char:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
 
     if chapter_number > 0:
-        ch = query("SELECT id FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_number), fetch="one")
+        ch = query("SELECT id FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_number), fetch="one")
         if not ch:
             return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
         rows = query(
             "SELECT cde.*, c.number as chapter_number "
             "FROM character_distillation_evolution cde "
             "JOIN chapters c ON cde.chapter_id = c.id "
-            "WHERE cde.character_id = %s AND cde.chapter_id = %s "
+            "WHERE cde.character_id = ? AND cde.chapter_id = ? "
             "ORDER BY c.number",
             (char["id"], ch["id"])
         )
@@ -743,7 +790,7 @@ def distillation_get(novel_name: str, character_name: str, chapter_number: int =
             "SELECT cde.*, c.number as chapter_number "
             "FROM character_distillation_evolution cde "
             "JOIN chapters c ON cde.chapter_id = c.id "
-            "WHERE cde.character_id = %s "
+            "WHERE cde.character_id = ? "
             "ORDER BY c.number",
             (char["id"],)
         )
@@ -768,7 +815,7 @@ def distillation_timeline(novel_name: str, character_name: str,
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
     if not char:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
 
@@ -791,7 +838,7 @@ def distillation_timeline(novel_name: str, character_name: str,
         f"SELECT cde.{col} as value, c.number as chapter_number, c.title as chapter_title "
         "FROM character_distillation_evolution cde "
         "JOIN chapters c ON cde.chapter_id = c.id "
-        f"WHERE cde.character_id = %s AND cde.{col} IS NOT NULL "
+        f"WHERE cde.character_id = ? AND cde.{col} IS NOT NULL "
         f"AND cde.{col} != '{{}}' AND cde.{col} != '[]' "
         "ORDER BY c.number"
     )
@@ -818,12 +865,12 @@ def distillation_compare(novel_name: str, character_name: str,
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=%s AND name=%s", (novel_id, character_name), fetch="one")
+    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
     if not char:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
 
-    ch_a = query("SELECT id, number FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_a), fetch="one")
-    ch_b = query("SELECT id, number FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_b), fetch="one")
+    ch_a = query("SELECT id, number FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_a), fetch="one")
+    ch_b = query("SELECT id, number FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_b), fetch="one")
     if not ch_a or not ch_b:
         missing = []
         if not ch_a: missing.append(chapter_a)
@@ -831,11 +878,11 @@ def distillation_compare(novel_name: str, character_name: str,
         return json.dumps({"error": f"章节不存在: {missing}"}, ensure_ascii=False)
 
     snap_a = query(
-        "SELECT * FROM character_state_snapshots WHERE character_id=%s AND chapter_id=%s",
+        "SELECT * FROM character_state_snapshots WHERE character_id=? AND chapter_id=?",
         (char["id"], ch_a["id"]), fetch="one"
     )
     snap_b = query(
-        "SELECT * FROM character_state_snapshots WHERE character_id=%s AND chapter_id=%s",
+        "SELECT * FROM character_state_snapshots WHERE character_id=? AND chapter_id=?",
         (char["id"], ch_b["id"]), fetch="one"
     )
 
@@ -843,7 +890,7 @@ def distillation_compare(novel_name: str, character_name: str,
         "SELECT cde.*, c.number as chapter_number "
         "FROM character_distillation_evolution cde "
         "JOIN chapters c ON cde.chapter_id = c.id "
-        "WHERE cde.character_id = %s AND c.number > %s AND c.number <= %s "
+        "WHERE cde.character_id = ? AND c.number > ? AND c.number <= ? "
         "ORDER BY c.number",
         (char["id"], chapter_a, chapter_b)
     )

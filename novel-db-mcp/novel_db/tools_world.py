@@ -135,12 +135,12 @@ def world_upsert(novel_name: str, category: str, name: str, data: dict,
         extra_vals_update.append(is_constant)
 
     col_str = ", ".join(extra_cols)
-    insert_placeholders = ", ".join(["%s"] * len(extra_cols))
-    update_sets = ", ".join([f"{c} = %s" for c in extra_cols])
+    insert_placeholders = ", ".join(["?"] * len(extra_cols))
+    update_sets = ", ".join([f"{c} = ?" for c in extra_cols])
     query(
         f"INSERT INTO world_settings (novel_id, category, name, data, {col_str}) "
-        f"VALUES (%s, %s, %s, %s, {insert_placeholders}) "
-        f"ON CONFLICT (novel_id, category, name) DO UPDATE SET data = %s, {update_sets}, updated_at = NOW()",
+        f"VALUES (?, ?, ?, ?, {insert_placeholders}) "
+        f"ON CONFLICT (novel_id, category, name) DO UPDATE SET data = ?, {update_sets}, updated_at = datetime('now')",
         (novel_id, category, name, data_json, *extra_vals_insert, data_json, *extra_vals_update),
         fetch="none"
     )
@@ -170,22 +170,22 @@ def world_query(novel_name: str, category: str = "", name: str = "",
     
     # Exact match mode
     if category and name:
-        rows = query("SELECT * FROM world_settings WHERE novel_id = %s AND category = %s AND name = %s",
+        rows = query("SELECT * FROM world_settings WHERE novel_id = ? AND category = ? AND name = ?",
                      (novel_id, category, name))
         return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
     
     # Multi-dimension filter mode
-    conditions = ["novel_id = %s"]
+    conditions = ["novel_id = ?"]
     params = [novel_id]
     
     if category:
-        conditions.append("category = %s")
+        conditions.append("category = ?")
         params.append(category)
     if region:
-        conditions.append("(region = %s OR region = '全域')")
+        conditions.append("(region = ? OR region = '全域')")
         params.append(region)
     if faction_id is not None:
-        conditions.append("(faction_id = %s OR faction_id IS NULL)")
+        conditions.append("(faction_id = ? OR faction_id IS NULL)")
         params.append(faction_id)
     
     # Status filter: active or constant
@@ -245,31 +245,31 @@ def world_load_context(novel_name: str, volume: str = "", regions: str = "",
     if faction_name_list:
         for fn in faction_name_list:
             frow = query(
-                "SELECT id FROM world_settings WHERE novel_id = %s AND category = 'faction' AND name = %s",
+                "SELECT id FROM world_settings WHERE novel_id = ? AND category = 'faction' AND name = ?",
                 (novel_id, fn), fetch="one"
             )
             if frow:
                 faction_ids.append(frow["id"])
     
     # Build query conditions
-    conditions = ["novel_id = %s", "status = 'active'"]
+    conditions = ["novel_id = ?", "status = 'active'"]
     params = [novel_id]
     
     # Category filter
     if category_list:
-        cat_placeholders = ", ".join(["%s"] * len(category_list))
+        cat_placeholders = ", ".join(["?"] * len(category_list))
         conditions.append(f"category IN ({cat_placeholders})")
         params.extend(category_list)
     
     # Region filter: match specific regions OR '全域'
     if region_list:
-        region_placeholders = ", ".join(["%s"] * (len(region_list) + 1))
+        region_placeholders = ", ".join(["?"] * (len(region_list) + 1))
         conditions.append(f"(region IN ({region_placeholders}))")
         params.extend(region_list + ['全域'])
     
     # Faction filter: match specific faction OR no faction (shared)
     if faction_ids:
-        fid_placeholders = ", ".join(["%s"] * (len(faction_ids) + 1))
+        fid_placeholders = ", ".join(["?"] * (len(faction_ids) + 1))
         conditions.append(f"(faction_id IN ({fid_placeholders}) OR faction_id IS NULL)")
         params.extend(faction_ids + [0])  # 0 = shared/global
     
@@ -330,7 +330,7 @@ def world_delete(novel_name: str, category: str, name: str) -> str:
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    query("DELETE FROM world_settings WHERE novel_id = %s AND category = %s AND name = %s",
+    query("DELETE FROM world_settings WHERE novel_id = ? AND category = ? AND name = ?",
           (novel_id, category, name), fetch="none")
     return json.dumps({"ok": True}, ensure_ascii=False)
 
@@ -345,14 +345,14 @@ def world_deactivate(novel_name: str, category: str, name: str, reason: str = ""
       reason: 停用原因
     """
     novel_id = _resolve_novel_id(novel_name)
-    ws = query("SELECT id, data FROM world_settings WHERE novel_id=%s AND category=%s AND name=%s",
+    ws = query("SELECT id, data FROM world_settings WHERE novel_id=? AND category=? AND name=?",
                (novel_id, category, name), fetch="one")
     if not ws:
         return json.dumps({"error": f"世界元素 '{category}:{name}' 不存在"}, ensure_ascii=False)
     data = ws["data"] if isinstance(ws["data"], dict) else {}
     data["_deactivated"] = True
     data["_deactivation_reason"] = reason
-    query("UPDATE world_settings SET status='inactive', data=%s, updated_at=NOW() WHERE id=%s",
+    query("UPDATE world_settings SET status='inactive', data=?, updated_at=datetime('now') WHERE id=?",
           (json.dumps(data, ensure_ascii=False), ws["id"]), fetch="none")
     return json.dumps({"ok": True, "category": category, "name": name, "status": "inactive", "reason": reason}, ensure_ascii=False)
 
@@ -383,19 +383,19 @@ def world_batch_update_meta(novel_name: str, updates_json: str) -> str:
         sets = []
         vals = []
         if "region" in u:
-            sets.append("region = %s")
+            sets.append("region = ?")
             vals.append(u["region"])
         if "volume_range" in u:
-            sets.append("volume_range = %s")
+            sets.append("volume_range = ?")
             vals.append(u["volume_range"])
         if "faction_id" in u:
-            sets.append("faction_id = %s")
+            sets.append("faction_id = ?")
             vals.append(u["faction_id"])
         if "priority" in u:
-            sets.append("priority = %s")
+            sets.append("priority = ?")
             vals.append(u["priority"])
         if "is_constant" in u:
-            sets.append("is_constant = %s")
+            sets.append("is_constant = ?")
             vals.append(u["is_constant"])
         
         if not sets:
@@ -403,7 +403,7 @@ def world_batch_update_meta(novel_name: str, updates_json: str) -> str:
         
         vals.extend([novel_id, cat, name])
         query(
-            f"UPDATE world_settings SET {', '.join(sets)}, updated_at = NOW() WHERE novel_id = %s AND category = %s AND name = %s",
+            f"UPDATE world_settings SET {', '.join(sets)}, updated_at = datetime('now') WHERE novel_id = ? AND category = ? AND name = ?",
             tuple(vals), fetch="none"
         )
         updated += 1
@@ -420,7 +420,7 @@ def sync_lorebook(novel_name: str) -> str:
     if not os.path.isdir(novel_dir):
         return json.dumps({"error": f"novel dir not found: {novel_dir}"}, ensure_ascii=False)
 
-    novel = query("SELECT id FROM novels WHERE name = %s", (novel_name,), fetch="one")
+    novel = query("SELECT id FROM novels WHERE name = ?", (novel_name,), fetch="one")
     if not novel:
         return json.dumps({"error": f"novel '{novel_name}' not found in DB"}, ensure_ascii=False)
     novel_id = novel["id"]
@@ -514,12 +514,12 @@ def sync_lorebook(novel_name: str) -> str:
             try:
                 query(
                     "INSERT INTO world_settings (novel_id, category, name, data, keys, secondary_keys, tags, related_ids, volume_range, priority, is_constant, region, faction_id) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                     "ON CONFLICT (novel_id, category, name) DO UPDATE SET "
                     "data = EXCLUDED.data, keys = EXCLUDED.keys, secondary_keys = EXCLUDED.secondary_keys, "
                     "tags = EXCLUDED.tags, related_ids = EXCLUDED.related_ids, volume_range = EXCLUDED.volume_range, "
                     "priority = EXCLUDED.priority, is_constant = EXCLUDED.is_constant, "
-                    "region = EXCLUDED.region, faction_id = EXCLUDED.faction_id, updated_at = NOW()",
+                    "region = EXCLUDED.region, faction_id = EXCLUDED.faction_id, updated_at = datetime('now')",
                     (novel_id, category, name, data_json,
                      keys_val if keys_val else None,
                      secondary_keys_val if secondary_keys_val else None,
@@ -549,7 +549,7 @@ def engine_detail(engine_type: str, novel_name: str) -> str:
     novel_id = _resolve_novel_id(novel_name)
 
     row = query(
-        "SELECT data FROM world_settings WHERE novel_id = %s AND category = 'engine_reference' AND name = %s",
+        "SELECT data FROM novel_config WHERE novel_id = ? AND config_type = 'engine_reference' AND name = ?",
         (novel_id, engine_type), fetch="one"
     )
     if row:
@@ -558,7 +558,7 @@ def engine_detail(engine_type: str, novel_name: str) -> str:
             return json.dumps({"engine": engine_type, "content": data["content"], "source": "db"}, ensure_ascii=False)
 
     row = query(
-        "SELECT data FROM world_settings WHERE novel_id = %s AND category = 'engine_reference' AND name = %s",
+        "SELECT data FROM novel_config WHERE novel_id = ? AND config_type = 'engine_reference' AND name = ?",
         (0, engine_type), fetch="one"
     )
     if row:
@@ -577,7 +577,7 @@ def author_voice(novel_name: str) -> str:
     novel_id = _resolve_novel_id(novel_name)
 
     rows = query(
-        "SELECT name, data FROM world_settings WHERE novel_id = %s AND category = 'author_voice'",
+        "SELECT name, data FROM novel_config WHERE novel_id = ? AND config_type = 'author_voice'",
         (novel_id,)
     )
     if rows:
@@ -602,7 +602,7 @@ def writing_spec(novel_name: str) -> str:
     novel_id = _resolve_novel_id(novel_name)
 
     rows = query(
-        "SELECT name, data FROM world_settings WHERE novel_id = %s AND category = 'writing_spec'",
+        "SELECT name, data FROM novel_config WHERE novel_id = ? AND config_type = 'writing_spec'",
         (novel_id,)
     )
     if rows:

@@ -123,8 +123,8 @@ def clean_db(test_db):
 def novel_id(test_db):
     """创建测试小说并返回 novel_id。"""
     r = query(
-        "INSERT INTO novels (name, genre, status) VALUES (%s, %s, %s) RETURNING id",
-        ("测试小说", "玄幻", "writing"), fetch="one"
+        "INSERT INTO novels (name, genre, status) VALUES (?, ?, ?)",
+        ("测试小说", "玄幻", "writing"), fetch="insert"
     )
     return r["id"]
 
@@ -212,10 +212,10 @@ class TestCharacterRoundTrip:
         cols = ["novel_id", "name"] + list(defaults.keys())
         vals = [novel_id, name] + [defaults[k] for k in defaults]
 
-        placeholders = ",".join(["%s"] * len(cols))
+        placeholders = ",".join(["?"] * len(cols))
         r = query(
-            f"INSERT INTO characters ({','.join(cols)}) VALUES ({placeholders}) RETURNING id",
-            tuple(vals), fetch="one"
+            f"INSERT INTO characters ({','.join(cols)}) VALUES ({placeholders})",
+            tuple(vals), fetch="insert"
         )
         return r["id"]
 
@@ -237,7 +237,7 @@ class TestCharacterRoundTrip:
         assert "protagonist" in content
 
         # Step 2: 清空 DB 中的人物数据
-        query("DELETE FROM characters WHERE id = %s", (char_id,), fetch="none")
+        query("DELETE FROM characters WHERE id = ?", (char_id,), fetch="none")
 
         # Step 3: File → DB
         if engine.get("character").file_to_db_enabled:
@@ -246,7 +246,7 @@ class TestCharacterRoundTrip:
 
             # 验证数据恢复
             restored = query(
-                "SELECT * FROM characters WHERE novel_id = %s AND name = %s",
+                "SELECT * FROM characters WHERE novel_id = ? AND name = ?",
                 (novel_id, "沈野"), fetch="one"
             )
             assert restored is not None, "File→DB 后人物未恢复"
@@ -293,7 +293,7 @@ class TestCharacterRoundTrip:
         query(
             "INSERT INTO character_relations "
             "(novel_id, from_character_id, to_character_id, relation_type, description, intensity, status, subtext_design) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (novel_id, id1, id2, "ally", "战友", 7, "active", "对TA的关心永远通过动作表达"),
             fetch="none"
         )
@@ -341,10 +341,10 @@ class TestVolumeRoundTrip:
         cols = ["novel_id", "number", "title"] + list(defaults.keys())
         vals = [novel_id, number, title] + [defaults[k] for k in defaults]
 
-        placeholders = ",".join(["%s"] * len(cols))
+        placeholders = ",".join(["?"] * len(cols))
         r = query(
-            f"INSERT INTO volumes ({','.join(cols)}) VALUES ({placeholders}) RETURNING id",
-            tuple(vals), fetch="one"
+            f"INSERT INTO volumes ({','.join(cols)}) VALUES ({placeholders})",
+            tuple(vals), fetch="insert"
         )
         return r["id"]
 
@@ -401,7 +401,7 @@ class TestWorldSettingsRoundTrip:
 
         query(
             "INSERT INTO world_settings (novel_id, category, name, data, keys, tags, volume_range, region) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (novel_id, category, name, data_json, keys, tags,
              meta.get("volume_range", ""), meta.get("region", "全域")),
             fetch="none"
@@ -550,7 +550,7 @@ class TestForeshadowRoundTrip:
         """辅助：创建章节用于伏笔引用。"""
         for i in range(1, 6):
             query(
-                "INSERT INTO chapters (novel_id, number, title, status) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO chapters (novel_id, number, title, status) VALUES (?, ?, ?, ?)",
                 (novel_id, i, f"第{i}章", "planned"), fetch="none"
             )
 
@@ -560,7 +560,7 @@ class TestForeshadowRoundTrip:
 
         query(
             "INSERT INTO foreshadows (novel_id, description, importance, status, related_characters, tags) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (novel_id, "沈野左耳后的旧疤来历", "high", "planted",
              json.dumps(["沈野"], ensure_ascii=False),
              json.dumps(["身份", "过去"], ensure_ascii=False)),
@@ -569,7 +569,7 @@ class TestForeshadowRoundTrip:
 
         query(
             "INSERT INTO foreshadows (novel_id, description, importance, status, related_characters, tags) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (novel_id, "铁谷镇地下的灵纹阵法", "medium", "planted",
              json.dumps(["沈野", "方岩"], ensure_ascii=False),
              json.dumps(["地点", "秘密"], ensure_ascii=False)),
@@ -598,27 +598,27 @@ class TestEchoRoundTrip:
         """辅助：创建章节和回响。"""
         for i in range(1, 6):
             query(
-                "INSERT INTO chapters (novel_id, number, title, status) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO chapters (novel_id, number, title, status) VALUES (?, ?, ?, ?)",
                 (novel_id, i, f"第{i}章", "planned"), fetch="none"
             )
 
         # 创建一个卷
         vol = query(
-            "INSERT INTO volumes (novel_id, number, title) VALUES (%s, %s, %s) RETURNING id",
-            (novel_id, 1, "兽潮"), fetch="one"
+            "INSERT INTO volumes (novel_id, number, title) VALUES (?, ?, ?)",
+            (novel_id, 1, "兽潮"), fetch="insert"
         )
 
         # 获取章节 ID
-        ch1 = query("SELECT id FROM chapters WHERE novel_id=%s AND number=%s",
+        ch1 = query("SELECT id FROM chapters WHERE novel_id=? AND number=?",
                      (novel_id, 1), fetch="one")
-        ch3 = query("SELECT id FROM chapters WHERE novel_id=%s AND number=%s",
+        ch3 = query("SELECT id FROM chapters WHERE novel_id=? AND number=?",
                      (novel_id, 3), fetch="one")
 
         if ch1 and ch3:
             query(
                 "INSERT INTO echoes (novel_id, source_chapter_id, echo_chapter_id, volume_id, "
                 "source_event, echo_type, echo_description, strong_related, tags) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (novel_id, ch1["id"], ch3["id"], vol["id"],
                  "沈野第一次使用灵纹", "character_habit", "方岩模仿沈野握拳方式", 0,
                  json.dumps(["沈野", "方岩"], ensure_ascii=False)),
@@ -659,7 +659,7 @@ class TestCrossDimensionIntegrity:
         tags = json.dumps(meta.get("tags", [category]), ensure_ascii=False)
         query(
             "INSERT INTO world_settings (novel_id, category, name, data, keys, tags) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (novel_id, category, name, data_json, keys, tags),
             fetch="none"
         )
@@ -670,7 +670,7 @@ class TestCrossDimensionIntegrity:
         self._insert_world(novel_id, "faction", "壁盾军团", {"content": "军事力量"}, keys=["壁盾"])
 
         faction_row = query(
-            "SELECT id FROM world_settings WHERE novel_id=%s AND category='faction' AND name=%s",
+            "SELECT id FROM world_settings WHERE novel_id=? AND category='faction' AND name=?",
             (novel_id, "壁盾军团"), fetch="one"
         )
         assert faction_row is not None, "势力未创建成功"
@@ -679,7 +679,7 @@ class TestCrossDimensionIntegrity:
         query(
             "INSERT INTO characters (novel_id, name, role, faction_id, appearance, personality, "
             "background, goals, weaknesses, speech_style, arc_notes, first_appearance_chapter) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (novel_id, "方岩", "ally", faction_row["id"],
              "魁梧青年", "豪爽", "壁盾军团士兵", "守护城镇",
              "冲动", "大嗓门", "从服从到质疑", 1),
@@ -688,7 +688,7 @@ class TestCrossDimensionIntegrity:
 
         # 验证交叉引用
         char = query(
-            "SELECT * FROM characters WHERE novel_id=%s AND name='方岩'",
+            "SELECT * FROM characters WHERE novel_id=? AND name='方岩'",
             (novel_id,), fetch="one"
         )
         assert char is not None
@@ -696,7 +696,7 @@ class TestCrossDimensionIntegrity:
 
         # 反向验证：势力可以查到归属人物
         faction_members = query(
-            "SELECT * FROM characters WHERE novel_id=%s AND faction_id=%s",
+            "SELECT * FROM characters WHERE novel_id=? AND faction_id=?",
             (novel_id, faction_row["id"])
         )
         assert len(faction_members) >= 1, "势力下应有人物"
@@ -707,7 +707,7 @@ class TestCrossDimensionIntegrity:
         query(
             "INSERT INTO characters (novel_id, name, role, appearance, personality, "
             "background, goals, weaknesses, speech_style, arc_notes, first_appearance_chapter) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (novel_id, "沈野", "protagonist", "瘦削少年", "沉默", "孤儿",
              "找到妹妹", "过度保护", "简短", "弧线", 1),
             fetch="none"
@@ -716,7 +716,7 @@ class TestCrossDimensionIntegrity:
         # 创建伏笔引用该人物
         query(
             "INSERT INTO foreshadows (novel_id, description, importance, status, related_characters, tags) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (novel_id, "沈野的旧疤", "high", "planted",
              json.dumps(["沈野"], ensure_ascii=False),
              json.dumps(["身份"], ensure_ascii=False)),
@@ -725,7 +725,7 @@ class TestCrossDimensionIntegrity:
 
         # 验证：伏笔中引用的人物名称在 characters 表中存在
         foreshadows = query(
-            "SELECT * FROM foreshadows WHERE novel_id=%s",
+            "SELECT * FROM foreshadows WHERE novel_id=?",
             (novel_id,)
         )
         assert len(foreshadows) >= 1
@@ -734,7 +734,7 @@ class TestCrossDimensionIntegrity:
             related = json.loads(fs["related_characters"]) if fs["related_characters"] else []
             for char_name in related:
                 exists = query(
-                    "SELECT id FROM characters WHERE novel_id=%s AND name=%s AND is_active=1",
+                    "SELECT id FROM characters WHERE novel_id=? AND name=? AND is_active=1",
                     (novel_id, char_name), fetch="one"
                 )
                 assert exists is not None, f"伏笔引用的人物 '{char_name}' 不存在于 characters 表"
@@ -751,14 +751,14 @@ class TestCrossDimensionIntegrity:
 
         # 验证：地点数据中引用的势力名在 world_settings 中存在
         loc = query(
-            "SELECT * FROM world_settings WHERE novel_id=%s AND category='location' AND name='铁谷镇'",
+            "SELECT * FROM world_settings WHERE novel_id=? AND category='location' AND name='铁谷镇'",
             (novel_id,), fetch="one"
         )
         assert loc is not None
         loc_data = json.loads(loc["data"]) if isinstance(loc["data"], str) else loc["data"]
         if "所属势力" in loc_data:
             faction_exists = query(
-                "SELECT id FROM world_settings WHERE novel_id=%s AND category='faction' AND name=%s",
+                "SELECT id FROM world_settings WHERE novel_id=? AND category='faction' AND name=?",
                 (novel_id, loc_data["所属势力"]), fetch="one"
             )
             assert faction_exists is not None, f"地点引用的势力 '{loc_data['所属势力']}' 不存在"
@@ -933,7 +933,7 @@ class TestCrossGeneration:
         query(
             "INSERT INTO characters (novel_id, name, role, appearance, personality, "
             "background, goals, weaknesses, speech_style, arc_notes, first_appearance_chapter) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (novel_id, "沈野", "protagonist", "瘦削", "沉默", "孤儿",
              "找到妹妹", "过度保护", "简短",
              "从自我封闭到学会信任", 1),
@@ -943,22 +943,22 @@ class TestCrossGeneration:
         # 创建大纲卷，其人物弧光表引用同一人物
         vol = query(
             "INSERT INTO volumes (novel_id, number, title, character_arcs) "
-            "VALUES (%s, %s, %s, %s) RETURNING id",
+            "VALUES (?, ?, ?, ?)",
             (novel_id, 1, "兽潮",
              json.dumps([
                  {"角色": "沈野", "卷初状态": "自我封闭", "触发事件": "兽潮", "卷末状态": "开始信任"}
              ], ensure_ascii=False)),
-            fetch="one"
+            fetch="insert"
         )
 
         # 验证：大纲人物弧光中的角色名在 characters 表中存在
-        vol_data = query("SELECT * FROM volumes WHERE id=%s", (vol["id"],), fetch="one")
+        vol_data = query("SELECT * FROM volumes WHERE id=?", (vol["id"],), fetch="one")
         arcs = json.loads(vol_data["character_arcs"]) if vol_data["character_arcs"] else []
 
         for arc in arcs:
             char_name = arc.get("角色", "")
             char_exists = query(
-                "SELECT id FROM characters WHERE novel_id=%s AND name=%s AND is_active=1",
+                "SELECT id FROM characters WHERE novel_id=? AND name=? AND is_active=1",
                 (novel_id, char_name), fetch="one"
             )
             assert char_exists is not None, f"大纲弧光引用的角色 '{char_name}' 不存在于 characters 表"
@@ -967,14 +967,14 @@ class TestCrossGeneration:
         """大纲中列出的伏笔应在 foreshadows 表中有对应记录。"""
         # 创建章节
         query(
-            "INSERT INTO chapters (novel_id, number, title, status) VALUES (%s, %s, %s, %s)",
+            "INSERT INTO chapters (novel_id, number, title, status) VALUES (?, ?, ?, ?)",
             (novel_id, 1, "第一章", "planned"), fetch="none"
         )
 
         # 创建伏笔
         query(
             "INSERT INTO foreshadows (novel_id, description, importance, status, tags) "
-            "VALUES (%s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?)",
             (novel_id, "沈野的旧疤来历", "high", "planted",
              json.dumps(["身份"], ensure_ascii=False)),
             fetch="none"
@@ -982,7 +982,7 @@ class TestCrossGeneration:
 
         # 验证：foreshadows 表中存在该伏笔
         fs = query(
-            "SELECT * FROM foreshadows WHERE novel_id=%s AND description LIKE '%旧疤%'",
+            "SELECT * FROM foreshadows WHERE novel_id=? AND description LIKE '%旧疤%'",
             (novel_id,), fetch="one"
         )
         assert fs is not None, "伏笔未在 foreshadows 表中找到"
@@ -993,7 +993,7 @@ class TestCrossGeneration:
         # 创建地点
         query(
             "INSERT INTO world_settings (novel_id, category, name, data) "
-            "VALUES (%s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?)",
             (novel_id, "location", "铁谷镇",
              json.dumps({"content": "铁谷镇"}, ensure_ascii=False)),
             fetch="none"
@@ -1002,18 +1002,18 @@ class TestCrossGeneration:
         # 创建卷大纲，其场景中提到该地点
         vol = query(
             "INSERT INTO volumes (novel_id, number, title, act_intro) "
-            "VALUES (%s, %s, %s, %s) RETURNING id",
+            "VALUES (?, ?, ?, ?)",
             (novel_id, 1, "兽潮",
              json.dumps({
                  "prose": "铁谷镇的黎明被兽吼撕碎。",
                  "events": ["兽潮前兆"], "feibi_notes": [], "list_items": []
              }, ensure_ascii=False)),
-            fetch="one"
+            fetch="insert"
         )
 
         # 验证：大纲中提到的地点名在 world_settings 中存在
         loc_exists = query(
-            "SELECT id FROM world_settings WHERE novel_id=%s AND category='location' AND name LIKE '%铁谷%'",
+            "SELECT id FROM world_settings WHERE novel_id=? AND category='location' AND name LIKE '%铁谷%'",
             (novel_id,), fetch="one"
         )
         assert loc_exists is not None, "大纲中提到的地点 '铁谷镇' 不在 world_settings(location) 中"
@@ -1023,7 +1023,7 @@ class TestCrossGeneration:
         # 创建能力设定
         query(
             "INSERT INTO world_settings (novel_id, category, name, data) "
-            "VALUES (%s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?)",
             (novel_id, "ability", "灵纹共鸣",
              json.dumps({
                  "类型": "感知型", "阶位": "初觉",
@@ -1038,7 +1038,7 @@ class TestCrossGeneration:
             "INSERT INTO characters (novel_id, name, role, appearance, personality, "
             "background, goals, weaknesses, speech_style, arc_notes, first_appearance_chapter, "
             "ability_system) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (novel_id, "沈野", "protagonist", "瘦削", "沉默", "孤儿",
              "找到妹妹", "过度保护", "简短", "弧线", 1,
              json.dumps({"core": "灵纹共鸣", "essence": "感知灵能纹路"}, ensure_ascii=False)),
@@ -1047,14 +1047,14 @@ class TestCrossGeneration:
 
         # 验证：人物的 ability_system.core 在 world_settings(ability) 中存在
         char = query(
-            "SELECT * FROM characters WHERE novel_id=%s AND name='沈野'",
+            "SELECT * FROM characters WHERE novel_id=? AND name='沈野'",
             (novel_id,), fetch="one"
         )
         ability_data = json.loads(char["ability_system"]) if char["ability_system"] else {}
         ability_name = ability_data.get("core", "")
 
         ability_exists = query(
-            "SELECT id FROM world_settings WHERE novel_id=%s AND category='ability' AND name=%s",
+            "SELECT id FROM world_settings WHERE novel_id=? AND category='ability' AND name=?",
             (novel_id, ability_name), fetch="one"
         )
         assert ability_exists is not None, f"人物能力 '{ability_name}' 不在 world_settings(ability) 中"
@@ -1127,7 +1127,7 @@ class TestDataFormatSwitching:
             "INSERT INTO characters (novel_id, name, role, appearance, personality, "
             "background, goals, weaknesses, speech_style, arc_notes, first_appearance_chapter, "
             "appearance_detail, decision_engine) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (novel_id, "测试人物", "npc", "普通", "普通", "无",
              "无", "无", "普通", "无", 1,
              '{}', '{}'),
@@ -1147,7 +1147,7 @@ class TestDataFormatSwitching:
         query(
             "INSERT INTO characters (novel_id, name, role, appearance, personality, "
             "background, goals, weaknesses, speech_style, arc_notes, first_appearance_chapter) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (novel_id, "沈野", "protagonist", "瘦削", "沉默", "孤儿",
              "找到妹妹", "过度保护", "简短", "弧线", 5),
             fetch="none"
@@ -1166,7 +1166,7 @@ class TestDataFormatSwitching:
         # 世界观模板中有 md_key: 首次出场
         query(
             "INSERT INTO world_settings (novel_id, category, name, data, keys) "
-            "VALUES (%s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?)",
             (novel_id, "ability", "灵纹共鸣",
              json.dumps({"content": "灵纹共鸣", "首次出场": "Ch1"}, ensure_ascii=False),
              json.dumps(["灵纹"], ensure_ascii=False)),
@@ -1217,14 +1217,14 @@ class TestDataFormatSwitching:
         # 创建两个势力
         query(
             "INSERT INTO world_settings (novel_id, category, name, data) "
-            "VALUES (%s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?)",
             (novel_id, "faction", "壁盾军团",
              json.dumps({"content": "军事力量"}, ensure_ascii=False)),
             fetch="none"
         )
         query(
             "INSERT INTO world_settings (novel_id, category, name, data) "
-            "VALUES (%s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?)",
             (novel_id, "faction", "星火社",
              json.dumps({"content": "反抗组织"}, ensure_ascii=False)),
             fetch="none"
@@ -1241,7 +1241,7 @@ class TestDataFormatSwitching:
 
         # 更新其中一个势力
         query(
-            "UPDATE world_settings SET data=%s WHERE novel_id=%s AND category='faction' AND name='壁盾军团'",
+            "UPDATE world_settings SET data=? WHERE novel_id=? AND category='faction' AND name='壁盾军团'",
             (json.dumps({"content": "更新后的军事力量"}, ensure_ascii=False), novel_id),
             fetch="none"
         )
@@ -1276,7 +1276,7 @@ class TestTemplateFieldCompleteness:
             "appearance, personality, speech_style, catchphrase, "
             "background, goals, weaknesses, "
             "arc_notes, first_appearance_chapter, status) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (novel_id, "测试角色", "rival", "异族", "凝相",
              "高瘦、银发", "冷酷、狡猾", "低沉缓慢", "不值得",
              "被驱逐的异族后裔", "复仇", "固执",
@@ -1315,7 +1315,7 @@ class TestTemplateFieldCompleteness:
         """世界观模板的动态 heading `{category}: {name}` 正确替换。"""
         query(
             "INSERT INTO world_settings (novel_id, category, name, data) "
-            "VALUES (%s, %s, %s, %s)",
+            "VALUES (?, ?, ?, ?)",
             (novel_id, "race", "灵族",
              json.dumps({"起源": "远古灵能聚合体", "content": "灵族是……"}, ensure_ascii=False)),
             fetch="none"

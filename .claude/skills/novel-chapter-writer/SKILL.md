@@ -1,296 +1,252 @@
 ---
 name: novel-chapter-writer
-description: 逐章写作编排器，驱动 4 个独立子 Agent 协作完成章节。触发词：写第N章/继续写/写一章
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__get_chapter_context, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__skill_loader, mcp__novel-db__character_update, mcp__novel-db__character_increment, mcp__novel-db__character_snapshot, mcp__novel-db__relation_snapshot, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_upsert, mcp__novel-db__character_create, mcp__novel-db__relation_create, mcp__novel-db__consistency_guard, mcp__novel-db__distillation_evolve, mcp__memory__memory_store, mcp__memory__memory_search
-depends_on: novel-planner, lorecraft, engines/anti-ai-quickref, engines/author-voice, engines/causality, agents/context-curator, agents/creative-director, agents/engine-coordinator, agents/text-generator
+description: 逐章写作编排器，直接调 MCP + 模型完成章节。触发词：写第N章/继续写/写一章
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__get_chapter_context, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__resolve_engines, mcp__novel-db__skill_loader, mcp__novel-db__character_update, mcp__novel-db__character_increment, mcp__novel-db__character_snapshot, mcp__novel-db__relation_snapshot, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_upsert, mcp__novel-db__character_create, mcp__novel-db__relation_create, mcp__novel-db__consistency_guard, mcp__novel-db__distillation_evolve, mcp__novel-db__volume_get, mcp__memory__memory_store, mcp__memory__memory_search
+depends_on: novel-planner, engines/anti-ai-quickref, engines/author-voice
 lifecycle: core
-version: "1.3.0"
+version: "2.0.0"
 ---
 
-# 逐章写作编排器（Multi-Agent Pipeline）
+# 逐章写作编排器（v2 — 无子 Agent）
 
-> **架构原则**：编排器负责 MCP 工具调用和数据流转，子 Agent 各司其职、上下文干净、互不污染。
+> **v2 架构原则**：编排器直接调 MCP 获取精简上下文 + 做创意决策 + 生成正文。无子 Agent，无中间文件传递，无信息损耗。
 
 <what-to-do>
 
 ## 流水线总览
 
 ```
-Step 0 断点检测
+Step 0 断点检测 + 一致性校验
   ↓
-Step 1 编排器调 MCP 收集原始数据
+Step 1 get_chapter_context (MCP) → 精简上下文包
   ↓
-Step 2 启动 Agent 1: Context Curator → 产出干净的上下文包
+Step 2 创意决策 → 创意蓝图（含新实体创建）+ 存档
+  ↓  🔒 检查点 A: 确认创意蓝图
+Step 3 resolve_engines (MCP) → 引擎指令
   ↓
-Step 3 启动 Agent 2: Creative Director → 产出创意蓝图（含新实体创建）+ 存档
-  ↓  🔒 检查点 A: 确认创意蓝图（场面数量/因果链/角色弧线）
-Step 4 启动 Agent 3: Engine Coordinator → 产出引擎指令包
-  ↓
-Step 5 启动 Agent 4: Text Generator → 产出章节正文
-  ↓  🔒 检查点 B: 确认正文完整性（字数/场面覆盖/反AI自检）
-Step 6 🔒 writing_finish + 存盘
+Step 4 逐场面生成正文 + 自检
+  ↓  🔒 检查点 B: 确认正文完整性
+Step 5 🔒 validate_chapter + writing_finish + 存盘
 ```
 
-### 角色分工与失败处理
+### v1→v2 变更摘要
 
-| 角色 | 执行者 | 职责 | 上下文 | 完整性检查 | 不通过时 |
-|------|--------|------|--------|-----------|----------|
-| 数据采集 | **编排器（你）** | 调 MCP 工具收集原始数据 | 主对话 | — | — |
-| 信息整理 | **Agent 1** (search) | 清洗、压缩、结构化上下文 | 独立干净 | 上下文包含人物档案+伏笔清单+缺口标注 | 补充查询 MCP 后重新启动 Agent 1 |
-| 创意决策 | **Agent 2** (general_purpose_task) | 场面设计、因果链、角色弧线、创建新实体（调 MCP） | 独立干净 | 创意蓝图含场面设计+因果链+角色行为弧线 | 指出缺失项，要求 Agent 2 补充 |
-| 引擎统筹 | **Agent 3** (general_purpose_task) | 加载引擎文件、定制指令 | 独立干净 | 引擎指令包含反AI指令+硬约束+场面引擎 | 指出缺失项，要求 Agent 3 补充 |
-| 正文生成 | **Agent 4** (general_purpose_task) | 逐场面写正文、自检 | 独立干净 | 正文长度达到卷均章节的 80–120%（常规章）或 120–180%（关键转折章）+ 含自检报告 | 检查弹性事件是否已展开。如字数仍不足，具体说明差距，不笼统重试 |
-| 校验存盘 | **编排器（你）** | validate + writing_finish + 写文件 | 主对话 | — | — |
+| 变更 | v1 | v2 |
+|------|----|----|
+| Agent 数量 | 4 个子 Agent | 0（编排器直接执行） |
+| 文件加载 | 27+ 个文件 | MCP 聚合查询（get_chapter_context + resolve_engines） |
+| 上下文体积 | ~80KB（完整档案+全量世界观） | ~36KB（蒸馏卡片+分层世界观+世界状态） |
+| 中间文件 | 4 个 .tmp 文件 | 0（创意蓝图直接存档） |
+| 约束检查 | Agent 3 手动加载引擎文件 | resolve_engines MCP + writing_rules 自动注入 |
+| 信息损耗 | Agent 间传递有压缩损耗 | 无传递，零损耗 |
 
-> 编排器接收每个 Agent 输出后，需逐字段验证（详见 supporting-info §Agent 输出格式验证表）。字段缺失按失败处理表启动重试或手动补全。
+## Step 0: 断点检测 + 一致性校验
 
-**Agent 重试机制**：每个 Agent 步骤建议预留 1–3 次重试空间。重试次数取决于问题的严重程度——格式缺失可快速修复，创意偏差可能需要更多轮次。**但正文长度不足不属于"需要重试"的问题**——Creative Director 已在蓝图中储备弹性事件（2-3个，覆盖800-1500字余量），Text Generator 必须先展开全部弹性事件。若同一 Agent 多次不通过（通常 2 次以上），编排器应降级处理：手动补全缺失部分后继续下一 Agent，并在 Memory 中记录 `bug: Agent{N}连续失败`，供后续流程优化参考。
-
-## Step 0: 断点检测 + 数据一致性校验
-
-检查目标章节文件 `novels/{小说名}/正文/第{NNN}章-{标题}.md` 是否已存在：
-- **文件存在且内容完整** → 提示「第 N 章已完成，是否写第 N+1 章？」
+检查 `novels/{小说名}/正文/第{NNN}章-{标题}.md` 是否已存在：
+- **文件存在且完整** → 提示「第 N 章已完成，是否写第 N+1 章？」
 - **文件不存在** → 进入 Step 1
-- **断点续传**：通过 Memory 搜索 `flow-state` 恢复上次中断位置
+- **断点续传**：Memory 搜索 `flow-state` 恢复中断位置
 
-**数据一致性校验**：调用 `consistency_guard(novel_name="NOVEL_NAME", auto_sync=True)` — DB 是设定数据的唯一权威源，文件是人可读副本。若两者不一致，Agent 读取时可能拿到过时信息。自动同步确保所有 Agent 基于同一事实工作。
+**一致性校验**：`consistency_guard(novel_name="NOVEL_NAME", auto_sync=True)`
 
-## Step 1: 编排器采集原始数据
+## Step 1: 获取精简上下文包
 
-### 1.1 加载卷级大纲 + 世界观基调向量
+### 1.1 一次 MCP 调用获取全部上下文
 
-```python
-# DB 是权威源，直接调 MCP 获取卷大纲
-volume_get(novel_name="NOVEL_NAME", volume_number={卷号})
-# 如 MCP 返回不完整（notes 为空），回退读文件：Read("novels/{小说名}/设定/大纲/V{卷号}-{卷名}.md")
-# 提取本章信息：核心事件/参与角色/微事件/伏笔操作/声音适配标记
+```
+ctx = get_chapter_context(novel_name="NOVEL_NAME", chapter_number={N}, load_mode="smart")
+```
 
-# 🔒 提取本章三个基调字段（来自 chapter-designer 产出的章节大纲）
-# 在卷纲文件/DB 中，每章条目应包含：
-#   基调向量: {冷漠克制|突然暴力|短暂温暖|荒诞笑点|兄妹张力}[+辅助]
-#   世界秩序锚: {废墟秩序的1个具体细节}
-#   特写配额: 场景{N}写透（其余粗放）
-# 如果字段缺失（旧大纲未填写）：标注 ⚠️ 基调字段缺失，编排器从 tone-primer.md 提示用户补充
-# 如果字段存在：将三字段提取到 ch{N}-tone-directive.md 传递给后续 Agent
+**v2 返回精简上下文包**（~36KB）：
+- `chapter` — 章节信息
+- `volume` — 卷级大纲（含 world_state 字段）
+- `prev_summaries` — 前3章摘要
+- `character_cards` — 角色蒸馏卡片（name/role/核心特质/说话风格/目标/弧线/关系摘要/快照）
+- `unresolved_foreshadows` — 本章相关伏笔（按卷范围过滤）
+- `active_threads` — 活跃线索
+- `world_settings` — 分层世界观（smart 模式：宽范围条目只返回索引，卷级特定返回完整数据）
+- `world_state` — 当前卷世界状态（衰退曲线锚点+外围/中域/内城描述）
+- `tone_prompts` — 底色提示（从 writing_rules world_tone 类别提取）
+- `timeline` — 时间线
+- `quality_history` — 质量历史
+- `writing_prompt` — 写作提示词（含规则+作者DNA）
 
-# 加载项目专属基调词典（供 Agent 2 和 Agent 3 参考枚举值）
+**无需再单独调用**：`volume_get` / `foreshadow_list` / `character_detail` / `relation_list` / `world_query` / `timeline_query`
+
+### 1.2 补充基调指令
+
+如卷级大纲中本章条目包含基调字段（基调向量/世界秩序锚/特写配额），提取备用。如缺失，标注 ⚠️。
+
+加载基调词典（仅此一个文件需手动读取）：
+```
 Read("novels/{小说名}/设定/写作/tone-primer.md")
-# → 5种基调向量定义 + 废墟秩序锚点库 + 微动作特征库 + 克制美学基准
 ```
 
-### 1.2 调用聚合 MCP（一次调用获取全部上下文）
+### 1.3 回退策略
+
+如 `world_settings` 某分类为空，说明未同步到 DB，回退读设定文件。
+
+## Step 2: 创意决策 → 创意蓝图
+
+编排器直接做创意决策，不启动子 Agent。
+
+### 2.1 场面设计
+
+基于上下文包，设计本章场面：
+- 常规章 2-4 个场面，转折章 5-6 个
+- 每个场面标注 AES 类型标签（供 Step 3 resolve_engines 使用）
+- 每个场面填写基调字段（基调调性/写透或粗放/克制约束/微动作分配）
+- 确认因果链完整性（前因→后果→角色选择）
+- 场面分配到起承转合（起10-15%/承40-50%/转20-25%/合10-15%）
+
+### 2.2 角色弧线 + 伏笔操作
+
+- 设计角色行为弧线（含失控时刻）
+- 设计伏笔操作（种/推进/回收）
+- 设计微事件和弹性事件（2-3个，覆盖800-1500字余量）
+
+### 2.3 创建新实体
+
+识别需新建的人物/地点/物品/势力/伏笔，直接调 MCP 创建：
+- `character_create` / `world_upsert` / `foreshadow_plant` / `relation_create`
+
+### 2.4 存档创意蓝图
 
 ```
-get_chapter_context(novel_name="NOVEL_NAME", chapter_number) → 全部写作上下文
+Write("novels/{小说名}/创意决策/Ch{N}-创意蓝图.md", blueprint_content)
 ```
 
-**一次调用返回**：章节信息 + 卷级大纲 + 前3章摘要 + 全部角色深度信息（外观/性格/说话风格/能力/状态/关系）+ 未回收伏笔 + 活跃线索 + 世界观全分类数据 + 人物关系 + 时间线 + 质量历史 + 写作提示词（含规则+作者DNA）
+🔒 **检查点 A**：确认创意蓝图包含场面设计 + 因果链 + 角色行为弧线 + AES 标签。
 
-**无需再单独调用**：`volume_get` / `foreshadow_list` / `character_detail` / `relation_list` / `world_query` / `timeline_query` — 全部已聚合（`writing_start` 已移除，使用 `get_chapter_context` 替代）。
-
-**如 world_settings 某分类为空**：说明大纲阶段未同步到DB，编排器回退读取设定文件。
-
-将所有数据保存到临时文件，传递给 Agent 1：
-```python
-Write("novels/{小说名}/.tmp/ch{N}-raw-data.md", raw_data)
-# 同时写入基调指令文件（独立传递，不混入 raw-data 防止压缩丢失）
-Write("novels/{小说名}/.tmp/ch{N}-tone-directive.md", {
-    "基调向量": "{从章节大纲提取，或标注⚠️缺失}",
-    "世界秩序锚": "{从章节大纲提取，或标注⚠️缺失}",
-    "特写配额": "{从章节大纲提取，或标注⚠️缺失}",
-    "tone_primer_path": "novels/{小说名}/设定/写作/tone-primer.md"
-})
-```
-
-> **raw_data 必须包含**：本章核心事件、声音适配标记、涉及的世界元素定义、人物档案/伏笔/时间线。缺失任何一项会导致上下文压缩失真（详见 supporting-info §raw_data 内容要求）。
-> **tone-directive 独立存储**：基调字段不进入 raw-data，由编排器单独写入 `ch{N}-tone-directive.md`，Context Curator 在输出的"本章基调注入"块中原样复制，Creative Director 直接读取使用。
-
-## Step 2: 启动 Agent 1 — Context Curator
-
-使用 Task 工具启动 search 子 Agent（启动模板详见 supporting-info §子 Agent 启动模板）：
+## Step 3: 加载引擎指令
 
 ```
-subagent_type: search
-description: 整理第N章上下文
-query: 你是 Context Curator Agent。请读取 agents/context-curator.md 了解完整职责。
-→ 接收原始数据（novels/{小说名}/.tmp/ch{N}-raw-data.md），清洗压缩结构化，产出上下文包。
-→ 人物档案压缩到核心信息密度（单角色约占 5–10%），标注本章动机和伏笔操作，识别缺口。
-→ 按 context-curator.md 输出格式产出上下文包，不创作、不添加原始数据中不存在的信息。
+engines = resolve_engines(AES_tags=[从创意蓝图提取的场面类型标签])
 ```
 
-Agent 1 返回 → 编排器验证必填字段 → 保存到 `novels/{小说名}/.tmp/ch{N}-context-package.md`。如标注缺口，编排器补充查询 MCP 后更新临时文件。
+MCP 自动从 `ENGINE_MATRIX` 匹配引擎文件并加载内容。始终注入 `author-voice`。
 
-## Step 3: 启动 Agent 2 — Creative Director
+**反AI指令**：从 `get_chapter_context` 返回的 `writing_prompt` 中获取（已由规则引擎注入）。
 
-使用 Task 工具启动 general_purpose_task 子 Agent：
+**术语规范**：从 `writing_prompt` 中的 `term_map` 规则获取。
 
-```
-subagent_type: general_purpose_task
-description: 设计第N章创意蓝图
-query: 你是 Creative Director Agent。请读取 agents/creative-director.md 了解完整职责。
-→ 基于上下文包（novels/{小说名}/.tmp/ch{N}-context-package.md），做出本章全部创意决策。
-→ 🔒 加载基调指令（novels/{小说名}/.tmp/ch{N}-tone-directive.md）：包含本章基调向量/世界秩序锚/特写配额。
-→ 🔒 加载 tone-primer.md（novels/{小说名}/设定/写作/tone-primer.md）：获取基调枚举值/微动作特征库/克制美学基准。
-→ 每个场面设计必须填写4个基调字段（基调调性/写透或粗放/克制约束/微动作分配），来自 tone-primer 枚举值。
-→ 阶段指令已加载；引擎指令（environment/dialogue/action/causality）由 skill_loader 预加载注入。
-→ 确认因果链完整性，场面分配到起承转合（常规章2-4个，转折章5-6个），选择悬念锚点。
-→ 设计密度/角色矩阵/微事件/伏笔操作/镜头序列/叙事节奏/角色弧线（含失控时刻）。
-→ 识别需新建实体，直接调用 MCP 创建（见 creative-director.md 步骤 5）。
-→ 保存创意蓝图到 novels/{小说名}/创意决策/Ch{N}-创意蓝图.md，按输出格式产出（含已创建实体 ID + 基调字段）。
-```
+**硬约束**：从 `writing_prompt` 中的 `hard_constraint` 规则获取。
 
-Agent 2 返回 → 编排器验证必填字段 → 创意蓝图已由 Agent 2 保存，编排器提取元数据（已创建实体ID、伏笔操作摘要）用于 Step 6。
+无需手动读取 `engines/anti-ai-quickref.md` / `engines/writing-style.md` / `term-map.md` — 全部已通过 MCP 聚合注入。
 
-🔒 **检查点 A**：确认创意蓝图包含场面设计 + 因果链 + 角色行为弧线。
+## Step 4: 逐场面生成正文 + 自检
 
-## Step 4: 启动 Agent 3 — Engine Coordinator
+编排器直接生成正文，不启动子 Agent。
 
-使用 Task 工具启动 general_purpose_task 子 Agent：
+### 4.1 写前确认
 
-```
-subagent_type: general_purpose_task
-description: 为第N章加载引擎指令
-query: 你是 Engine Coordinator Agent。请读取 agents/engine-coordinator.md 了解完整职责。
-→ 基于创意蓝图，判定场面类型，加载对应引擎文件，产出引擎指令包。
-→ 读取文件：engines/anti-ai-quickref.md, engines/writing-style.md, term-map.md（🔒术语规范——写前必读）。
-→ 按场面类型加载引擎（映射表详见 supporting-info §引擎加载映射表）。
-→ writing-constraints.md 已通过 get_chapter_context 注入，无需重复读取。
-→ 提取反AI指令(F1-F6) + 硬约束清单 + 术语规范 → 产出引擎指令包。
-```
+确认信息就绪度：角色矩阵 ✓ / 感官分配 ✓ / 反AI指令 ✓ / 硬约束 ✓ / 微事件 ✓ / 伏笔 ✓
 
-Agent 3 返回 → 编排器验证必填字段 → 保存到 `novels/{小说名}/.tmp/ch{N}-engine-package.md`。
+### 4.2 逐场面生成
 
-## Step 5: 启动 Agent 4 — Text Generator
+按起承转合四段逐场面生成：
+- 每段完成后反AI自检（F1-F6）
+- 全文通读后硬约束自检 + 术语合规检查
 
-使用 Task 工具启动 general_purpose_task 子 Agent：
+### 4.3 自检报告
+
+产出正文 + 自检报告（反AI逐项结果 + 硬约束逐条结果）
+
+🔒 **检查点 B**：确认正文完整性 — 字数达标（卷均80-120%，关键转折章120-180%）+ 场面覆盖完整 + 反AI自检通过。
+
+**字数不足时**：先展开蓝图的全部弹性事件。如仍不足，补充世界呼吸/人物互动微场景，**不循环重跑**。
+
+## Step 5: 🔒 存盘 + 移交审计
+
+> **生成与审计分离**：本章只生成正文，审计由 novel-qa 独立进行。
+
+### 5.1 validate_chapter
 
 ```
-subagent_type: general_purpose_task
-description: 生成第N章正文
-query: 你是 Text Generator Agent。请读取 agents/text-generator.md 了解完整职责。
-→ 基于创意蓝图 + 引擎指令包，逐场面生成章节正文。
-→ 写前确认信息就绪度（角色矩阵/感官分配/反AI指令/硬约束/微事件/伏笔）。
-→ 按起承转合四段逐场面生成（占比建议：起10-15%/承40-50%/转20-25%/合10-15%）。
-→ 每段完成后反AI自检；全文通读后硬约束自检 + 术语合规检查（对照 term-map.md）。
-→ 正文纯净化，不含注释/统计/审计备注。按 text-generator.md 输出格式产出正文+自检报告。
+validate_chapter(chapter_text={正文})
 ```
 
-Agent 4 返回 → **章节正文**（chapter_text）+ **自检报告**
+有 violations 必须修复后才能存盘。
 
-🔒 **检查点 B**：确认正文完整性 — 字数达标（卷均80-120%，关键转折章120-180%）+ 场面覆盖完整 + 反AI自检通过。**字数不足时**，编排器应确认 Agent 4 的自检报告中是否已展开蓝图的全部弹性事件。如果未展开，要求 Agent 4 展开（不是重写）；如果已展开仍不足，手动补充世界呼吸/人物互动微场景，**不循环重跑 Agent 4**。
-
-## Step 6: 🔒 存盘 + 移交审计
-
-> **生成与审计分离原则**：本章只负责生成正文，不执行审计。审计由 novel-qa 独立进行。
-
-### 6.1 调用 writing_finish
+### 5.2 writing_finish
 
 ```
-writing_finish(chapter_id, chapter_text, summary={Agent 4 自检报告摘要},
-  key_events={创意蓝图事件清单}, characters_involved={出场角色 ID 列表},
-  new_foreshadows={新种伏笔}, resolved_foreshadows={回收伏笔}, self_check='passed')
+writing_finish(novel_name, chapter_number, chapter_text, summary, key_events,
+  characters_involved, new_foreshadows, resolved_foreshadows, self_check='passed')
 ```
 
-> `self_check` 是 Agent 4 的自检报告，不是 novel-qa 的独立审计。
+### 5.3 更新角色与关系快照
 
-### 6.1.1–6.1.4 更新角色与关系快照
+对每个出场角色：
+- `character_increment` — 增量更新状态（identity/ability/goal/knows/relationships）
+- `character_snapshot` — 保存快照到独立表
+- 对有显著变化的关系：`relation_snapshot`
+- 对有显著演化的角色：`distillation_evolve`（主角色每次都调，配角仅显著变化时调）
 
-每章写完后，必须更新出场角色状态。详细伪代码详见 supporting-info §DB 存盘伪代码：
-- **6.1.1** `character_increment` — 增量更新角色状态（identity/ability/goal/knows/relationships）
-- **6.1.2** `character_snapshot` — 保存角色快照到独立表（供 get_chapter_context 消费）
-- **6.1.3** `relation_snapshot` — 保存有显著变化的角色关系快照
-- **6.1.4** `distillation_evolve` — 记录角色蒸馏模型演化增量（决策/认知/信念/关系/能力/弧线——每章写完后，对每个**有显著变化**的角色调用）
+### 5.4 存盘
 
-### 6.2 存盘
+正文写入 `novels/{小说名}/正文/第{NNN}章-{标题}.md`。纯净化：只写正文，不含注释/统计/审计备注。
 
-正文写入 `novels/{小说名}/正文/第{NNN}章-{标题}.md`。正文纯净化：只写入正文部分（分隔线 `---` 之前），不含注释/统计/审计备注。
+### 5.5 一致性同步
 
-### 6.3 自动一致性同步
-
-```python
+```
 consistency_guard(novel_name="NOVEL_NAME", auto_sync=True)
 ```
 
-🔒 **不可跳过**：跳过会导致设定文件与 DB 不一致，后续 Agent 可能基于过时信息工作。原理详见 supporting-info §consistency_guard 自动同步原理。
+🔒 **不可跳过**。
 
-### 6.4 清理临时文件
-
-删除 `novels/{小说名}/.tmp/` 目录（保留创意蓝图在 `创意决策/` 目录）。详见 supporting-info §临时文件清理。
-
-### 6.5 移交审计
+### 5.6 移交审计
 
 ```
 第{NNN}章生成完成。是否进行独立审计？
-- 输入"审计" → 触发 novel-qa 进行15维度扫描
-- 输入"继续" → 进入下一章写作
+- 输入"审计" → 触发 novel-qa
+- 输入"继续" → 进入下一章
 ```
-
-审计由 novel-qa 独立执行，不阻塞写作流程。
 
 </what-to-do>
 
 <supporting-info>
 
-## Agent 输出格式验证表
+## 创意蓝图格式
 
-编排器需要验证以下字段的存在性和完整性——确保下游 Agent 获得足够信息输入，避免信息断层导致创意偏离或正文质量下降：
+```markdown
+# Ch{N} 创意蓝图
 
-| Agent | 必填字段 | 格式 |
-|-------|---------|------|
-| Agent 1 | `人物档案` `伏笔清单` `缺口标注` | 人物档案建议压缩到核心信息密度（单角色约占上下文包的 5–10%，保留动机、能力状态、关系张力等本章必需信息，细节可裁剪），伏笔含本章操作，缺口含缺失信息类型 |
-| Agent 2 | `场面设计` `因果链` `角色行为弧线` `叙事节奏` `已创建实体` | 场面数量占本章叙事负荷的合理比例（常规章 2–4 个，根据章节复杂度调整；高密度转折章可达 5–6 个），因果链含前因→后果→角色选择，弧线含失控时刻，新实体已通过 MCP 创建并记录 ID |
-| Agent 3 | `场面引擎指令` `反AI指令(F1-F6)` `硬约束清单` | 每场面有定制引擎指令，反AI指令具体到本章可执行项 |
-| Agent 4 | `章节正文` `自检报告` | 正文长度约为卷均章节的 80–120%（常规章），关键转折章可放宽至 120–180%；纯净化无注释；自检报告含反AI逐项结果+硬约束逐条结果 |
+## 场面设计
+### 场面 1: {标题}
+- AES: {类型标签}
+- 基调: {调性} | 写透/粗放 | 克制约束 | 微动作
+- 冲突: {核心冲突}
+- 角色: {出场角色}
+- 因果: {前因→选择→后果}
 
-字段缺失会导致下游 Agent 信息不足，进而影响创意质量或正文完整性，需要按失败处理表启动重试或手动补全。
+### 场面 2: ...
 
-## 阶段指令与引擎加载
+## 因果链
+{事件A} → {角色选择} → {事件B} → ...
 
-**阶段指令**：`skill_loader("novel-chapter-writer", "phase", "b2-chapter")` — 编排器在 Step 2 启动前加载，注入当前上下文。
+## 角色弧线
+- {角色1}: {起始状态} → {失控时刻} → {结束状态}
+- {角色2}: ...
 
-**引擎按需加载**：Agent 3 在创意蓝图中为每个场面标注 AES 类型标签。编排器收到蓝图后调用 `resolve_engines(AES_tags)`，自动从 `ENGINE_MATRIX` 按场面类型匹配引擎文件并加载内容。
+## 伏笔操作
+- 种: {新伏笔}
+- 推进: {已有伏笔}
+- 回收: {待回收伏笔}
 
-**叙事声音统一性**：`resolve_engines` 始终注入 `author-voice` 引擎（在 `_always` 桶中），确保跨场次的作者声音一致性。若某场面有特殊声音需求（如回忆片段、书信体），Agent 3 可标注 `AES:emotion` 或 `AES:mystery` 来叠加变体。
+## 弹性事件
+1. {弹性事件1} (~500字)
+2. {弹性事件2} (~500字)
 
-### 引擎加载映射表
-
-场面类型→引擎映射由 `ENGINE_MATRIX`（`tools_writing.py`）硬编码管理，编排器层自动解析，不交给模型选择。详见 `ENGINE_MATRIX` 定义。`resolve_engines` 调用即自动加载匹配引擎，无需人为猜测。
-
-在 SKILL.md 手写此映射表是旧模式。映射表的权威源已迁移到 `ENGINE_MATRIX`。
-
-## 子 Agent 启动模板
-
-Step 2-5 均使用 Task 工具启动子 Agent，统一结构如下：
-
+## 已创建实体
+- character: {name} (id={id})
+- world: {name} (id={id})
+- foreshadow: {id}
 ```
-subagent_type: {search | general_purpose_task}
-description: {任务简述}
-query: 你是 {Agent 角色} Agent。请读取 .claude/skills/novel-chapter-writer/agents/{agent-file}.md 了解你的完整职责和输出格式。
-
-你的任务：{任务描述}
-
-{输入数据}
-
-要求：
-1. {具体要求 1}
-2. {具体要求 2}
-...
-N. 按 {agent-file}.md 中定义的输出格式产出结果
-```
-
-## raw_data 内容要求
-
-以下信息是 Agent 1 有效工作的基础，缺失任何一项都会导致上下文压缩失真：
-- 本章核心事件（来自卷级事件大纲）
-- 声音适配标记（来自卷级事件大纲）
-- 涉及的世界元素定义（来自世界元素索引）
-- 人物档案/伏笔/时间线（来自 MCP）
 
 ## DB 存盘伪代码
 
-### 6.1.1 角色状态增量更新（character_increment）
-
-每章写完后，必须用 `character_increment` 增量更新出场角色的状态：
+### 角色状态增量更新（character_increment）
 
 ```python
 for character in involved_characters:
@@ -314,9 +270,7 @@ for character in involved_characters:
     )
 ```
 
-### 6.1.2 角色快照（character_snapshot）
-
-`character_increment` 写入 `characters.current_snapshot`（可变），但 `get_chapter_context` 和 `character_detail` 从 `character_state_snapshots` 表读取。必须同时写入快照表，下游才能读到数据：
+### 角色快照（character_snapshot）
 
 ```python
 for character in involved_characters:
@@ -335,9 +289,7 @@ for character in involved_characters:
     )
 ```
 
-### 6.1.3 关系快照（relation_snapshot）
-
-Creative Director 在创意蓝图中设计了关系变化。每章写完后，对有显著变化的角色关系调用快照：
+### 关系快照（relation_snapshot）
 
 ```python
 for relation_change in blueprint.relationship_changes:
@@ -347,19 +299,17 @@ for relation_change in blueprint.relationship_changes:
         to_name=relation_change.to_name,
         chapter_number=chapter_number,
         intensity=relation_change.new_intensity,
-        status=relation_change.new_status,  # active/broken/evolved/hidden
+        status=relation_change.new_status,
         notes=relation_change.description
     )
 ```
 
-### 6.1.4 人物蒸馏演化记录（distillation_evolve）
-
-每章写完后，对**有显著演化**的角色（决策变化/信念转变/能力解锁/弧线推进/关键抉择），记录蒸馏模型增量：
+### 人物蒸馏演化记录（distillation_evolve）
 
 ```python
 for character in characters_with_evolution:
     if not character.distillation_tracked:
-        continue  # 跳过已关闭蒸馏追踪的角色（临时NPC）
+        continue
     distillation_evolve(
         novel_name="NOVEL_NAME",
         character_name=character.name,
@@ -376,37 +326,98 @@ for character in characters_with_evolution:
     )
 ```
 
-主角色（`distillation_tracked=1`）应每次写完后都调（持续追踪弧线推进），配角只在有显著变化时调（避免噪音）。临时NPC（`distillation_tracked=0`）会被上述 `if not character.distillation_tracked: continue` 自动跳过。
+## Step 4 执行规范
+
+### 事件分类
+
+| 类型 | 作用 | 特征 |
+|------|------|------|
+| 线索推动型 | 推动线索进展 | 有线索标记（F1/F2...） |
+| 人物关系型 | 推动关系变化 | 互动后信任/怀疑/依赖变化 |
+| 场景铺垫型 | 为高潮铺垫 | 不直接推进，让后续更有冲击力 |
+| 人物展示型 | 自然展现人物 | 通过对话/行动体现，禁评价词 |
+| 伏笔埋设型 | 长线回收准备 | 必须填foreshadow_plant |
+
+### 事件层级
+
+| 层级 | 粒度 | 爽点要求 |
+|------|------|---------|
+| 超级 | 卷级 | 卷终决战/命运转折 |
+| 大 | 弧级(8-12章) | Boss战/重大转折 |
+| 中 | 段级(3-5章) | 阶段胜利/关系突破 |
+| 小 | 章级 | 小胜利/小揭露/角色高光 |
+| 微 | 场景级 | 对话钩子/信息投放 |
+
+### 爽点密度
+
+- 微/小爽点：每章至少1个
+- 中爽点：每3-5章
+- 大高潮：每8-12章
+- 超级高潮：每卷1-2次
+- **平路不超过3章**
+
+### 4层内容模型
+
+| 层 | 内容 | 占比 | 要求 |
+|----|------|------|------|
+| A推进层 | 主线/冲突/升级 | 40-50% | 每段必须有新信息 |
+| B人物层 | 对话/心理/关系 | 25-30% | 主观镜头偏心 |
+| C世界层 | 环境/NPC/世界观 | 15-20% | 用身体感受替代精确数字 |
+| D氛围层 | 感官/节奏/伏笔 | 5-10% | 锯齿状叙事 |
+
+### 章节结构变体（每5章至少2种）
+
+| 变体 | 适用 | 结构 |
+|------|------|------|
+| 标准型 | 常规推进 | 起→承→转→合 |
+| 突入型 | 延续高潮 | 直接从转开始→合留悬念 |
+| 日常型 | 过渡铺垫 | 起→长段日常承→安静收束 |
+| 倒叙型 | 揭露回忆 | 合段开头→倒回起→承→解释 |
+| 碎片型 | 多线切换 | 3-4个短场景碎片拼接 |
+| 螺旋型 | 高潮核心 | 起极短→承极长→转爆发→合极短 |
+
+### NPC互动规则（每章至少2个有动机NPC）
+
+| 类型 | 动机 | 对话特点 |
+|------|------|---------|
+| 商贩 | 利益驱动 | 价格变动/供需/行情 |
+| 居民 | 地区文化 | 生活态度/舆论/流言 |
+| 军人 | 专业背景 | 术语/经验/立场 |
+| 逃亡者 | 创伤求生 | 谨慎/回避/试探 |
+
+NPC必须有：姓名/绰号 + 背景暗示 + 可见动机 + 与主角的互动痕迹。
+
+### 字数控制
+
+- **最低**: 3000字（不含标点）
+- **目标**: 3000-5000字
+- 不足3000时按优先级填充：
+  1. 先展开蓝图的弹性事件储备（世界呼吸/人物塑造/费笔纹理/人物互动）
+  2. 再扩展现有场面的感官维度（嗅觉/触觉/温度/环境音）
+  3. 再加入角色微动作/微表情/习惯细节
+  4. **填充标准**：每次填充引入新内容（新动作/新对话/新冲突/新事件），不重复已有内容
+
+### 内容丰富度14项检查
+
+| 检查项 | 要求 |
+|--------|------|
+| 章节结构 | 使用合适变体，近5章至少2种不同变体 |
+| 章末钩子 | 有钩子或确认是日常型 |
+| 爽点密度 | 本章至少1个微/小爽点 |
+| 信息缺口 | 至少1个 |
+| 日常事件 | 2-3个日常场景 |
+| NPC出场 | 至少2个有动机NPC |
+| 场景搭建 | 每场景五感氛围铺垫 |
+| 世界观展示 | 至少3个元素自然融入 |
+| 人物性格 | 微表情/动作展示（禁直白词） |
+| 分支事件 | 占15%-25%字数 |
+| 4层内容 | A40-50%+B25-30%+C15-20%+D5-10% |
+| 反注水 | 无孤立感官/无因果过渡/无重复意象 |
+| 场景密度 | 每3段至少1段"同时做2+件事" |
+| 伏笔处理 | 伏笔已标记并填写foreshadow_plant |
 
 ## consistency_guard 自动同步原理
 
-Agent 2 在创意决策中可能通过 MCP 创建了新实体（DB 已有），编排器无需手动遍历写入文件——由 `consistency_guard` 自动完成：
-
-```python
-# 一致性守卫自动检测 DB hash 变更 → 同步到文件
-# DB-authoritative 数据（world/character/foreshadow）：DB 有变→自动写入文件
-# 无需手动遍历 blueprint.new_characters 等——MCP 自动处理
-consistency_guard(novel_name="NOVEL_NAME", auto_sync=True)
-```
-
-**原理**：Agent 2 通过 `character_create` / `world_upsert` / `foreshadow_plant` 写入 DB 时，`consistency_guard` 自动计算并存储了 DB 记录的 hash。重新调用时检测到 hash 变更，按权威源规则自动同步到文件。一个调用覆盖所有实体类型，无需逐个遍历。
-
-**🔒 不可跳过此步骤**：跳过会导致设定文件与 DB 不一致，后续 Agent 读取时可能基于过时信息工作，引发角色状态错误或伏笔冲突。
-
-## 临时文件清理
-
-```python
-# 删除本章临时文件（保留创意蓝图在 创意决策/ 目录）
-import shutil
-shutil.rmtree("novels/{小说名}/.tmp/", ignore_errors=True)
-```
-
-## 子 Agent 指令文件索引
-
-每个 Agent 的详细指令见：
-- `.claude/skills/novel-chapter-writer/agents/context-curator.md` — Agent 1 完整职责
-- `.claude/skills/novel-chapter-writer/agents/creative-director.md` — Agent 2 完整职责
-- `.claude/skills/novel-chapter-writer/agents/engine-coordinator.md` — Agent 3 完整职责
-- `.claude/skills/novel-chapter-writer/agents/text-generator.md` — Agent 4 完整职责
+编排器在创意决策中通过 MCP 创建了新实体（DB 已有），`consistency_guard` 自动检测 DB hash 变更并同步到文件。一个调用覆盖所有实体类型。
 
 </supporting-info>
