@@ -1,68 +1,69 @@
 name: world
 display_name: 世界观
-authority: db
-
 db_table: world_settings
 id_field: name
-composite_id_fields: [category, name]
-order_by: "category, name"
-
 file_dir: "设定/世界观"
-file_pattern: "{category_file}.md"
+authority: db
 merge_mode: section_replace
 section_marker: "## {category}: {name}"
+file_pattern: "{category_file}.md"
+file_title: "{category}"
+header_template: "# {category_file}"
+skip_existing: false
+composite_id_fields: [category, name]
+transforms:
+  category: builtin.resolve_category_file
+  faction_id: builtin.resolve_faction
 
 category_file_map:
-  core_setting: "核心设定/"
-  bestiary: "异灵/"
-  ability: "能力/"
-  item: "物品/"
-  location: "地点/"
-  faction: "势力/"
-  economy: "经济体系/"
-  daily_life: "日常生活/"
-  history: "历史事件/"
-  race: "种族/"
-  building: "建筑/"
-  culture: "文化/"
-  plant: "植物/"
+  core_setting: "核心设定"
+  bestiary: "异灵图鉴"
+  ability: "能力体系"
+  item: "物品装备"
+  economy: "经济体系"
+  daily_life: "日常生活"
+  history: "历史事件"
+  location: "地图"
+  faction: "势力"
+  race: "种族"
 
 sections:
   - heading: "{category}: {name}"
+    type: blockquote
+    blockquotes:
+      - column: name
+        label: 条目名
+
+  - heading: 元数据
     type: fields
     fields:
       - column: keys
-        optional: true
+        type: list
       - column: secondary_keys
-        optional: true
+        type: list
       - column: tags
-        optional: true
+        type: list
       - column: related_ids
         md_key: related
-        optional: true
-      - column: region
-        optional: true
+        type: list
       - column: volume_range
-        optional: true
+      - column: region
       - column: faction_id
-        optional: true
+        md_key: faction
+        transform: resolve_faction
       - column: writing_guide
-        optional: true
       - column: priority
-        optional: true
-        condition: null
+        type: int
       - column: is_constant
         type: bool
-        optional: true
       - column: first_appearance_chapter
-        md_key: 首次出场
-        type: int
-        optional: true
+        transform: resolve_chapter_number
+      - column: status
+
   - heading: 详细内容
     type: jsonb
     jsonb_column: data
-    jsonb_key: content
-    condition: always
+    jsonb_key: data
 
 file_to_db:
   enabled: true

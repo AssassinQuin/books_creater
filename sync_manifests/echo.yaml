@@ -1,43 +1,33 @@
 name: echo
 display_name: 回响
-authority: db
-
 db_table: echoes
 id_field: id
-order_by: "id ASC"
-
 file_dir: "设定/大纲"
-file_pattern: "回响清单.md"
+authority: db
 merge_mode: section_replace
 section_marker: "## echo: {id}"
+file_pattern: "回响清单.md"
+file_title: "回响清单"
+header_template: "# 回响清单"
+skip_existing: false
 
 sections:
   - heading: "echo: {id}"
     type: fields
     fields:
       - column: source_event
-        optional: false
       - column: echo_type
-        optional: false
       - column: echo_description
-        optional: true
       - column: strong_related
-        type: bool
-        optional: false
+        type: int
       - column: source_chapter_id
         md_key: source_chapter
         transform: resolve_chapter_number
-        optional: true
       - column: echo_chapter_id
         md_key: echo_chapter
         transform: resolve_chapter_number
-        optional: true
       - column: tags
         type: list
-        optional: true
-
-transforms:
-  resolve_chapter_number: builtin.resolve_chapter_number
 
 file_to_db:
   enabled: true

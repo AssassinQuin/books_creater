@@ -1,42 +1,39 @@
 name: foreshadow
 display_name: 伏笔
-authority: db
-
 db_table: foreshadows
 id_field: id
-order_by: "id ASC"
-
 file_dir: "设定/大纲"
-file_pattern: "伏笔清单.md"
+authority: db
 merge_mode: section_replace
 section_marker: "## foreshadow: {id}"
+file_pattern: "伏笔清单.md"
+file_title: "伏笔清单"
+header_template: "# 伏笔清单"
+skip_existing: false
 
 sections:
   - heading: "foreshadow: {id}"
     type: fields
     fields:
       - column: description
-        optional: false
       - column: status
-        optional: false
       - column: importance
-        optional: true
       - column: planted_chapter_id
         md_key: planted_chapter
         transform: resolve_chapter_number
-        optional: true
       - column: planned_recall_chapter
-        md_key: planned_recall
-        optional: true
+        type: int
+      - column: actual_recall_chapter_id
+        md_key: actual_recall_chapter
+        transform: resolve_chapter_number
       - column: related_characters
         type: list
-        optional: true
       - column: tags
         type: list
-        optional: true
-
-transforms:
-  resolve_chapter_number: builtin.resolve_chapter_number
+      - column: clue_type
+      - column: reveal_strategy
+      - column: related_foreshadows
+        type: list
 
 file_to_db:
   enabled: true

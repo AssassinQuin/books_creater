@@ -4,15 +4,16 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-PROJECT_ROOT = os.environ.get(
+PROJECT_ROOT = os.path.abspath(os.environ.get(
     "NOVEL_PROJECT_ROOT",
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
+))
 
-LIBSQL_DB_PATH = os.environ.get(
+_raw_db_path = os.environ.get(
     "LIBSQL_DB_PATH",
     os.path.join(PROJECT_ROOT, "data", "novel.db")
 )
+LIBSQL_DB_PATH = _raw_db_path if os.path.isabs(_raw_db_path) else os.path.abspath(os.path.join(PROJECT_ROOT, _raw_db_path))
 
 mcp = FastMCP("novel-db", instructions="网文小说创作数据库 MCP，管理小说项目、世界观、人物、章节、伏笔、时间线等结构化数据。")
 

@@ -1,0 +1,111 @@
+name: volume
+display_name: 卷级大纲
+db_table: volumes
+id_field: number
+file_dir: "设定/大纲"
+authority: db
+merge_mode: overwrite
+file_pattern: "V{number:02d}-{title}.md"
+file_title: "V{number} {title}"
+header_template: "# V{number} {title}"
+skip_existing: false
+order_by: "number ASC"
+
+sections:
+  - heading: 元信息
+    type: blockquote
+    blockquotes:
+      - column: core_emotion
+        label: 核心情绪
+      - column: pov_anchor
+        label: POV锚点
+      - column: time_span
+        label: 时间跨度
+      - column: voice_mapping
+        label: 声音适配
+
+  - heading: 卷级因果链
+    type: raw
+    raw_column: causal_chain
+
+  - heading: 起
+    type: acts
+    acts:
+      - ["起", "act_intro"]
+
+  - heading: 承
+    type: acts
+    acts:
+      - ["承", "act_rise"]
+
+  - heading: 转
+    type: acts
+    acts:
+      - ["转", "act_twist"]
+
+  - heading: 合
+    type: acts
+    acts:
+      - ["合", "act_resolution"]
+
+  - heading: 下卷衔接
+    type: jsonb
+    jsonb_column: next_volume_bridge
+    jsonb_key: next_volume_bridge
+
+  - heading: 人物弧光
+    type: table
+    table_column: character_arcs
+
+  - heading: 互动矩阵
+    type: table
+    table_column: interaction_matrix
+
+  - heading: 不做的
+    type: jsonb
+    jsonb_column: boundaries
+    jsonb_key: boundaries
+
+  - heading: 悬念锚点
+    type: jsonb
+    jsonb_column: suspense_anchors
+    jsonb_key: suspense_anchors
+
+  - heading: 关键对话
+    type: jsonb
+    jsonb_column: key_dialogues
+    jsonb_key: key_dialogues
+
+  - heading: 写作优先级
+    type: jsonb
+    jsonb_column: writing_priorities
+    jsonb_key: writing_priorities
+
+  - heading: 硬约束
+    type: jsonb
+    jsonb_column: hard_constraints
+    jsonb_key: hard_constraints
+
+  - heading: 信息投放节奏
+    type: table
+    table_column: info_pacing
+
+  - heading: 节奏分配
+    type: table
+    table_column: rhythm_allocation
+
+  - heading: 世界状态
+    type: raw
+    raw_column: world_state
+
+  - heading: 主线脉络
+    type: jsonb
+    jsonb_column: main_plotlines
+    jsonb_key: main_plotlines
+
+  - heading: 备注
+    type: raw
+    raw_column: notes
+
+file_to_db:
+  enabled: true
