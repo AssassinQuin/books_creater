@@ -74,7 +74,7 @@ def _character_update_by_id(character_id: int, name: str = "", role: str = "", f
                      appearance: str = "", personality: str = "", background: str = "",
                      goals: str = "", weaknesses: str = "", speech_style: str = "",
                      catchphrase: str = "", arc_notes: str = "", is_active: bool = True,
-                     _status_json: str = "",
+                     status_json: str = "",
                      appearance_detail: str = "", decision_engine: str = "",
                      voice_fingerprint: str = "", ability_system: str = "",
                      behavior_pattern: str = "", current_snapshot: str = "",
@@ -86,8 +86,10 @@ def _character_update_by_id(character_id: int, name: str = "", role: str = "", f
     if faction_id: fields["faction_id"] = faction_id
     if race: fields["race"] = race
     if ability_level: fields["ability_level"] = ability_level
-    if status: fields["status"] = status
-    if _status_json: fields["status"] = _status_json
+    if status_json:
+        fields["status"] = status_json
+    elif status:
+        fields["status"] = status
     if appearance: fields["appearance"] = appearance
     if personality: fields["personality"] = personality
     if background: fields["background"] = background
@@ -247,7 +249,7 @@ def character_update(novel_name: str, character_name: str, name: str = "", role:
                              appearance: str = "", personality: str = "", background: str = "",
                              goals: str = "", weaknesses: str = "", speech_style: str = "",
                              catchphrase: str = "", arc_notes: str = "", is_active: bool = True,
-                             _status_json: str = "",
+                             status_json: str = "",
                              appearance_detail: str = "", decision_engine: str = "",
                              voice_fingerprint: str = "", ability_system: str = "",
                              behavior_pattern: str = "", current_snapshot: str = "",
@@ -255,6 +257,7 @@ def character_update(novel_name: str, character_name: str, name: str = "", role:
                              distillation_tracked: bool = True) -> str:
     """按角色名更新人物信息（无需ID）。传入需要修改的字段，空值/零值会被忽略。
     distillation_tracked: 人物蒸馏追踪开关（默认True），设为False可关闭临时NPC的蒸馏记录。
+    status_json: 传入完整 JSON 字符串作为 status 字段值（优先于 status 参数）。
       novel_name: 小说名称
       character_name: 角色名
     """
@@ -264,7 +267,7 @@ def character_update(novel_name: str, character_name: str, name: str = "", role:
         return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
     return _character_update_by_id(char["id"], name, role, faction_id, race, ability_level, status,
                             appearance, personality, background, goals, weaknesses, speech_style,
-                            catchphrase, arc_notes, is_active, _status_json,
+                            catchphrase, arc_notes, is_active, status_json,
                             appearance_detail, decision_engine, voice_fingerprint, ability_system,
                             behavior_pattern, current_snapshot, growth_trajectory,
                             distillation_tracked=distillation_tracked)

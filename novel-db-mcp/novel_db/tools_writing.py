@@ -7,6 +7,7 @@ from .tools_chapter import _save_chapter_summary_internal
 from .constraints import validate_chapter_text, _get_constraints, _enrichment_level, validate_with_db_rules
 from .prompts import _build_event_checklist
 from .sync import _record_db_hash
+from .errors import ValidationError
 
 
 @mcp.tool
@@ -161,6 +162,8 @@ def validate_chapter(chapter_text: str, novel_name: str = "") -> str:
             result["db_warnings"] = [v["message"] for v in db_warnings]
         except Exception as e:
             result["db_error"] = str(e)
+            result["passed"] = False
+            result["db_rules_available"] = False
 
     return json.dumps(result, ensure_ascii=False)
 
@@ -267,14 +270,12 @@ def writing_rule_list(novel_name: str, category: str = "", is_active: bool = Tru
 # ── writing_finish 内部函数（拆分自原单体函数）──
 
 
-def _wf_validate(chapter_text: str, self_check: str, novel_id: int = 0) -> dict | None:
-    """Step 1: 硬约束校验 + DB规则校验 + 自检门控。通过返回 validation dict，失败返回 None。
-    返回格式: {"passed": True, "validation": {...}, "stats": {...}, "enrichment": ...} 或 None
-    失败时直接返回 JSON 错误响应（由 writing_finish 序列化后返回）。
+def _wf_validate(chapter_text: str, self_check: str, novel_id: int = 0) -> dict:
+    """Step 1: 硬约束校验 + DB规则校验 + 自检门控。通过返回 validation dict。
+    失败时抛出 ValidationError。
     """
     validation = validate_chapter_text(chapter_text)
 
-    # Run DB-driven rules if novel_id provided
     if novel_id:
         db_result = validate_with_db_rules(novel_id, chapter_text)
         db_violations = db_result.get("violations", [])
@@ -286,31 +287,26 @@ def _wf_validate(chapter_text: str, self_check: str, novel_id: int = 0) -> dict 
             validation["violations"].extend([v["message"] for v in db_errors])
 
     if not validation["passed"]:
-        err = {
-            "ok": False,
-            "error": "硬约束校验不通过，拒绝存盘",
-            "violations": validation["violations"],
-            "stats": validation["stats"],
-        }
         stats = validation["stats"]
         wc = stats.get("word_count", 0)
         c = _get_constraints()
         hard_abs = c.get("hard_abs", {})
         min_words = hard_abs.get("word_count", {}).get("min", 0)
-        if wc < min_words:
-            err["enrichment"] = _enrichment_level(wc, min_words)
-        # 返回带 _is_error 标记的 dict，writing_finish 识别后直接序列化返回
-        err["_is_error"] = True
-        return err
+        enrichment = _enrichment_level(wc, min_words) if wc < min_words else None
+        raise ValidationError(json.dumps({
+            "ok": False,
+            "error": "硬约束校验不通过，拒绝存盘",
+            "violations": validation["violations"],
+            "stats": stats,
+            **({"enrichment": enrichment} if enrichment else {}),
+        }, ensure_ascii=False))
 
     if self_check != "passed":
-        err = {
+        raise ValidationError(json.dumps({
             "ok": False,
             "error": "自检未完成，拒绝存盘",
             "hint": "调 chapter_self_check(chapter_text) → 逐项检查 → 修复 → 再调 writing_finish(self_check='passed')",
-            "_is_error": True,
-        }
-        return err
+        }, ensure_ascii=False))
 
     return {
         "passed": True,
@@ -408,10 +404,10 @@ def writing_finish(novel_name: str, chapter_number: int, summary: str, chapter_t
     chapter_id = ch["id"]
 
     # Step 1: 硬约束校验 + DB规则校验 + 自检门控
-    result = _wf_validate(chapter_text, self_check, novel_id)
-    if result.get("_is_error"):
-        del result["_is_error"]
-        return json.dumps(result, ensure_ascii=False)
+    try:
+        result = _wf_validate(chapter_text, self_check, novel_id)
+    except ValidationError as e:
+        return str(e)
 
     # Step 2: 保存摘要 + 更新章节状态
     _wf_save_summary(chapter_id, ch["novel_id"], chapter_number, summary,

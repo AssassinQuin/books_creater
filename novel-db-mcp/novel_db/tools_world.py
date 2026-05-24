@@ -357,7 +357,14 @@ def world_deactivate(novel_name: str, category: str, name: str, reason: str = ""
                (novel_id, category, name), fetch="one")
     if not ws:
         return json.dumps({"error": f"世界元素 '{category}:{name}' 不存在"}, ensure_ascii=False)
-    data = ws["data"] if isinstance(ws["data"], dict) else {}
+    data = ws["data"]
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, TypeError):
+            data = {"_raw": data}
+    if not isinstance(data, dict):
+        data = {}
     data["_deactivated"] = True
     data["_deactivation_reason"] = reason
     query("UPDATE world_settings SET status='inactive', data=?, updated_at=datetime('now') WHERE id=?",
@@ -422,7 +429,7 @@ def world_batch_update_meta(novel_name: str, updates_json: str) -> str:
 @mcp.tool
 def sync_lorebook(novel_name: str) -> str:
     """从 设定/世界观/ 目录下的 MD 文件同步数据到 DB。
-    解析 ## category: name 格式，upsert 到 world_settings 表。
+    递归扫描子目录，解析 ## category: name 格式，upsert 到 world_settings 表。
     每次写作前调一次，确保 DB 与文件一致。"""
     novel_dir = os.path.join(_NOVELS_BASE, novel_name, "设定", "世界观")
     if not os.path.isdir(novel_dir):
@@ -434,13 +441,14 @@ def sync_lorebook(novel_name: str) -> str:
     novel_id = novel["id"]
 
     changes = {}
-    md_files = sorted(
-        f for f in os.listdir(novel_dir)
-        if f.endswith(".md") and not f.startswith("_")
-    )
+    md_files = []
+    for root, _dirs, files in os.walk(novel_dir):
+        for f in sorted(files):
+            if f.endswith(".md") and not f.startswith("_"):
+                md_files.append(os.path.join(root, f))
 
-    for fname in md_files:
-        fpath = os.path.join(novel_dir, fname)
+    errors = []
+    for fpath in md_files:
         with open(fpath, "r", encoding="utf-8") as f:
             text = f.read()
 
@@ -481,10 +489,15 @@ def sync_lorebook(novel_name: str) -> str:
                     in_meta = False
                 else:
                     in_meta = False
+                    if line.startswith("> **条目名**"):
+                        continue
                     content_lines.append(line)
 
             content = "\n".join(content_lines).strip()
             content = re.sub(r"^---\s*$", "", content, flags=re.MULTILINE).strip()
+
+            if not content:
+                continue
 
             data = {"content": content}
             data_json = json.dumps(data, ensure_ascii=False)
@@ -544,8 +557,13 @@ def sync_lorebook(novel_name: str) -> str:
                 changes[cat_key] = changes.get(cat_key, 0) + 1
             except Exception as e:
                 logger.warning(f"sync_lorebook skip {category}:{name}: {e}")
+                errors.append({"category": category, "name": name, "error": str(e)})
 
-    return json.dumps({"ok": True, "novel_id": novel_id, "changes": changes}, ensure_ascii=False)
+    result = {"ok": len(errors) == 0, "novel_id": novel_id, "changes": changes}
+    if errors:
+        result["errors"] = errors
+        result["error_count"] = len(errors)
+    return json.dumps(result, ensure_ascii=False)
 
 
 @mcp.tool

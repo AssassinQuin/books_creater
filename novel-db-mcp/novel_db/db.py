@@ -1,5 +1,6 @@
 import os
 import json
+import threading
 from typing import Any
 
 from fastmcp import FastMCP
@@ -21,8 +22,22 @@ import sqlite3
 
 os.makedirs(os.path.dirname(LIBSQL_DB_PATH), exist_ok=True)
 
+_local = threading.local()
+
+
 def get_conn():
-    return sqlite3.connect(LIBSQL_DB_PATH)
+    if not hasattr(_local, 'conn') or _local.conn is None:
+        _local.conn = sqlite3.connect(LIBSQL_DB_PATH)
+    return _local.conn
+
+
+def close_conn():
+    if hasattr(_local, 'conn') and _local.conn is not None:
+        try:
+            _local.conn.close()
+        except Exception:
+            pass
+        _local.conn = None
 
 def _adapt_param(p):
     if p is None:
@@ -71,8 +86,6 @@ def query(sql: str, params: tuple = (), fetch: str = "all") -> Any:
     except Exception as e:
         conn.rollback()
         raise e
-    finally:
-        conn.close()
 
 
 def get_novel_config(novel_id: int, config_type: str, name: str, default=None):

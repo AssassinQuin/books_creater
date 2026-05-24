@@ -188,8 +188,9 @@ def get_chapter_context(novel_name: str, chapter_number: int,
     try:
         threads = query("SELECT * FROM plot_threads WHERE novel_id = ? AND status = 'active'", (novel_id,))
         result["active_threads"] = [dict(r) for r in threads] if threads else []
-    except Exception:
+    except Exception as e:
         result["active_threads"] = []
+        result.setdefault("_errors", []).append(f"plot_threads query failed: {e}")
 
     echoes = query(
         "SELECT e.source_event, e.echo_type, e.echo_description, e.strong_related, "
@@ -599,55 +600,36 @@ def dimension_log(novel_name: str, chapter_id: int, dimension: str,
                   change_type: str, entity_name: str,
                   before_value: dict = None, after_value: dict = None,
                   description: str = "") -> str:
-    """[DEPRECATED] 此工具已废弃，维度变更已由 character_state_snapshots 追踪。记录维度变更。dimension: time/space/ability/economy/character_status
-      novel_name: 小说名称
-    """
-    novel_id = _resolve_novel_id(novel_name)
-
-    bv = json.dumps(before_value or {}, ensure_ascii=False)
-    av = json.dumps(after_value or {}, ensure_ascii=False)
-    query(
-        "INSERT INTO dimension_changes (novel_id, chapter_id, dimension, change_type, "
-        "entity_name, before_value, after_value, description) "
-        "VALUES (?,?,?,?,?,?,?,?)",
-        (novel_id, chapter_id, dimension, change_type, entity_name, bv, av, description),
-        fetch="none"
-    )
-    return json.dumps({"ok": True}, ensure_ascii=False)
+    """[DEPRECATED] 此工具已废弃，维度变更已由 character_state_snapshots 追踪。请使用 character_state_snapshots 替代。"""
+    return json.dumps({"error": "dimension_log 已废弃，请使用 character_state_snapshots 替代"}, ensure_ascii=False)
 
 
 @mcp.tool
 def dimension_query(novel_name: str, dimension: str = "", from_chapter: int = 0,
                     to_chapter: int = 99999) -> str:
-    """[DEPRECATED] 此工具已废弃，维度变更已由 character_state_snapshots 追踪。查询维度变更记录
-      novel_name: 小说名称
-    """
-    novel_id = _resolve_novel_id(novel_name)
-
-    sql = (
-        "SELECT dc.*, c.number as chapter_number FROM dimension_changes dc "
-        "JOIN chapters c ON dc.chapter_id = c.id "
-        "WHERE dc.novel_id = ? AND c.number BETWEEN ? AND ?"
-    )
-    params: list = [novel_id, from_chapter, to_chapter]
-    if dimension:
-        sql += " AND dc.dimension = ?"
-        params.append(dimension)
-    sql += " ORDER BY c.number, dc.id"
-    rows = query(sql, tuple(params))
-    return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
+    """[DEPRECATED] 此工具已废弃，维度变更已由 character_state_snapshots 追踪。请使用 character_state_snapshots 替代。"""
+    return json.dumps({"error": "dimension_query 已废弃，请使用 character_state_snapshots 替代"}, ensure_ascii=False)
 
 
 @mcp.tool
-def timeline_add(novel_name: str, chapter_id: int, event_time: str,
+def timeline_add(novel_name: str, chapter_number: int, event_time: str,
                  event_order: int, event_description: str,
                  characters_involved: list = None,
                  location_id: int = None,
-                 significance: str = "normal") -> str:
-    """添加时间线事件
+                 significance: str = "normal",
+                 chapter_id: int = 0) -> str:
+    """添加时间线事件。优先使用 chapter_number，兼容旧 chapter_id。
       novel_name: 小说名称
+      chapter_number: 章节序号（推荐）
+      chapter_id: 章节ID（兼容旧调用，优先级低于 chapter_number）
     """
     novel_id = _resolve_novel_id(novel_name)
+
+    if chapter_number and not chapter_id:
+        ch = query("SELECT id FROM chapters WHERE novel_id = ? AND number = ?",
+                   (novel_id, chapter_number), fetch="one")
+        if ch:
+            chapter_id = ch["id"]
 
     r = query(
         "INSERT INTO timeline_events (novel_id, chapter_id, event_time, event_order, "

@@ -1,4 +1,5 @@
 from .db import query
+from .errors import NotFoundError
 
 
 def _resolve_novel_id(novel_name_or_id) -> int:
@@ -11,7 +12,7 @@ def _resolve_novel_id(novel_name_or_id) -> int:
         pass
     r = query("SELECT id FROM novels WHERE name = ?", (novel_name_or_id,), fetch="one")
     if not r:
-        raise ValueError(f"小说 '{novel_name_or_id}' 不存在于数据库中")
+        raise NotFoundError(f"小说 '{novel_name_or_id}' 不存在于数据库中")
     return r["id"]
 
 
@@ -20,7 +21,7 @@ def _resolve_chapter_id(novel_name: str, chapter_number: int) -> int:
     r = query("SELECT id FROM chapters WHERE novel_id = ? AND number = ?",
               (novel_id, chapter_number), fetch="one")
     if not r:
-        raise ValueError(f"章节 {chapter_number} 不存在于小说 '{novel_name}' 中")
+        raise NotFoundError(f"章节 {chapter_number} 不存在于小说 '{novel_name}' 中")
     return r["id"]
 
 

@@ -97,6 +97,11 @@ def _get_constraints() -> dict:
     return _CONSTRAINTS_CACHE
 
 
+def invalidate_constraints_cache():
+    global _CONSTRAINTS_CACHE
+    _CONSTRAINTS_CACHE = None
+
+
 def validate_chapter_text(text: str) -> dict:
     violations = []
     stats = {}

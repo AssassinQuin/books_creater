@@ -41,11 +41,19 @@ def health_check(novel_name: str) -> str:
     planted_list = [dict(f) for f in planted]
     if written:
         latest_num = max(c["number"] for c in written)
+        planted_ch_ids = [f["planted_chapter_id"] for f in planted_list if f.get("planted_chapter_id")]
+        ch_num_map = {}
+        if planted_ch_ids:
+            placeholders = ",".join(["?"] * len(planted_ch_ids))
+            ch_rows = query(
+                f"SELECT id, number FROM chapters WHERE id IN ({placeholders})",
+                tuple(planted_ch_ids)
+            )
+            ch_num_map = {r["id"]: r["number"] for r in ch_rows}
         for f in planted_list:
-            planted_ch = query("SELECT number FROM chapters WHERE id = ?",
-                              (f["planted_chapter_id"],), fetch="one")
-            if planted_ch:
-                f["age_chapters"] = latest_num - planted_ch["number"]
+            pcid = f.get("planted_chapter_id")
+            if pcid and pcid in ch_num_map:
+                f["age_chapters"] = latest_num - ch_num_map[pcid]
     result["foreshadow"] = {
         "planted": len(planted), "recalled": recalled or 0,
         "recall_rate": round(recall_rate, 2),
@@ -57,29 +65,40 @@ def health_check(novel_name: str) -> str:
                   "WHERE novel_id = ? AND is_active = 1 AND role != 'protagonist'", (novel_id,))
     core_chars = [c for c in chars if c["role"] in ("ally", "rival", "mentor", "love_interest")]
     char_activity = []
-    for cc in core_chars:
-        recent = query(
-            "SELECT cs.chapter_id FROM chapter_summaries cs "
-            "JOIN chapters ch ON cs.chapter_id = ch.id "
-            "WHERE ch.novel_id = ? AND EXISTS (SELECT 1 FROM json_each(cs.characters_involved) WHERE value = ?) "
-            "ORDER BY ch.number DESC LIMIT 1",
-            (novel_id, cc["id"])
+
+    if core_chars and written:
+        core_char_ids = [cc["id"] for cc in core_chars]
+        placeholders = ",".join(["?"] * len(core_char_ids))
+        latest_num = max(c["number"] for c in written)
+
+        recent_rows = query(
+            f"SELECT cs.chapter_id, ch.id as char_id, ch2.number as ch_number "
+            f"FROM chapter_summaries cs "
+            f"JOIN chapters ch2 ON cs.chapter_id = ch2.id, "
+            f"json_each(cs.characters_involved) je "
+            f"JOIN characters ch ON je.value = ch.id "
+            f"WHERE ch2.novel_id = ? AND ch.id IN ({placeholders}) "
+            f"ORDER BY ch.id, ch2.number DESC",
+            (novel_id, *core_char_ids)
         )
-        last_ch = None
-        if recent and written:
-            ch_num = query("SELECT number FROM chapters WHERE id = ?",
-                           (recent[0]["chapter_id"],), fetch="val")
-            if ch_num:
-                last_ch = ch_num
-                latest_num = max(c["number"] for c in written)
-                gap = latest_num - ch_num
-            else:
-                gap = None
-        else:
-            gap = None
-        char_activity.append({"name": cc["name"], "role": cc["role"],
-                              "last_chapter": last_ch, "gap": gap,
-                              "warning": gap is not None and gap > 10})
+
+        char_last_ch = {}
+        for r in (recent_rows or []):
+            cid = r.get("char_id")
+            if cid and cid not in char_last_ch:
+                char_last_ch[cid] = r.get("ch_number")
+
+        for cc in core_chars:
+            last_ch = char_last_ch.get(cc["id"])
+            gap = (latest_num - last_ch) if last_ch is not None else None
+            char_activity.append({"name": cc["name"], "role": cc["role"],
+                                  "last_chapter": last_ch, "gap": gap,
+                                  "warning": gap is not None and gap > 10})
+    else:
+        for cc in core_chars:
+            char_activity.append({"name": cc["name"], "role": cc["role"],
+                                  "last_chapter": None, "gap": None,
+                                  "warning": False})
     result["character_activity"] = char_activity
 
     ability_changes = query(

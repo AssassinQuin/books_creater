@@ -100,8 +100,12 @@ def _resolve_chapter_number(val, row):
     return f"Ch{ch}" if ch else str(val)
 
 
-def _resolve_category_file(val, row):
-    """Transform: category → 中文文件名（世界观专用）."""
+def _resolve_category_file(val, row, tpl=None):
+    """Transform: category → 中文文件名（世界观专用）.
+    优先从 tpl.category_file_map 查找，回退到内置映射。
+    """
+    if tpl and tpl.category_file_map and val in tpl.category_file_map:
+        return tpl.category_file_map[val]
     _WORLD_CATEGORY_FILES = {
         "core_setting": "核心设定",
         "bestiary": "异灵图鉴",
@@ -113,6 +117,9 @@ def _resolve_category_file(val, row):
         "location": "地图",
         "faction": "势力",
         "race": "种族",
+        "building": "建筑",
+        "culture": "文化",
+        "plant": "植物",
     }
     return _WORLD_CATEGORY_FILES.get(val, val)
 
@@ -521,21 +528,26 @@ class SyncEngine:
 
         return query(sql, tuple(params), fetch="all") or []
 
+    def _replace_category_file(self, tpl: SyncTemplate, text: str, row: dict) -> str:
+        """统一替换 {category_file} 占位符。优先 category_file_map，回退内置映射。"""
+        if "{category_file}" not in text or "category" not in row:
+            return text
+        cat = row["category"]
+        resolved = _resolve_category_file(cat, row, tpl=tpl)
+        if resolved.endswith("/"):
+            resolved = resolved.rstrip("/")
+        return text.replace("{category_file}", resolved)
+
     def _resolve_filepath(self, tpl: SyncTemplate, novel_name: str, row: dict) -> str:
         fname = tpl.file_pattern
 
         if "{category_file}" in fname and "category" in row:
             cat = row["category"]
-            if tpl.category_file_map and cat in tpl.category_file_map:
-                mapped = tpl.category_file_map[cat]
-                if mapped.endswith("/"):
-                    fname = fname.replace("{category_file}", f"{mapped}{row.get('name', cat)}")
-                else:
-                    fname = fname.replace("{category_file}", mapped)
-            elif tpl.transforms and "resolve_category_file" in tpl.transforms:
-                fname = fname.replace("{category_file}", tpl.transforms["resolve_category_file"](cat, row))
+            resolved = _resolve_category_file(cat, row, tpl=tpl)
+            if resolved.endswith("/"):
+                fname = fname.replace("{category_file}", f"{resolved}{row.get('name', cat)}")
             else:
-                fname = fname.replace("{category_file}", str(cat))
+                fname = fname.replace("{category_file}", resolved)
 
         for col in [tpl.id_field, "title", "number", "category", "category_file"]:
             if col in row and f"{{{col}}}" in fname:
@@ -567,15 +579,7 @@ class SyncEngine:
             for col, val in row.items():
                 if val is not None and f"{{{col}}}" in title:
                     title = title.replace(f"{{{col}}}", str(val))
-            if "{category_file}" in title and "category" in row:
-                cat = row["category"]
-                if tpl.category_file_map and cat in tpl.category_file_map:
-                    mapped = tpl.category_file_map[cat]
-                    if mapped.endswith("/"):
-                        mapped = mapped.rstrip("/")
-                    title = title.replace("{category_file}", mapped)
-                else:
-                    title = title.replace("{category_file}", str(cat))
+            title = self._replace_category_file(tpl, title, row)
             content_lines.append(title)
 
         # 渲染段落
@@ -688,7 +692,6 @@ class SyncEngine:
         col = sec.jsonb_column or sec.jsonb_key
         val = row.get(col)
         if _is_empty(val):
-            # 尝试 fallback columns
             if sec.fallback_columns:
                 lines = []
                 for fc in sec.fallback_columns:
@@ -705,6 +708,9 @@ class SyncEngine:
         parsed = _parse_json_field(val)
         if not parsed:
             return None
+
+        if tpl.name == "world" and isinstance(parsed, dict):
+            parsed = clean_data_for_storage(parsed)
 
         key = sec.jsonb_key or col
         return [f"- **{key}**:"] + _jsonb_to_md(parsed, sec.indent, title_key=sec.title_key)

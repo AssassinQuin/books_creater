@@ -4,11 +4,11 @@ db_table: world_settings
 id_field: name
 file_dir: "设定/世界观"
 authority: db
-merge_mode: section_replace
+merge_mode: overwrite
 section_marker: "## {category}: {name}"
-file_pattern: "{category_file}.md"
-file_title: "{category}"
-header_template: "# {category_file}"
+file_pattern: "{category_file}/{name}.md"
+file_title: "{name}"
+header_template: "# {name}"
 skip_existing: false
 composite_id_fields: [category, name]
 transforms:
