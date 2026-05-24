@@ -265,7 +265,8 @@ class SyncEngine:
 
     def __init__(self):
         self._templates: dict[str, SyncTemplate] = {}
-        self._manifest_loaded: set[str] = set()  # 已加载的 manifest 路径
+        self._manifest_loaded: set[str] = set()
+        self._table_columns_cache: dict[str, set[str]] = {}
 
     # ── 模板管理 ──────────────────────────────────────────────────
 
@@ -282,6 +283,12 @@ class SyncEngine:
     @property
     def available_types(self) -> list[str]:
         return list(self._templates.keys())
+
+    def _get_table_columns(self, table: str) -> set[str]:
+        if table not in self._table_columns_cache:
+            cols = query(f"PRAGMA table_info({table})")
+            self._table_columns_cache[table] = {c["name"] for c in cols}
+        return self._table_columns_cache[table]
 
     # ── YAML Manifest 加载 ──────────────────────────────────────
 
@@ -538,6 +545,25 @@ class SyncEngine:
             resolved = resolved.rstrip("/")
         return text.replace("{category_file}", resolved)
 
+    @staticmethod
+    def _resolve_filename_placeholders(fname: str, row: dict, id_field: str) -> str:
+        placeholder_cols = [id_field, "title", "number", "category", "category_file"]
+        for col in placeholder_cols:
+            if col not in row or row[col] is None:
+                continue
+            val = row[col]
+            fmt_pattern = re.compile(rf"\{{{col}:(\w+)\}}")
+            fmt_match = fmt_pattern.search(fname)
+            if fmt_match:
+                fmt_spec = fmt_match.group(1)
+                try:
+                    formatted = format(val, fmt_spec)
+                except (ValueError, TypeError):
+                    formatted = str(val)
+                fname = fmt_pattern.sub(formatted, fname)
+            fname = fname.replace(f"{{{col}}}", str(val))
+        return fname
+
     def _resolve_filepath(self, tpl: SyncTemplate, novel_name: str, row: dict) -> str:
         fname = tpl.file_pattern
 
@@ -549,11 +575,7 @@ class SyncEngine:
             else:
                 fname = fname.replace("{category_file}", resolved)
 
-        for col in [tpl.id_field, "title", "number", "category", "category_file"]:
-            if col in row and f"{{{col}}}" in fname:
-                val = row[col]
-                if val is not None:
-                    fname = fname.replace(f"{{{col}}}", str(val))
+        fname = self._resolve_filename_placeholders(fname, row, tpl.id_field)
 
         base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
         full_dir = os.path.join(base, os.path.dirname(fname))
@@ -936,8 +958,66 @@ class SyncEngine:
 
         return row if row else None
 
+    def _parse_heading_for_entity(
+        self, tpl: SyncTemplate, heading: str, fields: dict, novel_id: int, row: dict, file_category: str | None = None
+    ) -> bool:
+        if tpl.name in ("foreshadow", "echo"):
+            m = re.match(rf"{tpl.name}:\s*(\d+)", heading)
+            if m:
+                row[tpl.id_field] = int(m.group(1))
+            else:
+                return False
+
+        elif tpl.name == "world":
+            m = re.match(r'^(\w+):\s*(.+)$', heading)
+            if m:
+                row["category"] = m.group(1)
+                row["name"] = m.group(2).strip()
+            elif file_category:
+                row["category"] = file_category
+                row["name"] = heading.strip()
+            else:
+                return False
+
+        elif tpl.name == "relation":
+            m = re.match(r'^(.+?)\s*→\s*(.+?)\s*\((.+?)\)$', heading)
+            if not m:
+                return False
+            from_name = m.group(1).strip()
+            to_name = m.group(2).strip()
+            rel_type = m.group(3).strip()
+            if from_name.startswith("{"):
+                from_char = query(
+                    "SELECT id FROM characters WHERE novel_id = ? AND id = ?",
+                    (novel_id, int(fields.get("from", 0))), fetch="one"
+                ) if fields.get("from") else None
+                to_char = query(
+                    "SELECT id FROM characters WHERE novel_id = ? AND id = ?",
+                    (novel_id, int(fields.get("to", 0))), fetch="one"
+                ) if fields.get("to") else None
+            else:
+                from_char = query(
+                    "SELECT id FROM characters WHERE novel_id = ? AND name = ?",
+                    (novel_id, from_name), fetch="one"
+                )
+                to_char = query(
+                    "SELECT id FROM characters WHERE novel_id = ? AND name = ?",
+                    (novel_id, to_name), fetch="one"
+                )
+            if from_char and to_char:
+                row["from_character_id"] = from_char["id"]
+                row["to_character_id"] = to_char["id"]
+                row["relation_type"] = rel_type
+            else:
+                return False
+
+        else:
+            return False
+
+        return True
+
     def _files_to_db_aggregate(self, tpl: SyncTemplate, novel_id: int,
-                                novel_name: str, base: str) -> dict:
+                                novel_name: str) -> dict:
         """
         聚合文件的 File→DB 解析（section_replace 模式）。
         多行DB记录共享一个文件，每个段落对应一行。
@@ -996,31 +1076,13 @@ class SyncEngine:
                         continue
 
                     row = {"novel_id": novel_id}
+                    fields = parse_bullet_fields(sec["body"])
 
-                    if tpl.name in ("foreshadow", "echo"):
-                        m = re.match(rf"{tpl.name}:\s*(\d+)", heading)
-                        if m:
-                            row[tpl.id_field] = int(m.group(1))
-                        else:
-                            continue
-
-                    elif tpl.name == "world":
-                        m = re.match(r'^(\w+):\s*(.+)$', heading)
-                        if m:
-                            row["category"] = m.group(1)
-                            row["name"] = m.group(2).strip()
-                        elif file_category:
-                            row["category"] = file_category
-                            row["name"] = heading.strip()
-                        else:
-                            continue
-
-                    else:
-                        # 通用：尝试从模板 heading 提取
+                    if not self._parse_heading_for_entity(tpl, heading, fields, novel_id, row, file_category):
                         continue
 
                     # ── 解析段落内容 ──
-                    fields = parse_bullet_fields(sec["body"])
+                    # fields 已在上方提前解析
 
                     # 将 fields 映射到 DB 列
                     for sec_def in tpl.sections:
@@ -1063,7 +1125,7 @@ class SyncEngine:
                                     if col_name in parsed:
                                         row[col_name] = json.dumps(parsed[col_name], ensure_ascii=False)
 
-                    if not row.get(tpl.id_field) and tpl.name != "world":
+                    if not row.get(tpl.id_field) and not tpl.composite_id_fields and tpl.name != "world":
                         continue
                     if tpl.name == "world" and not row.get("name"):
                         continue
@@ -1072,8 +1134,10 @@ class SyncEngine:
                         self._upsert_row(tpl, row)
                         if tpl.name == "world":
                             key = f"{row.get('category', '?')}:{row.get('name', '?')}"
+                        elif tpl.composite_id_fields:
+                            key = "-".join(str(row.get(f, "?")) for f in tpl.composite_id_fields)
                         else:
-                            key = str(row[tpl.id_field])
+                            key = str(row.get(tpl.id_field, "?"))
                         result["synced"] += 1
                         result["details"].append({"key": key, "file": os.path.basename(target_file)})
                     except Exception as e:
@@ -1121,6 +1185,8 @@ class SyncEngine:
         for col, val in row.items():
             if col in exclude_cols:
                 continue
+            if not col or not col.strip():
+                continue
             if col == "data" and tpl.name == "world":
                 val = json.dumps(clean_data_for_storage(
                     json.loads(val) if isinstance(val, str) else val
@@ -1128,18 +1194,36 @@ class SyncEngine:
             set_cols.append(col)
             set_vals.append(val if val is not None else None)
 
+        if not set_cols:
+            return
+
+        table_cols = self._get_table_columns(tpl.db_table)
+        has_updated_at = "updated_at" in table_cols
+        has_created_at = "created_at" in table_cols
+
         if existing:
             # UPDATE
             set_clause = ", ".join(f"{c} = ?" for c in set_cols)
-            sql = f"UPDATE {tpl.db_table} SET {set_clause}, updated_at = datetime('now') WHERE id = ?"
+            if has_updated_at:
+                sql = f"UPDATE {tpl.db_table} SET {set_clause}, updated_at = datetime('now') WHERE id = ?"
+            else:
+                sql = f"UPDATE {tpl.db_table} SET {set_clause} WHERE id = ?"
             params = set_vals + [existing["id"]]
         else:
             # INSERT
             insert_cols = ["novel_id"] + pk_fields + set_cols
             insert_vals = [row["novel_id"]] + pk_vals + set_vals
-            cols_str = ", ".join(insert_cols)
-            placeholders = ", ".join(["?"] * len(insert_vals))
-            sql = f"INSERT INTO {tpl.db_table} ({cols_str}, created_at, updated_at) VALUES ({placeholders}, datetime('now'), datetime('now'))"
+            extra_cols = []
+            extra_vals = []
+            if has_created_at:
+                extra_cols.append("created_at")
+                extra_vals.append("datetime('now')")
+            if has_updated_at:
+                extra_cols.append("updated_at")
+                extra_vals.append("datetime('now')")
+            cols_str = ", ".join(insert_cols + extra_cols)
+            placeholders = ", ".join(["?"] * len(insert_vals) + extra_vals)
+            sql = f"INSERT INTO {tpl.db_table} ({cols_str}) VALUES ({placeholders})"
             params = insert_vals
 
         query(sql, tuple(params), fetch="none")

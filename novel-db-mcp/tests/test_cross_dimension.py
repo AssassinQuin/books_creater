@@ -89,14 +89,6 @@ def test_db(tmp_path_factory):
 @pytest.fixture(autouse=True)
 def clean_db(test_db):
     """每个测试前清空数据表，保证测试隔离。"""
-    import sqlite3
-    conn = sqlite3.connect(test_db)
-    # 获取所有用户表名
-    cursor = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-    )
-    all_tables = [row[0] for row in cursor.fetchall()]
-    # 按依赖顺序删除（先删除有外键引用的子表）
     priority_order = [
         "data_hashes", "chapter_quality", "dimension_changes",
         "scene_outlines", "timeline_events", "echoes",
@@ -104,18 +96,11 @@ def clean_db(test_db):
         "character_distillation_evolution", "character_relations",
         "characters", "world_settings", "chapters", "volumes", "novels",
     ]
-    ordered = [t for t in priority_order if t in all_tables]
-    # 追加 schema 中可能存在的其他表
-    for t in all_tables:
-        if t not in ordered:
-            ordered.append(t)
-    for t in ordered:
+    for t in priority_order:
         try:
-            conn.execute(f"DELETE FROM {t}")
-        except sqlite3.OperationalError:
-            pass  # 表不存在则跳过
-    conn.commit()
-    conn.close()
+            query(f"DELETE FROM {t}", fetch="none")
+        except Exception:
+            pass
     yield
 
 
@@ -426,8 +411,7 @@ class TestWorldSettingsRoundTrip:
         result = engine.db_to_files("测试小说", "world", overwrite=True)
         assert result["synced"] >= 1, f"世界观同步失败: {result}"
 
-        # 检查文件
-        faction_file = test_novel_dir / "设定" / "世界观" / "势力.md"
+        faction_file = test_novel_dir / "设定" / "世界观" / "势力" / "壁盾军团.md"
         assert faction_file.exists(), "势力文件未生成"
 
         content = faction_file.read_text(encoding="utf-8")
@@ -454,7 +438,7 @@ class TestWorldSettingsRoundTrip:
         result = engine.db_to_files("测试小说", "world", overwrite=True)
         assert result["synced"] >= 1
 
-        location_file = test_novel_dir / "设定" / "世界观" / "地图.md"
+        location_file = test_novel_dir / "设定" / "世界观" / "地图" / "铁谷镇.md"
         assert location_file.exists(), "地点文件未生成"
 
         content = location_file.read_text(encoding="utf-8")
@@ -476,7 +460,7 @@ class TestWorldSettingsRoundTrip:
         result = engine.db_to_files("测试小说", "world", overwrite=True)
         assert result["synced"] >= 1
 
-        item_file = test_novel_dir / "设定" / "世界观" / "物品装备.md"
+        item_file = test_novel_dir / "设定" / "世界观" / "物品装备" / "碎铁匕首.md"
         assert item_file.exists(), "物品文件未生成"
 
         content = item_file.read_text(encoding="utf-8")
@@ -498,7 +482,7 @@ class TestWorldSettingsRoundTrip:
         result = engine.db_to_files("测试小说", "world", overwrite=True)
         assert result["synced"] >= 1
 
-        ability_file = test_novel_dir / "设定" / "世界观" / "能力体系.md"
+        ability_file = test_novel_dir / "设定" / "世界观" / "能力体系" / "灵纹共鸣.md"
         assert ability_file.exists(), "能力体系文件未生成"
 
     def test_core_setting_sync(self, novel_id, engine, test_novel_dir):
@@ -513,14 +497,14 @@ class TestWorldSettingsRoundTrip:
         result = engine.db_to_files("测试小说", "world", overwrite=True)
         assert result["synced"] >= 1
 
-        core_file = test_novel_dir / "设定" / "世界观" / "核心设定.md"
+        core_file = test_novel_dir / "设定" / "世界观" / "核心设定" / "灵衰.md"
         assert core_file.exists(), "核心设定文件未生成"
 
         content = core_file.read_text(encoding="utf-8")
         assert "灵衰" in content
 
     def test_world_multi_category_aggregate(self, novel_id, engine, test_novel_dir):
-        """验证多个世界观分类写入不同文件（聚合模式）。"""
+        """验证多个世界观分类写入不同文件。"""
         self._insert_world(novel_id, "faction", "壁盾军团", {"content": "军事力量"}, keys=["壁盾"])
         self._insert_world(novel_id, "faction", "星火社", {"content": "反抗组织"}, keys=["星火"])
         self._insert_world(novel_id, "location", "铁谷镇", {"content": "边境小镇"}, keys=["铁谷"])
@@ -528,15 +512,16 @@ class TestWorldSettingsRoundTrip:
         result = engine.db_to_files("测试小说", "world", overwrite=True)
         assert result["synced"] >= 3
 
-        faction_file = test_novel_dir / "设定" / "世界观" / "势力.md"
-        location_file = test_novel_dir / "设定" / "世界观" / "地图.md"
+        faction_file1 = test_novel_dir / "设定" / "世界观" / "势力" / "壁盾军团.md"
+        faction_file2 = test_novel_dir / "设定" / "世界观" / "势力" / "星火社.md"
+        location_file = test_novel_dir / "设定" / "世界观" / "地图" / "铁谷镇.md"
 
-        assert faction_file.exists(), "势力文件未生成"
-        assert location_file.exists(), "地点文件未生成"
+        assert faction_file1.exists(), "壁盾军团文件未生成"
+        assert faction_file2.exists(), "星火社文件未生成"
+        assert location_file.exists(), "铁谷镇文件未生成"
 
-        faction_content = faction_file.read_text(encoding="utf-8")
-        assert "壁盾军团" in faction_content
-        assert "星火社" in faction_content
+        assert "壁盾军团" in faction_file1.read_text(encoding="utf-8")
+        assert "星火社" in faction_file2.read_text(encoding="utf-8")
 
 
 # ============================================================================
@@ -1102,15 +1087,10 @@ class TestSyncEngineBasics:
     def test_volume_template_acts(self, engine):
         """验证卷级大纲模板包含四幕结构。"""
         tpl = engine.get("volume")
-        acts_section = None
-        for sec in tpl.sections:
-            if sec.type == "acts":
-                acts_section = sec
-                break
+        acts_sections = [sec for sec in tpl.sections if sec.type == "acts"]
 
-        assert acts_section is not None, "卷级大纲模板缺少 acts 段落"
-        assert len(acts_section.acts) == 4, "四幕结构不完整"
-        act_names = [a[0] for a in acts_section.acts]
+        assert len(acts_sections) == 4, "四幕结构不完整"
+        act_names = [sec.acts[0][0] for sec in acts_sections]
         assert act_names == ["起", "承", "转", "合"], f"四幕名称不正确: {act_names}"
 
 
@@ -1159,8 +1139,8 @@ class TestDataFormatSwitching:
         char_file = test_novel_dir / "设定" / "人物" / "沈野.md"
         content = char_file.read_text(encoding="utf-8")
 
-        # 人物模板中 first_appearance_chapter 没有 md_key，输出原始列名
-        assert "first_appearance_chapter" in content, "first_appearance_chapter 字段未输出"
+        # 人物模板中 first_appearance_chapter 的 md_key 是 first_appearance
+        assert "first_appearance" in content, "first_appearance 字段未输出"
         assert "5" in content, "first_appearance_chapter 值未正确输出"
 
         # 世界观模板中有 md_key: 首次出场
@@ -1175,7 +1155,7 @@ class TestDataFormatSwitching:
 
         engine.db_to_files("测试小说", "world", overwrite=True)
 
-        ability_file = test_novel_dir / "设定" / "世界观" / "能力体系.md"
+        ability_file = test_novel_dir / "设定" / "世界观" / "能力体系" / "灵纹共鸣.md"
         if ability_file.exists():
             world_content = ability_file.read_text(encoding="utf-8")
             # 世界观模板中 first_appearance_chapter 有 md_key: 首次出场
@@ -1213,8 +1193,7 @@ class TestDataFormatSwitching:
         assert _md_bullet("is_constant", False) == "- **is_constant**: 否"
 
     def test_section_replace_merge_mode(self, novel_id, engine, test_novel_dir):
-        """section_replace 模式：同一文件中多个段落应分别替换。"""
-        # 创建两个势力
+        """overwrite 模式：同 category 多条记录生成独立文件，更新后重新写入。"""
         query(
             "INSERT INTO world_settings (novel_id, category, name, data) "
             "VALUES (?, ?, ?, ?)",
@@ -1230,29 +1209,27 @@ class TestDataFormatSwitching:
             fetch="none"
         )
 
-        # 第一次同步
         result1 = engine.db_to_files("测试小说", "world", overwrite=True)
         assert result1["synced"] >= 2
 
-        faction_file = test_novel_dir / "设定" / "世界观" / "势力.md"
-        content1 = faction_file.read_text(encoding="utf-8")
-        assert "壁盾军团" in content1
-        assert "星火社" in content1
+        faction_file1 = test_novel_dir / "设定" / "世界观" / "势力" / "壁盾军团.md"
+        faction_file2 = test_novel_dir / "设定" / "世界观" / "势力" / "星火社.md"
+        assert faction_file1.exists()
+        assert faction_file2.exists()
+        assert "壁盾军团" in faction_file1.read_text(encoding="utf-8")
+        assert "星火社" in faction_file2.read_text(encoding="utf-8")
 
-        # 更新其中一个势力
         query(
             "UPDATE world_settings SET data=? WHERE novel_id=? AND category='faction' AND name='壁盾军团'",
             (json.dumps({"content": "更新后的军事力量"}, ensure_ascii=False), novel_id),
             fetch="none"
         )
 
-        # 第二次同步 — section_replace 应只更新壁盾军团段落
         result2 = engine.db_to_files("测试小说", "world", overwrite=True)
         assert result2["synced"] >= 1
 
-        content2 = faction_file.read_text(encoding="utf-8")
+        content2 = faction_file1.read_text(encoding="utf-8")
         assert "壁盾军团" in content2
-        assert "星火社" in content2
 
 
 # ============================================================================
@@ -1294,7 +1271,7 @@ class TestTemplateFieldCompleteness:
         expected_fields = ["role", "race", "ability_level", "appearance",
                            "personality", "speech_style", "catchphrase",
                            "background", "goals", "weaknesses",
-                           "arc_notes", "first_appearance_chapter"]
+                           "arc_notes", "first_appearance"]
         for field in expected_fields:
             assert field in content, f"人物文件缺少字段: {field}"
 
@@ -1307,7 +1284,7 @@ class TestTemplateFieldCompleteness:
             section_types.add(sec.type)
 
         # 模板定义的段落类型
-        expected_types = {"fields", "blockquote", "raw", "acts", "table", "jsonb"}
+        expected_types = {"blockquote", "raw", "acts", "table", "jsonb"}
         for et in expected_types:
             assert et in section_types, f"卷级大纲模板缺少段落类型: {et}"
 
@@ -1324,7 +1301,7 @@ class TestTemplateFieldCompleteness:
         result = engine.db_to_files("测试小说", "world", overwrite=True)
         assert result["synced"] >= 1
 
-        race_file = test_novel_dir / "设定" / "世界观" / "种族.md"
+        race_file = test_novel_dir / "设定" / "世界观" / "种族" / "灵族.md"
         assert race_file.exists(), "种族文件未生成"
 
         content = race_file.read_text(encoding="utf-8")

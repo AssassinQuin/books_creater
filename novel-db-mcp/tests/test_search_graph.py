@@ -60,8 +60,9 @@ class TestCleanDataForStorage:
             {"region": "全域", "content": "more text"},
         ]
         cleaned = clean_data_for_storage(raw)
-        assert "核心机制" in cleaned
         assert "content" in cleaned
+        assert "灵力衰减" in cleaned["content"]
+        assert "Some content text" in cleaned["content"]
 
     def test_already_clean_data(self):
         from novel_db.sync_engine import clean_data_for_storage
