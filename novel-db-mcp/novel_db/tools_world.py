@@ -1,8 +1,11 @@
 import json
+import logging
 import os
 import re
 
 from .db import mcp, query
+
+logger = logging.getLogger(__name__)
 from .resolvers import _resolve_novel_id
 from .sync import _record_db_hash, _NOVELS_BASE
 
@@ -145,6 +148,11 @@ def world_upsert(novel_name: str, category: str, name: str, data: dict,
         fetch="none"
     )
     _record_db_hash(novel_id, "world", f"{category}:{name}", data_json)
+    from .hooks import fire_post_save
+    ws = query("SELECT id FROM world_settings WHERE novel_id = ? AND category = ? AND name = ?",
+               (novel_id, category, name), fetch="one")
+    if ws:
+        fire_post_save(novel_id, "world_setting", ws["id"])
     return json.dumps({"ok": True, "category": category, "name": name}, ensure_ascii=False)
 
 
@@ -478,8 +486,7 @@ def sync_lorebook(novel_name: str) -> str:
             content = "\n".join(content_lines).strip()
             content = re.sub(r"^---\s*$", "", content, flags=re.MULTILINE).strip()
 
-            data = dict(meta)
-            data["content"] = content
+            data = {"content": content}
             data_json = json.dumps(data, ensure_ascii=False)
 
             keys_val = meta.get("keys", [])
@@ -536,7 +543,7 @@ def sync_lorebook(novel_name: str) -> str:
                 cat_key = category
                 changes[cat_key] = changes.get(cat_key, 0) + 1
             except Exception as e:
-                pass
+                logger.warning(f"sync_lorebook skip {category}:{name}: {e}")
 
     return json.dumps({"ok": True, "novel_id": novel_id, "changes": changes}, ensure_ascii=False)
 

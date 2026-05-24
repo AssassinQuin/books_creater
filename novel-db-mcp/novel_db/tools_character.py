@@ -64,6 +64,8 @@ def character_create(novel_name: str, name: str, role: str = "npc",
         all_vals, fetch="insert"
     )
     _record_db_hash(novel_id, "character", name, json.dumps({"name": name, "role": role, "race": race, "appearance": appearance}, ensure_ascii=False))
+    from .hooks import fire_post_save
+    fire_post_save(novel_id, "character", r["id"])
     return json.dumps({"ok": True, "id": r["id"], "name": name}, ensure_ascii=False)
 
 
@@ -111,6 +113,8 @@ def _character_update_by_id(character_id: int, name: str = "", role: str = "", f
     char = query("SELECT novel_id, name FROM characters WHERE id = ?", (character_id,), fetch="one")
     if char:
         _record_db_hash(char["novel_id"], "character", char["name"], json.dumps(fields, ensure_ascii=False))
+        from .hooks import fire_post_save
+        fire_post_save(char["novel_id"], "character", character_id)
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
@@ -187,6 +191,8 @@ def _relation_create_by_id(novel_name: str, from_character_id: int, to_character
         (novel_id, from_character_id, to_character_id, relation_type,
          description, chapter_established, intensity), fetch="insert"
     )
+    from .hooks import fire_post_save
+    fire_post_save(novel_id, "character", from_character_id)
     return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
 
 

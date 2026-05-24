@@ -42,6 +42,33 @@ from typing import Any, Callable
 
 import yaml
 
+_META_BLACKLIST = {
+    "keys", "secondary_keys", "tags", "related", "region",
+    "volume_range", "priority", "is_constant", "writing_guide",
+    "lorebook_id", "faction_id", "锁定", "关联设定", "叙事功能",
+}
+
+
+def clean_data_for_storage(raw_data):
+    if isinstance(raw_data, list):
+        content_items = []
+        for item in raw_data:
+            if isinstance(item, dict):
+                filtered = {k: v for k, v in item.items() if k not in _META_BLACKLIST}
+                if "content" in filtered:
+                    content_items.append(str(filtered.pop("content")))
+                content_items.extend(
+                    str(v) for v in filtered.values()
+                    if isinstance(v, str) and v.strip()
+                )
+            elif isinstance(item, str) and item.strip():
+                content_items.append(item.strip())
+        return {"content": "\n".join(content_items)} if content_items else raw_data
+    elif isinstance(raw_data, dict):
+        return {k: v for k, v in raw_data.items() if k not in _META_BLACKLIST}
+    return raw_data
+
+
 from .db import query, PROJECT_ROOT
 from .sync import (
     _is_empty, _jsonb_to_md, _parse_json_field,
@@ -1079,6 +1106,10 @@ class SyncEngine:
         for col, val in row.items():
             if col in exclude_cols:
                 continue
+            if col == "data" and tpl.name == "world":
+                val = json.dumps(clean_data_for_storage(
+                    json.loads(val) if isinstance(val, str) else val
+                ), ensure_ascii=False)
             set_cols.append(col)
             set_vals.append(val if val is not None else None)
 

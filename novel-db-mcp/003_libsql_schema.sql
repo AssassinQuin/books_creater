@@ -374,3 +374,21 @@ CREATE INDEX IF NOT EXISTS idx_world_faction ON world_settings(faction_id);
 CREATE INDEX IF NOT EXISTS idx_world_volume_range ON world_settings(volume_range);
 CREATE INDEX IF NOT EXISTS idx_world_category_region ON world_settings(category, region);
 CREATE INDEX IF NOT EXISTS idx_world_status ON world_settings(status);
+
+-- ─── Entity Edges (关系图) ──────────────────────────────
+CREATE TABLE IF NOT EXISTS entity_edges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+    from_type TEXT NOT NULL,
+    from_id INTEGER NOT NULL,
+    to_type TEXT NOT NULL,
+    to_id INTEGER NOT NULL,
+    edge_type TEXT NOT NULL,
+    weight REAL DEFAULT 1.0,
+    metadata TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(novel_id, from_type, from_id, to_type, to_id, edge_type)
+);
+CREATE INDEX IF NOT EXISTS idx_edges_from ON entity_edges(novel_id, from_type, from_id);
+CREATE INDEX IF NOT EXISTS idx_edges_to ON entity_edges(novel_id, to_type, to_id);
+CREATE INDEX IF NOT EXISTS idx_edges_type ON entity_edges(novel_id, edge_type);

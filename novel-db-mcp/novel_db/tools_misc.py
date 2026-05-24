@@ -206,43 +206,114 @@ def skill_loader(skill: str, level: str, resource: str, project: str = "") -> st
 
 
 @mcp.tool
-def db_search(novel_name: str, keyword: str) -> str:
-    """在小说所有数据中搜索关键词（世界观/人物/章节/伏笔/时间线）
+def db_search(novel_name: str, keyword: str, top_k: int = 20) -> str:
+    """搜索小说数据（世界观/人物/章节/伏笔），返回排序摘要结果。
+
+    搜索策略：用索引列（name/keys/tags）匹配，不扫 data blob。
+    评分：name 匹配=10分，keys 匹配=5分，tags 匹配=3分。
+    返回格式：每个结果只包含 name/category/summary(150字)/score，不返回完整 data。
+
       novel_name: 小说名称
+      keyword: 搜索关键词
+      top_k: 返回最多结果数(默认20)
     """
     novel_id = _resolve_novel_id(novel_name)
-    result: dict = {}
     kw = f"%{keyword}%"
-    world = query(
-        "SELECT category, name, data FROM world_settings "
-        "WHERE novel_id = ? AND (name LIKE ? OR data LIKE ?)",
-        (novel_id, kw, kw)
-    )
-    if world:
-        result["world_settings"] = [dict(r) for r in world]
-    chars = query(
-        "SELECT id, name, role, personality FROM characters "
-        "WHERE novel_id = ? AND is_active = 1 AND "
-        "(name LIKE ? OR personality LIKE ? OR background LIKE ? OR goals LIKE ?)",
-        (novel_id, kw, kw, kw, kw)
-    )
-    if chars:
-        result["characters"] = [dict(r) for r in chars]
-    chapters = query(
-        "SELECT number, title, outline FROM chapters "
-        "WHERE novel_id = ? AND (title LIKE ? OR outline LIKE ?)",
-        (novel_id, kw, kw)
-    )
-    if chapters:
-        result["chapters"] = [dict(r) for r in chapters]
-    foreshadows = query(
-        "SELECT id, description, status FROM foreshadows "
-        "WHERE novel_id = ? AND description LIKE ?",
-        (novel_id, kw)
-    )
-    if foreshadows:
-        result["foreshadows"] = [dict(r) for r in foreshadows]
-    return json.dumps(result, ensure_ascii=False, default=str)
+    results = []
+
+    _SEARCH_SPECS = [
+        {
+            "sql": ("SELECT id, category, name, data, keys, tags FROM world_settings "
+                    "WHERE novel_id = ? AND status = 'active' AND "
+                    "(name LIKE ? OR keys LIKE ? OR tags LIKE ?)"),
+            "params": (novel_id, kw, kw, kw),
+            "result_type": "world_setting",
+            "name_col": "name",
+            "category_col": "category",
+            "score_fn": lambda r, kw=keyword: (
+                (10 if kw.lower() in (r.get("name") or "").lower() else 0)
+                + (5 if isinstance(r.get("keys"), str) and kw.lower() in r["keys"].lower() else 0)
+                + (3 if isinstance(r.get("tags"), str) and kw.lower() in r["tags"].lower() else 0)
+                or 1
+            ),
+            "summary_fn": lambda r: _extract_world_summary(r),
+        },
+        {
+            "sql": ("SELECT id, name, role, personality FROM characters "
+                    "WHERE novel_id = ? AND is_active = 1 AND "
+                    "(name LIKE ? OR personality LIKE ?)"),
+            "params": (novel_id, kw, kw),
+            "result_type": "character",
+            "name_col": "name",
+            "category_col": "role",
+            "score_fn": lambda r, kw=keyword: (
+                10 if kw.lower() in (r.get("name") or "").lower() else 5
+            ),
+            "summary_fn": lambda r: (r.get("personality") or "")[:150],
+        },
+        {
+            "sql": ("SELECT number, title, outline FROM chapters "
+                    "WHERE novel_id = ? AND (title LIKE ? OR outline LIKE ?)"),
+            "params": (novel_id, kw, kw),
+            "result_type": "chapter",
+            "name_col": "title",
+            "category_col": None,
+            "score_fn": lambda r, kw=keyword: (
+                10 if kw.lower() in (r.get("title") or "").lower() else 5
+            ),
+            "summary_fn": lambda r: (r.get("outline") or "")[:150],
+            "name_fmt": lambda r: r.get("title") or f"第{r['number']}章",
+            "category_fmt": lambda r: f"Ch{r['number']}",
+        },
+        {
+            "sql": ("SELECT id, description, status, tags FROM foreshadows "
+                    "WHERE novel_id = ? AND (description LIKE ? OR tags LIKE ?)"),
+            "params": (novel_id, kw, kw),
+            "result_type": "foreshadow",
+            "name_col": None,
+            "category_col": "status",
+            "score_fn": lambda r, kw=keyword: (
+                5 if kw.lower() in (r.get("description") or "").lower() else 3
+            ),
+            "summary_fn": lambda r: (r.get("description") or "")[:150],
+            "name_fmt": lambda r: f"伏笔#{r['id']}",
+        },
+    ]
+
+    for spec in _SEARCH_SPECS:
+        rows = query(spec["sql"], spec["params"])
+        for r in (rows or []):
+            name = spec.get("name_fmt", lambda r: r.get(spec["name_col"], ""))(r)
+            category = spec.get("category_fmt", lambda r: r.get(spec["category_col"], ""))(r) if spec.get("category_col") or spec.get("category_fmt") else ""
+            results.append({
+                "type": spec["result_type"],
+                "category": category,
+                "name": name,
+                "summary": spec["summary_fn"](r),
+                "score": spec["score_fn"](r),
+            })
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    results = results[:top_k]
+
+    return json.dumps({
+        "keyword": keyword,
+        "total": len(results),
+        "results": results,
+    }, ensure_ascii=False, default=str)
+
+
+def _extract_world_summary(r: dict) -> str:
+    data = r.get("data", {})
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, TypeError):
+            data = {}
+    if isinstance(data, dict):
+        content = data.get("content", "")
+        return content[:150] if content else json.dumps(data, ensure_ascii=False)[:150]
+    return ""
 
 
 @mcp.tool
@@ -474,3 +545,32 @@ def sync_roundtrip(novel_name: str, data_type: str = "") -> str:
         "details": results,
     }
     return json.dumps(summary, ensure_ascii=False, default=str)
+
+
+@mcp.tool
+def semantic_search(novel_name: str, query_text: str, top_k: int = 10) -> str:
+    """语义搜索：用自然语言查询找到相关实体（TF-IDF 零依赖方案）。
+
+    与 db_search 的区别：db_search 做关键词精确匹配，semantic_search 做语义相似度匹配。
+    例如搜"战斗方式"可以找到"铸造能力"，搜"生病"可以找到"灵衰症"。
+
+    参数:
+      novel_name: 小说名称
+      query_text: 自然语言查询文本
+      top_k: 返回最多结果数(默认10)
+    """
+    from .embedding import get_engine_for_novel
+
+    novel_id = _resolve_novel_id(novel_name)
+    engine = get_engine_for_novel(novel_id, query)
+    results = engine.search(query_text, top_k=top_k)
+
+    for r in results:
+        text = r.pop("text", "")
+        r["summary"] = text[:200]
+
+    return json.dumps({
+        "query": query_text,
+        "total": len(results),
+        "results": results,
+    }, ensure_ascii=False, default=str)

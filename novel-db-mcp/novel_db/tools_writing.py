@@ -339,6 +339,8 @@ def _wf_save_summary(chapter_id: int, novel_id: int, chapter_number: int,
     _save_chapter_summary_internal(chapter_id, summary, ke, ci, nf, rf, ds_json)
     query("UPDATE chapters SET status = 'written', updated_at = datetime('now') WHERE id = ?",
           (chapter_id,), fetch="none")
+    from .hooks import fire_post_save
+    fire_post_save(novel_id, "chapter", chapter_id)
 
 
 def _wf_post_save(chapter_id: int, novel_id: int,
@@ -461,6 +463,8 @@ def foreshadow_plant(novel_name: str, description: str,
          importance, related_characters or [], tags or []), fetch="insert"
     )
     _record_db_hash(novel_id, "foreshadow", str(r["id"]), json.dumps({"description": description, "importance": importance}, ensure_ascii=False))
+    from .hooks import fire_post_save
+    fire_post_save(novel_id, "foreshadow", r["id"])
     return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
 
 
@@ -474,6 +478,8 @@ def _foreshadow_recall_internal(novel_id: int, foreshadow_id: int, chapter_id: i
         "WHERE id = ?", (chapter_id, foreshadow_id),
         fetch="none"
     )
+    from .hooks import fire_post_save
+    fire_post_save(novel_id, "foreshadow", foreshadow_id)
     return {"ok": True}
 
 
