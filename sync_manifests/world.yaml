@@ -26,6 +26,9 @@ category_file_map:
   location: "地图"
   faction: "势力"
   race: "种族"
+  building: "建筑"
+  culture: "文化"
+  plant: "植物"
 
 sections:
   - heading: "{category}: {name}"

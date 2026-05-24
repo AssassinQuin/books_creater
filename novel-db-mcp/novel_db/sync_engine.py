@@ -567,6 +567,15 @@ class SyncEngine:
             for col, val in row.items():
                 if val is not None and f"{{{col}}}" in title:
                     title = title.replace(f"{{{col}}}", str(val))
+            if "{category_file}" in title and "category" in row:
+                cat = row["category"]
+                if tpl.category_file_map and cat in tpl.category_file_map:
+                    mapped = tpl.category_file_map[cat]
+                    if mapped.endswith("/"):
+                        mapped = mapped.rstrip("/")
+                    title = title.replace("{category_file}", mapped)
+                else:
+                    title = title.replace("{category_file}", str(cat))
             content_lines.append(title)
 
         # 渲染段落
