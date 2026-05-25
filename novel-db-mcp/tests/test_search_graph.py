@@ -17,7 +17,7 @@ def _make_db():
     conn.execute("PRAGMA foreign_keys = ON")
     schema_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                "003_libsql_schema.sql")
-    with open(schema_path) as f:
+    with open(schema_path, encoding="utf-8") as f:
         conn.executescript(f.read())
     conn.execute("INSERT INTO novels (id, name) VALUES (1, '测试小说')")
     return conn
