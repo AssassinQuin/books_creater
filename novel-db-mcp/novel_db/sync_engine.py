@@ -502,7 +502,13 @@ class SyncEngine:
         if "{category_file}" in fname and "category" in row:
             cat = row["category"]
             if tpl.category_file_map and cat in tpl.category_file_map:
-                fname = fname.replace("{category_file}", tpl.category_file_map[cat])
+                cat_file = tpl.category_file_map[cat]
+                if cat_file.endswith("/"):
+                    name_val = row.get("name", row.get(tpl.id_field, ""))
+                    safe_name = re.sub(r'[\\/:*?"<>|]', '_', str(name_val))
+                    fname = fname.replace("{category_file}", cat_file + safe_name)
+                else:
+                    fname = fname.replace("{category_file}", cat_file)
             elif tpl.transforms and "resolve_category_file" in tpl.transforms:
                 fname = fname.replace("{category_file}", tpl.transforms["resolve_category_file"](cat, row))
             else:
@@ -531,12 +537,19 @@ class SyncEngine:
         # 渲染所有段落
         content_lines = []
 
-        # 文件标题
-        if tpl.header_template:
+        # 文件标题（仅新文件时添加，section_replace模式已有文件时跳过）
+        is_new_file = not (tpl.merge_mode == "section_replace" and os.path.exists(fpath))
+        if tpl.header_template and is_new_file:
             title = tpl.header_template
             for col, val in row.items():
                 if val is not None and f"{{{col}}}" in title:
                     title = title.replace(f"{{{col}}}", str(val))
+            if "{category_file}" in title and "category" in row:
+                cat = row["category"]
+                if tpl.category_file_map and cat in tpl.category_file_map:
+                    cat_file = tpl.category_file_map[cat]
+                    display = cat_file.rstrip("/")
+                    title = title.replace("{category_file}", display)
             content_lines.append(title)
 
         # 渲染段落
@@ -584,10 +597,15 @@ class SyncEngine:
 
         if marker in existing:
             start = existing.index(marker)
-            next_h2 = existing.find("\n## ", start + len(marker))
-            if next_h2 == -1:
-                next_h2 = len(existing)
-            return existing[:start] + new_content + existing[next_h2:]
+            marker_prefix = marker.split(":")[0] if ":" in marker else None
+            if marker_prefix:
+                pattern = "\n" + marker_prefix + ": "
+                next_sec = existing.find(pattern, start + len(marker))
+            else:
+                next_sec = existing.find("\n## ", start + len(marker))
+            if next_sec == -1:
+                next_sec = len(existing)
+            return existing[:start] + new_content + existing[next_sec:]
         else:
             return existing + "\n" + new_content
 
@@ -668,6 +686,13 @@ class SyncEngine:
             return None
 
         key = sec.jsonb_key or col
+        if sec.jsonb_key and sec.jsonb_column and isinstance(parsed, dict):
+            target = parsed.get(sec.jsonb_key)
+            if _is_empty(target):
+                return None
+            if isinstance(target, str):
+                return [target]
+            return [f"- **{key}**:"] + _jsonb_to_md(target, sec.indent, title_key=sec.title_key)
         return [f"- **{key}**:"] + _jsonb_to_md(parsed, sec.indent, title_key=sec.title_key)
 
     def _render_static(self, tpl: SyncTemplate, sec: SectionDef, row: dict) -> list[str]:

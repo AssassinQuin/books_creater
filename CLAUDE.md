@@ -320,6 +320,10 @@ L3 加事件（>50%）     → 强制从大纲找事件或加微事件
 | F5 意象重复 | 同一意象无变化 | 意象梯度系统+替换库 |
 | F6 环境白噪 | 同一环境音重复30+次 | 轮换库，≤2同类型/章 |
 
+## Platform & Command Rules
+
+**执行任何命令前必须先确认当前操作系统平台。** 本项目运行在 Windows 上，所有 shell 命令必须使用 PowerShell 语法，禁止使用 bash/zsh 语法（如 `&&`、`export`、`source`、`cat`、`rm -rf` 等）。如果需要跨平台兼容，使用 Python 脚本而非 shell 命令。Sub-agent 同样受此规则约束——在 task description 中明确标注"Windows PowerShell 环境"。
+
 ## Git Commit Convention
 
 ```

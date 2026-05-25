@@ -26,23 +26,24 @@ file_pattern: "{category_file}.md"
 merge_mode: section_replace
 section_marker: "## {category}: {name}"
 file_to_db_enabled: false
+header_template: "# {category_file}"
 
 # --- 分类文件名映射 ---
 # 以 "/" 结尾 = 子目录模式（每条记录一个文件）；无 "/" = 单文件模式（聚合到一个文件）
 category_file_map:
-  core_setting: "核心设定/"    # 已拆分为子目录，24个文件
-  bestiary: "异灵/"            # 已拆分为子目录，4个文件
-  ability: "能力/"             # 已拆分为子目录，含角色能力+体系文件
-  item: "物品/"                # 已拆分为子目录，4个文件
-  location: "地点/"            # 已拆分为子目录，17个文件
-  faction: "势力/"             # 已拆分为子目录，3个文件
-  economy: 经济体系            # 扁平文件，未拆分
-  daily_life: 日常生活         # 扁平文件，未拆分
-  history: 历史事件            # 扁平文件，未拆分
-  race: 种族                   # 扁平文件，未拆分
-  building: 建筑               # 原 building.md 重命名
-  culture: 文化                 # 原 culture.md 重命名
-  plant: 植物                   # 原 plant.md 重命名
+  core_setting: "核心设定/"    # 子目录模式，24个文件
+  location: "地点/"            # 子目录模式，17个文件
+  bestiary: 异灵               # 聚合单文件
+  ability: 能力体系             # 聚合单文件（含角色能力+体系）
+  item: 物品                   # 聚合单文件
+  faction: 势力                # 聚合单文件
+  economy: 经济体系            # 聚合单文件
+  daily_life: 日常生活         # 聚合单文件
+  history: 历史事件            # 聚合单文件
+  race: 种族                   # 聚合单文件
+  building: 建筑               # 聚合单文件
+  culture: 文化                # 聚合单文件
+  plant: 植物                  # 聚合单文件
 
 # --- 段落定义 ---
 # 世界观使用动态 heading（包含 category 和 name）
