@@ -1,6 +1,7 @@
 import os
 import json
 import threading
+from contextlib import contextmanager
 from typing import Any
 
 from fastmcp import FastMCP
@@ -23,11 +24,36 @@ import sqlite3
 os.makedirs(os.path.dirname(LIBSQL_DB_PATH), exist_ok=True)
 
 _local = threading.local()
+_db_initialized = False
+
+
+def _init_db_schema(conn: sqlite3.Connection):
+    """自动初始化数据库表结构（如果表不存在）。"""
+    global _db_initialized
+    if _db_initialized:
+        return
+
+    schema_path = os.path.join(PROJECT_ROOT, "novel-db-mcp", "003_libsql_schema.sql")
+    if not os.path.exists(schema_path):
+        schema_path = os.path.join(os.path.dirname(__file__), "..", "003_libsql_schema.sql")
+
+    if os.path.exists(schema_path):
+        with open(schema_path, "r", encoding="utf-8") as f:
+            schema = f.read()
+        conn.executescript(schema)
+        conn.commit()
+        _db_initialized = True
+    else:
+        raise FileNotFoundError(f"DB schema file not found: {schema_path}")
 
 
 def get_conn():
     if not hasattr(_local, 'conn') or _local.conn is None:
         _local.conn = sqlite3.connect(LIBSQL_DB_PATH)
+        _local.conn.execute("PRAGMA journal_mode=WAL")
+        _local.conn.execute("PRAGMA busy_timeout=5000")
+        _local.in_transaction = 0
+        _init_db_schema(_local.conn)
     return _local.conn
 
 
@@ -38,6 +64,24 @@ def close_conn():
         except Exception:
             pass
         _local.conn = None
+
+
+@contextmanager
+def transaction():
+    conn = get_conn()
+    if not hasattr(_local, 'in_transaction'):
+        _local.in_transaction = 0
+    _local.in_transaction += 1
+    try:
+        yield
+        if _local.in_transaction == 1:
+            conn.commit()
+    except Exception:
+        if _local.in_transaction == 1:
+            conn.rollback()
+        raise
+    finally:
+        _local.in_transaction -= 1
 
 def _adapt_param(p):
     if p is None:
@@ -52,17 +96,21 @@ def query(sql: str, params: tuple = (), fetch: str = "all") -> Any:
     adapted_params = tuple(_adapt_param(p) for p in params)
 
     conn = get_conn()
+    in_txn = getattr(_local, 'in_transaction', 0) > 0
     try:
         cur = conn.cursor()
         cur.execute(sql, adapted_params)
 
         if fetch == "none":
-            conn.commit()
+            if not in_txn:
+                conn.commit()
             return None
 
         if fetch == "insert":
-            conn.commit()
-            return {"id": cur.lastrowid}
+            result = {"id": cur.lastrowid}
+            if not in_txn:
+                conn.commit()
+            return result
 
         if fetch == "one":
             row = cur.fetchone()
@@ -84,7 +132,8 @@ def query(sql: str, params: tuple = (), fetch: str = "all") -> Any:
         return [{col: row[i] for i, col in enumerate(columns)} for row in rows]
 
     except Exception as e:
-        conn.rollback()
+        if not in_txn:
+            conn.rollback()
         raise e
 
 

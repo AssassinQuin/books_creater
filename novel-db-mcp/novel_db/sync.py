@@ -13,7 +13,13 @@ _NOVELS_BASE = os.path.join(PROJECT_ROOT, "novels")
 # ============================================================================
 
 
+_hashes_table_ensured = False
+
+
 def _ensure_data_hashes_table():
+    global _hashes_table_ensured
+    if _hashes_table_ensured:
+        return
     query("""
         CREATE TABLE IF NOT EXISTS data_hashes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,6 +33,7 @@ def _ensure_data_hashes_table():
             UNIQUE(novel_id, data_type, data_key)
         )
     """, fetch="none")
+    _hashes_table_ensured = True
 
 
 def _compute_hash(content: str) -> str:

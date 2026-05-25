@@ -3,7 +3,7 @@ import logging
 import os
 import re
 
-from .db import mcp, query
+from .db import mcp, query, transaction
 
 logger = logging.getLogger(__name__)
 from .resolvers import _resolve_novel_id
@@ -90,69 +90,70 @@ def world_upsert(novel_name: str, category: str, name: str, data: dict,
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    data_json = json.dumps(data, ensure_ascii=False)
+    with transaction():
+        data_json = json.dumps(data, ensure_ascii=False)
 
-    extra_cols = ["region", "faction_id"]
-    extra_vals_insert = [region if region else "全域", faction_id]
-    extra_vals_update = [region if region else "全域", faction_id]
+        extra_cols = ["region", "faction_id"]
+        extra_vals_insert = [region if region else "全域", faction_id]
+        extra_vals_update = [region if region else "全域", faction_id]
 
-    if keys:
-        parsed_keys = json.loads(keys)
-        extra_cols.append("keys")
-        extra_vals_insert.append(parsed_keys)
-        extra_vals_update.append(parsed_keys)
-    if secondary_keys:
-        parsed_skeys = json.loads(secondary_keys)
-        extra_cols.append("secondary_keys")
-        extra_vals_insert.append(parsed_skeys)
-        extra_vals_update.append(parsed_skeys)
-    if tags:
-        parsed_tags = json.loads(tags)
-        extra_cols.append("tags")
-        extra_vals_insert.append(parsed_tags)
-        extra_vals_update.append(parsed_tags)
-    if related_ids:
-        parsed_rids = json.loads(related_ids)
-        extra_cols.append("related_ids")
-        extra_vals_insert.append(parsed_rids)
-        extra_vals_update.append(parsed_rids)
-    if volume_range:
-        extra_cols.append("volume_range")
-        extra_vals_insert.append(volume_range)
-        extra_vals_update.append(volume_range)
-    if writing_guide:
-        extra_cols.append("writing_guide")
-        extra_vals_insert.append(writing_guide)
-        extra_vals_update.append(writing_guide)
-    if lorebook_id:
-        extra_cols.append("lorebook_id")
-        extra_vals_insert.append(lorebook_id)
-        extra_vals_update.append(lorebook_id)
-    if priority != 30:
-        extra_cols.append("priority")
-        extra_vals_insert.append(priority)
-        extra_vals_update.append(priority)
-    if is_constant:
-        extra_cols.append("is_constant")
-        extra_vals_insert.append(is_constant)
-        extra_vals_update.append(is_constant)
+        if keys:
+            parsed_keys = json.loads(keys)
+            extra_cols.append("keys")
+            extra_vals_insert.append(parsed_keys)
+            extra_vals_update.append(parsed_keys)
+        if secondary_keys:
+            parsed_skeys = json.loads(secondary_keys)
+            extra_cols.append("secondary_keys")
+            extra_vals_insert.append(parsed_skeys)
+            extra_vals_update.append(parsed_skeys)
+        if tags:
+            parsed_tags = json.loads(tags)
+            extra_cols.append("tags")
+            extra_vals_insert.append(parsed_tags)
+            extra_vals_update.append(parsed_tags)
+        if related_ids:
+            parsed_rids = json.loads(related_ids)
+            extra_cols.append("related_ids")
+            extra_vals_insert.append(parsed_rids)
+            extra_vals_update.append(parsed_rids)
+        if volume_range:
+            extra_cols.append("volume_range")
+            extra_vals_insert.append(volume_range)
+            extra_vals_update.append(volume_range)
+        if writing_guide:
+            extra_cols.append("writing_guide")
+            extra_vals_insert.append(writing_guide)
+            extra_vals_update.append(writing_guide)
+        if lorebook_id:
+            extra_cols.append("lorebook_id")
+            extra_vals_insert.append(lorebook_id)
+            extra_vals_update.append(lorebook_id)
+        if priority != 30:
+            extra_cols.append("priority")
+            extra_vals_insert.append(priority)
+            extra_vals_update.append(priority)
+        if is_constant:
+            extra_cols.append("is_constant")
+            extra_vals_insert.append(is_constant)
+            extra_vals_update.append(is_constant)
 
-    col_str = ", ".join(extra_cols)
-    insert_placeholders = ", ".join(["?"] * len(extra_cols))
-    update_sets = ", ".join([f"{c} = ?" for c in extra_cols])
-    query(
-        f"INSERT INTO world_settings (novel_id, category, name, data, {col_str}) "
-        f"VALUES (?, ?, ?, ?, {insert_placeholders}) "
-        f"ON CONFLICT (novel_id, category, name) DO UPDATE SET data = ?, {update_sets}, updated_at = datetime('now')",
-        (novel_id, category, name, data_json, *extra_vals_insert, data_json, *extra_vals_update),
-        fetch="none"
-    )
-    _record_db_hash(novel_id, "world", f"{category}:{name}", data_json)
-    from .hooks import fire_post_save
-    ws = query("SELECT id FROM world_settings WHERE novel_id = ? AND category = ? AND name = ?",
-               (novel_id, category, name), fetch="one")
-    if ws:
-        fire_post_save(novel_id, "world_setting", ws["id"])
+        col_str = ", ".join(extra_cols)
+        insert_placeholders = ", ".join(["?"] * len(extra_cols))
+        update_sets = ", ".join([f"{c} = ?" for c in extra_cols])
+        query(
+            f"INSERT INTO world_settings (novel_id, category, name, data, {col_str}) "
+            f"VALUES (?, ?, ?, ?, {insert_placeholders}) "
+            f"ON CONFLICT (novel_id, category, name) DO UPDATE SET data = ?, {update_sets}, updated_at = datetime('now')",
+            (novel_id, category, name, data_json, *extra_vals_insert, data_json, *extra_vals_update),
+            fetch="none"
+        )
+        _record_db_hash(novel_id, "world", f"{category}:{name}", data_json)
+        from .hooks import fire_post_save
+        ws = query("SELECT id FROM world_settings WHERE novel_id = ? AND category = ? AND name = ?",
+                   (novel_id, category, name), fetch="one")
+        if ws:
+            fire_post_save(novel_id, "world_setting", ws["id"])
     return json.dumps({"ok": True, "category": category, "name": name}, ensure_ascii=False)
 
 

@@ -570,10 +570,9 @@ class SyncEngine:
         if "{category_file}" in fname and "category" in row:
             cat = row["category"]
             resolved = _resolve_category_file(cat, row, tpl=tpl)
-            if resolved.endswith("/"):
-                fname = fname.replace("{category_file}", f"{resolved}{row.get('name', cat)}")
-            else:
-                fname = fname.replace("{category_file}", resolved)
+            # resolved 以 / 结尾表示目录，直接替换即可；
+            # file_pattern 中的 {name} 等由 _resolve_filename_placeholders 后续处理
+            fname = fname.replace("{category_file}", resolved)
 
         fname = self._resolve_filename_placeholders(fname, row, tpl.id_field)
 
@@ -841,7 +840,7 @@ class SyncEngine:
 
         # section_replace 模式：需要处理聚合文件（多行→1文件）
         if tpl.merge_mode == "section_replace":
-            return self._files_to_db_aggregate(tpl, novel_id, novel_name, base)
+            return self._files_to_db_aggregate(tpl, novel_id, novel_name)
 
         # overwrite 模式：一个文件对应一行DB记录
         result = {"synced": 0, "errors": [], "details": []}
@@ -1029,6 +1028,8 @@ class SyncEngine:
             parse_jsonb_bullets, parse_md_table,
             parse_blockquotes, parse_acts,
         )
+
+        base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
 
         # 查找匹配的文件（支持两种模式）
         target_files = []

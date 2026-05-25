@@ -1,6 +1,6 @@
 import json
 
-from .db import mcp, query
+from .db import mcp, query, transaction
 from .resolvers import _resolve_novel_id, _resolve_chapter_id
 from .sync import _record_db_hash
 
@@ -24,48 +24,49 @@ def character_create(novel_name: str, name: str, role: str = "npc",
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    _json_fields = {}
-    if appearance_detail:
-        _json_fields["appearance_detail"] = json.loads(appearance_detail)
-    if decision_engine:
-        _json_fields["decision_engine"] = json.loads(decision_engine)
-    if voice_fingerprint:
-        _json_fields["voice_fingerprint"] = json.loads(voice_fingerprint)
-    if ability_system:
-        _json_fields["ability_system"] = json.loads(ability_system)
-    if behavior_pattern:
-        _json_fields["behavior_pattern"] = json.loads(behavior_pattern)
-    if current_snapshot:
-        _json_fields["current_snapshot"] = json.loads(current_snapshot)
-    if growth_trajectory:
-        _json_fields["growth_trajectory"] = json.loads(growth_trajectory)
-    if not distillation_tracked:
-        _json_fields["distillation_tracked"] = False
+    with transaction():
+        _json_fields = {}
+        if appearance_detail:
+            _json_fields["appearance_detail"] = json.loads(appearance_detail)
+        if decision_engine:
+            _json_fields["decision_engine"] = json.loads(decision_engine)
+        if voice_fingerprint:
+            _json_fields["voice_fingerprint"] = json.loads(voice_fingerprint)
+        if ability_system:
+            _json_fields["ability_system"] = json.loads(ability_system)
+        if behavior_pattern:
+            _json_fields["behavior_pattern"] = json.loads(behavior_pattern)
+        if current_snapshot:
+            _json_fields["current_snapshot"] = json.loads(current_snapshot)
+        if growth_trajectory:
+            _json_fields["growth_trajectory"] = json.loads(growth_trajectory)
+        if not distillation_tracked:
+            _json_fields["distillation_tracked"] = False
 
-    base_cols = ("novel_id, name, role, faction_id, race, ability_level, "
-                 "appearance, personality, background, goals, weaknesses, speech_style, catchphrase, "
-                 "arc_notes, first_appearance_chapter")
-    base_vals = (novel_id, name, role, faction_id, race, ability_level, appearance,
-                 personality, background, goals, weaknesses, speech_style, catchphrase,
-                 arc_notes, first_appearance_chapter)
+        base_cols = ("novel_id, name, role, faction_id, race, ability_level, "
+                     "appearance, personality, background, goals, weaknesses, speech_style, catchphrase, "
+                     "arc_notes, first_appearance_chapter")
+        base_vals = (novel_id, name, role, faction_id, race, ability_level, appearance,
+                     personality, background, goals, weaknesses, speech_style, catchphrase,
+                     arc_notes, first_appearance_chapter)
 
-    if _json_fields:
-        extra_cols = ", ".join(_json_fields.keys())
-        extra_vals = list(_json_fields.values())
-        all_cols = f"{base_cols}, {extra_cols}"
-        all_vals = base_vals + tuple(extra_vals)
-    else:
-        all_cols = base_cols
-        all_vals = base_vals
+        if _json_fields:
+            extra_cols = ", ".join(_json_fields.keys())
+            extra_vals = list(_json_fields.values())
+            all_cols = f"{base_cols}, {extra_cols}"
+            all_vals = base_vals + tuple(extra_vals)
+        else:
+            all_cols = base_cols
+            all_vals = base_vals
 
-    placeholders = ",".join(["?"] * len(all_vals))
-    r = query(
-        f"INSERT INTO characters ({all_cols}) VALUES ({placeholders})",
-        all_vals, fetch="insert"
-    )
-    _record_db_hash(novel_id, "character", name, json.dumps({"name": name, "role": role, "race": race, "appearance": appearance}, ensure_ascii=False))
-    from .hooks import fire_post_save
-    fire_post_save(novel_id, "character", r["id"])
+        placeholders = ",".join(["?"] * len(all_vals))
+        r = query(
+            f"INSERT INTO characters ({all_cols}) VALUES ({placeholders})",
+            all_vals, fetch="insert"
+        )
+        _record_db_hash(novel_id, "character", name, json.dumps({"name": name, "role": role, "race": race, "appearance": appearance}, ensure_ascii=False))
+        from .hooks import fire_post_save
+        fire_post_save(novel_id, "character", r["id"])
     return json.dumps({"ok": True, "id": r["id"], "name": name}, ensure_ascii=False)
 
 
@@ -109,14 +110,15 @@ def _character_update_by_id(character_id: int, name: str = "", role: str = "", f
     if not distillation_tracked: fields["distillation_tracked"] = False
     if not fields:
         return json.dumps({"ok": False, "error": "no valid fields"}, ensure_ascii=False)
-    sets = [f"{k} = ?" for k in fields]
-    vals = list(fields.values()) + [character_id]
-    query(f"UPDATE characters SET {', '.join(sets)}, updated_at = datetime('now') WHERE id = ?", tuple(vals), fetch="none")
-    char = query("SELECT novel_id, name FROM characters WHERE id = ?", (character_id,), fetch="one")
-    if char:
-        _record_db_hash(char["novel_id"], "character", char["name"], json.dumps(fields, ensure_ascii=False))
-        from .hooks import fire_post_save
-        fire_post_save(char["novel_id"], "character", character_id)
+    with transaction():
+        sets = [f"{k} = ?" for k in fields]
+        vals = list(fields.values()) + [character_id]
+        query(f"UPDATE characters SET {', '.join(sets)}, updated_at = datetime('now') WHERE id = ?", tuple(vals), fetch="none")
+        char = query("SELECT novel_id, name FROM characters WHERE id = ?", (character_id,), fetch="one")
+        if char:
+            _record_db_hash(char["novel_id"], "character", char["name"], json.dumps(fields, ensure_ascii=False))
+            from .hooks import fire_post_save
+            fire_post_save(char["novel_id"], "character", character_id)
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
@@ -468,80 +470,77 @@ def character_increment(novel_name: str, character_name: str,
 
     updates = []
 
-    # 叙事状态 → 写入快照表
-    has_narrative_change = location or arc_phase or emotional_state or physical_state or ability_add or inventory_add or knowledge_add
-    if has_narrative_change:
-        if not chapter_number:
-            return json.dumps({"error": "叙事状态增量需要 chapter_number 参数"}, ensure_ascii=False)
-        ch = query("SELECT id FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_number), fetch="one")
-        if not ch:
-            return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
+    with transaction():
+        has_narrative_change = location or arc_phase or emotional_state or physical_state or ability_add or inventory_add or knowledge_add
+        if has_narrative_change:
+            if not chapter_number:
+                return json.dumps({"error": "叙事状态增量需要 chapter_number 参数"}, ensure_ascii=False)
+            ch = query("SELECT id FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_number), fetch="one")
+            if not ch:
+                return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
 
-        # 取最新快照作为 base
-        base = query(
-            "SELECT css.* FROM character_state_snapshots css "
-            "JOIN chapters c ON css.chapter_id = c.id "
-            "WHERE css.character_id = ? ORDER BY c.number DESC LIMIT 1",
-            (char["id"],), fetch="one"
-        )
+            base = query(
+                "SELECT css.* FROM character_state_snapshots css "
+                "JOIN chapters c ON css.chapter_id = c.id "
+                "WHERE css.character_id = ? ORDER BY c.number DESC LIMIT 1",
+                (char["id"],), fetch="one"
+            )
 
-        def _parse_json(text, default):
-            if not text:
-                return default
-            try:
-                return json.loads(text)
-            except (json.JSONDecodeError, TypeError):
-                return default
+            def _parse_json(text, default):
+                if not text:
+                    return default
+                try:
+                    return json.loads(text)
+                except (json.JSONDecodeError, TypeError):
+                    return default
 
-        # 合并增量：标量直接覆盖，数组追加，对象合并
-        base_loc = base["location"] if base else ""
-        base_arc = base["arc_phase"] if base else ""
-        base_emo = base["emotional_state"] if base else ""
-        base_phy = base["physical_state"] if base else ""
-        base_abilities = _parse_json(base["ability_snapshot"] if base else "[]", [])
-        base_inventory = _parse_json(base["inventory_snapshot"] if base else "[]", [])
-        base_knowledge = _parse_json(base["knowledge_snapshot"] if base else "{}", {})
+            base_loc = base["location"] if base else ""
+            base_arc = base["arc_phase"] if base else ""
+            base_emo = base["emotional_state"] if base else ""
+            base_phy = base["physical_state"] if base else ""
+            base_abilities = _parse_json(base["ability_snapshot"] if base else "[]", [])
+            base_inventory = _parse_json(base["inventory_snapshot"] if base else "[]", [])
+            base_knowledge = _parse_json(base["knowledge_snapshot"] if base else "{}", {})
 
-        new_loc = location or base_loc
-        new_arc = arc_phase or base_arc
-        new_emo = emotional_state or base_emo
-        new_phy = physical_state or base_phy
-        if ability_add:
-            base_abilities.extend(_parse_json(ability_add, []))
-        if inventory_add:
-            base_inventory.extend(_parse_json(inventory_add, []))
-        if knowledge_add:
-            base_knowledge.update(_parse_json(knowledge_add, {}))
+            new_loc = location or base_loc
+            new_arc = arc_phase or base_arc
+            new_emo = emotional_state or base_emo
+            new_phy = physical_state or base_phy
+            if ability_add:
+                base_abilities.extend(_parse_json(ability_add, []))
+            if inventory_add:
+                base_inventory.extend(_parse_json(inventory_add, []))
+            if knowledge_add:
+                base_knowledge.update(_parse_json(knowledge_add, {}))
 
-        _character_snapshot_by_id(
-            char["id"], ch["id"],
-            new_loc, new_arc, new_emo, new_phy,
-            json.dumps(base_abilities, ensure_ascii=False),
-            json.dumps(base_inventory, ensure_ascii=False),
-            json.dumps(base_knowledge, ensure_ascii=False),
-            ""
-        )
-        updates.append("narrative_snapshot")
+            _character_snapshot_by_id(
+                char["id"], ch["id"],
+                new_loc, new_arc, new_emo, new_phy,
+                json.dumps(base_abilities, ensure_ascii=False),
+                json.dumps(base_inventory, ensure_ascii=False),
+                json.dumps(base_knowledge, ensure_ascii=False),
+                ""
+            )
+            updates.append("narrative_snapshot")
 
-    # 蒸馏字段 → 更新 characters 表
-    sets = []
-    vals = []
-    if snapshot_update:
-        cur_snap = _parse_json(char.get("current_snapshot") or "{}", {})
-        cur_snap.update(_parse_json(snapshot_update, {}))
-        sets.append("current_snapshot = ?")
-        vals.append(json.dumps(cur_snap, ensure_ascii=False))
-        updates.append("current_snapshot")
-    if growth_add:
-        cur_growth = _parse_json(char.get("growth_trajectory") or "[]", [])
-        cur_growth.extend(_parse_json(growth_add, []))
-        sets.append("growth_trajectory = ?")
-        vals.append(json.dumps(cur_growth, ensure_ascii=False))
-        updates.append("growth_trajectory")
-    if sets:
-        sets.append("updated_at = datetime('now')")
-        vals.append(char["id"])
-        query(f"UPDATE characters SET {', '.join(sets)} WHERE id = ?", tuple(vals), fetch="none")
+        sets = []
+        vals = []
+        if snapshot_update:
+            cur_snap = _parse_json(char.get("current_snapshot") or "{}", {})
+            cur_snap.update(_parse_json(snapshot_update, {}))
+            sets.append("current_snapshot = ?")
+            vals.append(json.dumps(cur_snap, ensure_ascii=False))
+            updates.append("current_snapshot")
+        if growth_add:
+            cur_growth = _parse_json(char.get("growth_trajectory") or "[]", [])
+            cur_growth.extend(_parse_json(growth_add, []))
+            sets.append("growth_trajectory = ?")
+            vals.append(json.dumps(cur_growth, ensure_ascii=False))
+            updates.append("growth_trajectory")
+        if sets:
+            sets.append("updated_at = datetime('now')")
+            vals.append(char["id"])
+            query(f"UPDATE characters SET {', '.join(sets)} WHERE id = ?", tuple(vals), fetch="none")
 
     if not updates:
         return json.dumps({"ok": False, "error": "Nothing to update"}, ensure_ascii=False)
@@ -641,7 +640,8 @@ def plot_thread_update(novel_name: str, thread_id: int, status: str = "",
         return json.dumps({"ok": False, "error": "Nothing to update"}, ensure_ascii=False)
     sets.append("updated_at = datetime('now')")
     vals.append(thread_id)
-    query(f"UPDATE plot_threads SET {', '.join(sets)} WHERE id = ?", tuple(vals), fetch="none")
+    with transaction():
+        query(f"UPDATE plot_threads SET {', '.join(sets)} WHERE id = ?", tuple(vals), fetch="none")
     return json.dumps({"ok": True, "thread_id": thread_id}, ensure_ascii=False)
 
 
@@ -752,18 +752,19 @@ def distillation_evolve(novel_name: str, character_name: str, chapter_number: in
     if not ch:
         return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
 
-    query(
-        "INSERT INTO character_distillation_evolution "
-        "(novel_id, character_id, chapter_id, decision_delta, new_knowledge, "
-        "changed_beliefs, relation_shifts, voice_changes, ability_changes, "
-        "arc_transition, key_decision, notes) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-        "ON CONFLICT DO NOTHING",
-        (novel_id, char["id"], ch["id"],
-         decision_delta, new_knowledge, changed_beliefs, relation_shifts,
-         voice_changes, ability_changes, arc_transition, key_decision, notes),
-        fetch="none"
-    )
+    with transaction():
+        query(
+            "INSERT INTO character_distillation_evolution "
+            "(novel_id, character_id, chapter_id, decision_delta, new_knowledge, "
+            "changed_beliefs, relation_shifts, voice_changes, ability_changes, "
+            "arc_transition, key_decision, notes) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT DO NOTHING",
+            (novel_id, char["id"], ch["id"],
+             decision_delta, new_knowledge, changed_beliefs, relation_shifts,
+             voice_changes, ability_changes, arc_transition, key_decision, notes),
+            fetch="none"
+        )
     return json.dumps({"ok": True, "character": character_name, "chapter": chapter_number}, ensure_ascii=False)
 
 

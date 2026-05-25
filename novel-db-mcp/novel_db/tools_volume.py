@@ -1,6 +1,6 @@
 import json
 
-from .db import mcp, query
+from .db import mcp, query, transaction
 from .resolvers import _resolve_novel_id
 
 # JSON-type fields that need json.dumps serialization

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from .db import mcp, query, PROJECT_ROOT
+from .db import mcp, query, PROJECT_ROOT, transaction
 from .resolvers import _resolve_novel_id, _resolve_chapter_id
 from .tools_chapter import _save_chapter_summary_internal
 from .constraints import validate_chapter_text, _get_constraints, _enrichment_level, validate_with_db_rules
@@ -208,36 +208,37 @@ def writing_rule_upsert(novel_name: str, rule_type: str, name: str, category: st
 
     active_int = 1 if is_active else 0
 
-    existing = query(
-        "SELECT id FROM writing_rules WHERE novel_id = ? AND name = ?",
-        (novel_id, name), fetch="one"
-    )
+    with transaction():
+        existing = query(
+            "SELECT id FROM writing_rules WHERE novel_id = ? AND name = ?",
+            (novel_id, name), fetch="one"
+        )
 
-    if existing:
-        query(
-            "UPDATE writing_rules SET rule_type=?, category=?, pattern=?, replacement=?, "
-            "threshold_min=?, threshold_max=?, scope=?, severity=?, message=?, "
-            "context_pattern=?, context_range=?, is_active=?, priority=?, "
-            "updated_at=CURRENT_TIMESTAMP WHERE id=?",
-            (rule_type, category, pattern, replacement,
-             threshold_min, threshold_max, scope, severity, message,
-             context_pattern, context_range, active_int, priority,
-             existing["id"]),
-            fetch="none"
-        )
-        return json.dumps({"ok": True, "action": "updated", "name": name}, ensure_ascii=False)
-    else:
-        query(
-            "INSERT INTO writing_rules (novel_id, rule_type, category, name, pattern, replacement, "
-            "threshold_min, threshold_max, scope, severity, message, "
-            "context_pattern, context_range, is_active, priority) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (novel_id, rule_type, category, name, pattern, replacement,
-             threshold_min, threshold_max, scope, severity, message,
-             context_pattern, context_range, active_int, priority),
-            fetch="none"
-        )
-        return json.dumps({"ok": True, "action": "created", "name": name}, ensure_ascii=False)
+        if existing:
+            query(
+                "UPDATE writing_rules SET rule_type=?, category=?, pattern=?, replacement=?, "
+                "threshold_min=?, threshold_max=?, scope=?, severity=?, message=?, "
+                "context_pattern=?, context_range=?, is_active=?, priority=?, "
+                "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (rule_type, category, pattern, replacement,
+                 threshold_min, threshold_max, scope, severity, message,
+                 context_pattern, context_range, active_int, priority,
+                 existing["id"]),
+                fetch="none"
+            )
+            return json.dumps({"ok": True, "action": "updated", "name": name}, ensure_ascii=False)
+        else:
+            query(
+                "INSERT INTO writing_rules (novel_id, rule_type, category, name, pattern, replacement, "
+                "threshold_min, threshold_max, scope, severity, message, "
+                "context_pattern, context_range, is_active, priority) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (novel_id, rule_type, category, name, pattern, replacement,
+                 threshold_min, threshold_max, scope, severity, message,
+                 context_pattern, context_range, active_int, priority),
+                fetch="none"
+            )
+            return json.dumps({"ok": True, "action": "created", "name": name}, ensure_ascii=False)
 
 
 @mcp.tool
@@ -332,11 +333,12 @@ def _wf_save_summary(chapter_id: int, novel_id: int, chapter_number: int,
     nf = new_foreshadows or []
     rf = resolved_foreshadows or []
 
-    _save_chapter_summary_internal(chapter_id, summary, ke, ci, nf, rf, ds_json)
-    query("UPDATE chapters SET status = 'written', updated_at = datetime('now') WHERE id = ?",
-          (chapter_id,), fetch="none")
-    from .hooks import fire_post_save
-    fire_post_save(novel_id, "chapter", chapter_id)
+    with transaction():
+        _save_chapter_summary_internal(chapter_id, summary, ke, ci, nf, rf, ds_json)
+        query("UPDATE chapters SET status = 'written', updated_at = datetime('now') WHERE id = ?",
+              (chapter_id,), fetch="none")
+        from .hooks import fire_post_save
+        fire_post_save(novel_id, "chapter", chapter_id)
 
 
 def _wf_post_save(chapter_id: int, novel_id: int,
@@ -451,31 +453,33 @@ def foreshadow_plant(novel_name: str, description: str,
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    r = query(
-        "INSERT INTO foreshadows (novel_id, description, planted_chapter_id, "
-        "planned_recall_chapter, importance, related_characters, tags) "
-        "VALUES (?,?,?,?,?,?,?)",
-        (novel_id, description, planted_chapter_id, planned_recall_chapter,
-         importance, related_characters or [], tags or []), fetch="insert"
-    )
-    _record_db_hash(novel_id, "foreshadow", str(r["id"]), json.dumps({"description": description, "importance": importance}, ensure_ascii=False))
-    from .hooks import fire_post_save
-    fire_post_save(novel_id, "foreshadow", r["id"])
+    with transaction():
+        r = query(
+            "INSERT INTO foreshadows (novel_id, description, planted_chapter_id, "
+            "planned_recall_chapter, importance, related_characters, tags) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (novel_id, description, planted_chapter_id, planned_recall_chapter,
+             importance, related_characters or [], tags or []), fetch="insert"
+        )
+        _record_db_hash(novel_id, "foreshadow", str(r["id"]), json.dumps({"description": description, "importance": importance}, ensure_ascii=False))
+        from .hooks import fire_post_save
+        fire_post_save(novel_id, "foreshadow", r["id"])
     return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
 
 
 def _foreshadow_recall_internal(novel_id: int, foreshadow_id: int, chapter_id: int) -> dict:
     """Internal: recall a foreshadow (shared between writing_finish and foreshadow_recall tool)."""
-    fs = query("SELECT id FROM foreshadows WHERE id=? AND novel_id=?", (foreshadow_id, novel_id), fetch="one")
-    if not fs:
-        return {"ok": False, "error": f"伏笔 {foreshadow_id} 不存在或不属于该项目"}
-    query(
-        "UPDATE foreshadows SET status = 'recalled', actual_recall_chapter_id = ?, updated_at = datetime('now') "
-        "WHERE id = ?", (chapter_id, foreshadow_id),
-        fetch="none"
-    )
-    from .hooks import fire_post_save
-    fire_post_save(novel_id, "foreshadow", foreshadow_id)
+    with transaction():
+        fs = query("SELECT id FROM foreshadows WHERE id=? AND novel_id=?", (foreshadow_id, novel_id), fetch="one")
+        if not fs:
+            return {"ok": False, "error": f"伏笔 {foreshadow_id} 不存在或不属于该项目"}
+        query(
+            "UPDATE foreshadows SET status = 'recalled', actual_recall_chapter_id = ?, updated_at = datetime('now') "
+            "WHERE id = ?", (chapter_id, foreshadow_id),
+            fetch="none"
+        )
+        from .hooks import fire_post_save
+        fire_post_save(novel_id, "foreshadow", foreshadow_id)
     return {"ok": True}
 
 
@@ -580,24 +584,24 @@ def echo_create(novel_name: str, source_chapter_id: int, echo_chapter_id: int,
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    # Resolve volume_id from echo_chapter
     vol_id = None
     ch = query("SELECT volume_id FROM chapters WHERE id = ? AND novel_id = ?",
                (echo_chapter_id, novel_id), fetch="one")
     if ch:
         vol_id = ch.get("volume_id")
 
-    r = query(
-        "INSERT INTO echoes (novel_id, source_chapter_id, echo_chapter_id, volume_id, "
-        "source_event, echo_type, echo_description, strong_related, tags) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (novel_id, source_chapter_id, echo_chapter_id, vol_id,
-         source_event, echo_type, echo_description,
-         1 if strong_related else 0,
-         tags or []), fetch="insert"
-    )
-    _record_db_hash(novel_id, "echo", str(r["id"]),
-                    json.dumps({"source_event": source_event, "echo_type": echo_type}, ensure_ascii=False))
+    with transaction():
+        r = query(
+            "INSERT INTO echoes (novel_id, source_chapter_id, echo_chapter_id, volume_id, "
+            "source_event, echo_type, echo_description, strong_related, tags) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (novel_id, source_chapter_id, echo_chapter_id, vol_id,
+             source_event, echo_type, echo_description,
+             1 if strong_related else 0,
+             tags or []), fetch="insert"
+        )
+        _record_db_hash(novel_id, "echo", str(r["id"]),
+                        json.dumps({"source_event": source_event, "echo_type": echo_type}, ensure_ascii=False))
     return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
 
 

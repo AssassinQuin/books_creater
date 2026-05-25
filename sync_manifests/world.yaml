@@ -4,7 +4,7 @@ db_table: world_settings
 id_field: name
 file_dir: "设定/世界观"
 authority: db
-merge_mode: overwrite
+merge_mode: section_replace
 section_marker: "## {category}: {name}"
 file_pattern: "{category_file}/{name}.md"
 file_title: "{name}"
@@ -16,19 +16,19 @@ transforms:
   faction_id: builtin.resolve_faction
 
 category_file_map:
-  core_setting: "核心设定"
-  bestiary: "异灵图鉴"
-  ability: "能力体系"
-  item: "物品装备"
-  economy: "经济体系"
-  daily_life: "日常生活"
-  history: "历史事件"
-  location: "地图"
-  faction: "势力"
-  race: "种族"
-  building: "建筑"
-  culture: "文化"
-  plant: "植物"
+  core_setting: "核心设定/"
+  bestiary: "异灵图鉴/"
+  ability: "能力体系/"
+  item: "物品装备/"
+  economy: "经济体系/"
+  daily_life: "日常生活/"
+  history: "历史事件/"
+  location: "地图/"
+  faction: "势力/"
+  race: "种族/"
+  building: "建筑/"
+  culture: "文化/"
+  plant: "植物/"
 
 sections:
   - heading: "{category}: {name}"

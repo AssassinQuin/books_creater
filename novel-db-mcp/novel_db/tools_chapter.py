@@ -1,7 +1,7 @@
 import json
 from collections import defaultdict
 
-from .db import mcp, query
+from .db import mcp, query, transaction
 from .resolvers import _resolve_novel_id, _resolve_chapter_id
 
 
