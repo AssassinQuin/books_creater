@@ -4,9 +4,10 @@ from pathlib import Path
 from .db import mcp, query, PROJECT_ROOT
 from .resolvers import _resolve_novel_id, _resolve_chapter_id
 from .tools_chapter import _save_chapter_summary_internal
-from .constraints import validate_chapter_text, _get_constraints, _enrichment_level
+from .constraints import validate_chapter_text, _get_constraints, _enrichment_level, validate_with_db_rules
 from .prompts import _build_event_checklist
 from .sync import _record_db_hash
+from .errors import ValidationError
 
 
 @mcp.tool
@@ -45,7 +46,7 @@ def record_new_content(novel_name: str, content_type: str, name: str = "",
 
     if not name:
         tmpl = query(
-            "SELECT data FROM world_settings WHERE novel_id = %s AND category = 'template' AND name = %s",
+            "SELECT data FROM world_settings WHERE novel_id = ? AND category = 'template' AND name = ?",
             (novel_id, content_type), fetch="one"
         )
         if tmpl:
@@ -71,7 +72,7 @@ def record_new_content(novel_name: str, content_type: str, name: str = "",
 
     if content_type == "npc":
         existing = query(
-            "SELECT id FROM characters WHERE novel_id = %s AND name = %s",
+            "SELECT id FROM characters WHERE novel_id = ? AND name = ?",
             (novel_id, name), fetch="one"
         )
         if existing:
@@ -79,21 +80,16 @@ def record_new_content(novel_name: str, content_type: str, name: str = "",
         desc = parsed_data.get("背景", parsed_data.get("notes", "")) if parsed_data else ""
         r = query(
             "INSERT INTO characters (novel_id, name, role, appearance, personality, speech_style, background, status) "
-            "VALUES (%s, %s, 'npc', %s, %s, %s, %s, %s) RETURNING id",
+            "VALUES (?, ?, 'npc', ?, ?, ?, ?, ?)",
             (novel_id, name,
              parsed_data.get("外观", {}).get("服饰", "") if isinstance(parsed_data.get("外观"), dict) else str(parsed_data.get("外观", "")),
              str(parsed_data.get("性格", {}).get("核心特质", "") if isinstance(parsed_data.get("性格"), dict) else parsed_data.get("性格", "")),
              str(parsed_data.get("性格", {}).get("说话风格", "") if isinstance(parsed_data.get("性格"), dict) else ""),
              str(parsed_data.get("背景", {}).get("出身", "") if isinstance(parsed_data.get("背景"), dict) else desc),
              json.dumps(parsed_data.get("当前状态", {}), ensure_ascii=False) if isinstance(parsed_data.get("当前状态"), dict) else "{}"),
-            fetch="one"
+            fetch="insert"
         )
         char_id = r["id"] if r else None
-        if parsed_data:
-            query("""INSERT INTO world_settings (novel_id, category, name, data) VALUES (%s, 'character_detail', %s, %s)
-                     ON CONFLICT (novel_id, category, name) DO UPDATE SET data = %s""",
-                  (novel_id, f"npc_{name}", json.dumps(parsed_data, ensure_ascii=False),
-                   json.dumps(parsed_data, ensure_ascii=False)), fetch="none")
         return json.dumps({"ok": True, "action": "created", "id": char_id, "type": "npc", "name": name}, ensure_ascii=False)
     else:
         cat = cat_map.get(content_type, "core_setting")
@@ -102,7 +98,7 @@ def record_new_content(novel_name: str, content_type: str, name: str = "",
             store_data["_name"] = name
         query(
             "INSERT INTO world_settings (novel_id, category, name, data) "
-            "VALUES (%s, %s, %s, %s) ON CONFLICT (novel_id, category, name) DO UPDATE SET data = %s",
+            "VALUES (?, ?, ?, ?) ON CONFLICT (novel_id, category, name) DO UPDATE SET data = ?",
             (novel_id, cat, name, json.dumps(store_data, ensure_ascii=False),
              json.dumps(store_data, ensure_ascii=False)), fetch="none"
         )
@@ -116,7 +112,7 @@ def event_checklist(novel_name: str, chapter_number: int) -> str:
       chapter_number: 章节序号
     """
     novel_id = _resolve_novel_id(novel_name)
-    ch = query("SELECT * FROM chapters WHERE novel_id = %s AND number = %s",
+    ch = query("SELECT * FROM chapters WHERE novel_id = ? AND number = ?",
                (novel_id, chapter_number), fetch="one")
     if not ch:
         return json.dumps({"error": "chapter not found"}, ensure_ascii=False)
@@ -136,8 +132,10 @@ def event_checklist(novel_name: str, chapter_number: int) -> str:
 
 
 @mcp.tool
-def validate_chapter(chapter_text: str) -> str:
-    """校验正文是否满足硬约束。返回 violations + stats + enrichment（字数不足时的充实指引）。约束从 writing-constraints.md 加载。"""
+def validate_chapter(chapter_text: str, novel_name: str = "") -> str:
+    """校验正文是否满足硬约束。返回 violations + stats + enrichment + db_violations。
+    novel_name: 可选。传入后额外加载该小说的 writing_rules 表规则执行数据驱动校验。
+    约束来源：writing-constraints.md（基础）+ writing_rules 表（数据驱动）。"""
     result = validate_chapter_text(chapter_text)
     stats = result.get("stats", {})
     wc = stats.get("word_count", 0)
@@ -146,48 +144,183 @@ def validate_chapter(chapter_text: str) -> str:
     min_words = hard_abs.get("word_count", {}).get("min", 0)
     if wc < min_words:
         result["enrichment"] = _enrichment_level(wc, min_words)
+
+    # Data-driven rules from DB
+    if novel_name:
+        try:
+            novel_id = _resolve_novel_id(novel_name)
+            db_result = validate_with_db_rules(novel_id, chapter_text)
+            db_violations = db_result.get("violations", [])
+            result["db_violations"] = db_violations
+            result["db_stats"] = db_result.get("rule_stats", {})
+            # Merge DB violations into overall pass/fail
+            db_errors = [v for v in db_violations if v.get("severity") == "error"]
+            if db_errors:
+                result["passed"] = False
+                result["violations"].extend([v["message"] for v in db_errors])
+            db_warnings = [v for v in db_violations if v.get("severity") == "warning"]
+            result["db_warnings"] = [v["message"] for v in db_warnings]
+        except Exception as e:
+            result["db_error"] = str(e)
+            result["passed"] = False
+            result["db_rules_available"] = False
+
     return json.dumps(result, ensure_ascii=False)
 
 
 @mcp.tool
-def writing_finish(novel_name: str, chapter_number: int, summary: str, chapter_text: str,
-                   key_events: list = None, characters_involved: list = None,
-                   new_foreshadows: list = None, resolved_foreshadows: list = None,
-                   ability_level: str = "", location: str = "",
-                   timeline_events: list = None,
-                   self_check: str = "") -> str:
-    """写章后一键更新所有状态：先校验正文→再自检→通过后存摘要+维度+伏笔+时间线。校验或自检不通过会拒绝存盘。
-    self_check: 必须传'passed'，表示正文自检已完成并全部通过。"""
-    novel_id = _resolve_novel_id(novel_name)
-    ch = query("SELECT id, novel_id, number FROM chapters WHERE novel_id=%s AND number=%s", (novel_id, chapter_number), fetch="one")
-    if not ch:
-        return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
-    chapter_id = ch["id"]
+def writing_rule_upsert(novel_name: str, rule_type: str, name: str, category: str = "",
+                        pattern: str = "", replacement: str = "",
+                        threshold_min: float = None, threshold_max: float = None,
+                        scope: str = "chapter", severity: str = "error",
+                        message: str = "", context_pattern: str = "",
+                        context_range: int = 0, is_active: bool = True,
+                        priority: int = 30) -> str:
+    """新增或更新写作校验规则。规则存储在 writing_rules 表，validate_chapter 自动执行。
+    rule_type: 'keyword_ban'(违禁)|'keyword_limit'(频次)|'pattern_match'(正则)|'term_replace'(术语)|'absence_check'(缺失)|'co_occurrence'(共现)
+    category: 'ai_flavor'|'cruelty'|'term'|'npc'|'micro_action'|'world_tone'|'punctuation'|'structure'
+    pattern: 关键词或正则；多个用JSON数组如 '[\"词1\",\"词2\"]'
+    threshold_min/threshold_max: 频次/密度阈值(null=不限)
+    context_pattern/context_range: absence_check 用的上下文模式
+    severity: 'error'(阻断存盘)|'warning'(仅提示)
 
+    用法:
+      # 禁用AI味词
+      writing_rule_upsert(novel_name="这次不一样了", rule_type="keyword_ban", name="AI味-不禁",
+        category="ai_flavor", pattern="不禁", severity="warning", message="AI味词：{found}，用其他方式表达")
+      # 术语替换
+      writing_rule_upsert(novel_name="这次不一样了", rule_type="term_replace", name="数据→讯息",
+        category="term", pattern="数据", replacement="讯息", severity="warning")
+      # 微动作频次
+      writing_rule_upsert(novel_name="这次不一样了", rule_type="keyword_limit", name="摩挲关节频次",
+        category="micro_action", pattern="摩挲关节", threshold_max=2, severity="warning",
+        message="微动作'{found}'超过{max}次/章")
+      # 灵站双重性（灵站出现时附近应有负面词）
+      writing_rule_upsert(novel_name="这次不一样了", rule_type="absence_check", name="灵站双重性",
+        category="world_tone", pattern="[\"灵站\"]", context_pattern="[\"八折\",\"兑换券\",\"克扣\",\"剥削\",\"打八折\"]",
+        context_range=300, severity="warning", message="灵站描写缺少代价/剥削面，需同时展现正面和负面")
+    novel_name: 小说名称
+    """
+    novel_id = _resolve_novel_id(novel_name)
+    valid_types = ["keyword_ban", "keyword_limit", "pattern_match", "term_replace", "absence_check", "co_occurrence"]
+    if rule_type not in valid_types:
+        return json.dumps({"error": f"rule_type must be one of {valid_types}"}, ensure_ascii=False)
+
+    active_int = 1 if is_active else 0
+
+    existing = query(
+        "SELECT id FROM writing_rules WHERE novel_id = ? AND name = ?",
+        (novel_id, name), fetch="one"
+    )
+
+    if existing:
+        query(
+            "UPDATE writing_rules SET rule_type=?, category=?, pattern=?, replacement=?, "
+            "threshold_min=?, threshold_max=?, scope=?, severity=?, message=?, "
+            "context_pattern=?, context_range=?, is_active=?, priority=?, "
+            "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (rule_type, category, pattern, replacement,
+             threshold_min, threshold_max, scope, severity, message,
+             context_pattern, context_range, active_int, priority,
+             existing["id"]),
+            fetch="none"
+        )
+        return json.dumps({"ok": True, "action": "updated", "name": name}, ensure_ascii=False)
+    else:
+        query(
+            "INSERT INTO writing_rules (novel_id, rule_type, category, name, pattern, replacement, "
+            "threshold_min, threshold_max, scope, severity, message, "
+            "context_pattern, context_range, is_active, priority) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (novel_id, rule_type, category, name, pattern, replacement,
+             threshold_min, threshold_max, scope, severity, message,
+             context_pattern, context_range, active_int, priority),
+            fetch="none"
+        )
+        return json.dumps({"ok": True, "action": "created", "name": name}, ensure_ascii=False)
+
+
+@mcp.tool
+def writing_rule_list(novel_name: str, category: str = "", is_active: bool = True) -> str:
+    """列出写作校验规则。可按 category 过滤。
+    novel_name: 小说名称
+    """
+    novel_id = _resolve_novel_id(novel_name)
+    active_int = 1 if is_active else 0
+    if category:
+        rows = query(
+            "SELECT id, rule_type, category, name, pattern, replacement, "
+            "threshold_min, threshold_max, severity, message, is_active "
+            "FROM writing_rules WHERE novel_id=? AND category=? AND is_active=? "
+            "ORDER BY priority DESC",
+            (novel_id, category, active_int)
+        )
+    else:
+        rows = query(
+            "SELECT id, rule_type, category, name, pattern, replacement, "
+            "threshold_min, threshold_max, severity, message, is_active "
+            "FROM writing_rules WHERE novel_id=? AND is_active=? "
+            "ORDER BY priority DESC",
+            (novel_id, active_int)
+        )
+    rules = [dict(r) for r in rows] if rows else []
+    return json.dumps({"rules": rules, "total": len(rules)}, ensure_ascii=False)
+
+
+# ── writing_finish 内部函数（拆分自原单体函数）──
+
+
+def _wf_validate(chapter_text: str, self_check: str, novel_id: int = 0) -> dict:
+    """Step 1: 硬约束校验 + DB规则校验 + 自检门控。通过返回 validation dict。
+    失败时抛出 ValidationError。
+    """
     validation = validate_chapter_text(chapter_text)
+
+    if novel_id:
+        db_result = validate_with_db_rules(novel_id, chapter_text)
+        db_violations = db_result.get("violations", [])
+        validation["db_violations"] = db_violations
+        validation["db_stats"] = db_result.get("rule_stats", {})
+        db_errors = [v for v in db_violations if v.get("severity") == "error"]
+        if db_errors:
+            validation["passed"] = False
+            validation["violations"].extend([v["message"] for v in db_errors])
+
     if not validation["passed"]:
-        err = {
-            "ok": False,
-            "error": "硬约束校验不通过，拒绝存盘",
-            "violations": validation["violations"],
-            "stats": validation["stats"],
-        }
         stats = validation["stats"]
         wc = stats.get("word_count", 0)
         c = _get_constraints()
         hard_abs = c.get("hard_abs", {})
         min_words = hard_abs.get("word_count", {}).get("min", 0)
-        if wc < min_words:
-            err["enrichment"] = _enrichment_level(wc, min_words)
-        return json.dumps(err, ensure_ascii=False)
+        enrichment = _enrichment_level(wc, min_words) if wc < min_words else None
+        raise ValidationError(json.dumps({
+            "ok": False,
+            "error": "硬约束校验不通过，拒绝存盘",
+            "violations": validation["violations"],
+            "stats": stats,
+            **({"enrichment": enrichment} if enrichment else {}),
+        }, ensure_ascii=False))
 
     if self_check != "passed":
-        return json.dumps({
+        raise ValidationError(json.dumps({
             "ok": False,
             "error": "自检未完成，拒绝存盘",
-            "hint": "调 chapter_self_check(chapter_text) → 逐项检查 → 修复 → 再调 writing_finish(self_check='passed')"
-        }, ensure_ascii=False)
+            "hint": "调 chapter_self_check(chapter_text) → 逐项检查 → 修复 → 再调 writing_finish(self_check='passed')",
+        }, ensure_ascii=False))
 
+    return {
+        "passed": True,
+        "validation": validation,
+        "stats": validation["stats"],
+        "enrichment": validation.get("enrichment"),
+    }
+
+
+def _wf_save_summary(chapter_id: int, novel_id: int, chapter_number: int,
+                     summary: str, key_events, characters_involved,
+                     new_foreshadows, resolved_foreshadows,
+                     ability_level: str, location: str) -> None:
+    """Step 2: 保存摘要 + 更新章节状态。"""
     ke = json.dumps(key_events or [], ensure_ascii=False)
     ds = {}
     if ability_level:
@@ -200,68 +333,100 @@ def writing_finish(novel_name: str, chapter_number: int, summary: str, chapter_t
     rf = resolved_foreshadows or []
 
     _save_chapter_summary_internal(chapter_id, summary, ke, ci, nf, rf, ds_json)
+    query("UPDATE chapters SET status = 'written', updated_at = datetime('now') WHERE id = ?",
+          (chapter_id,), fetch="none")
+    from .hooks import fire_post_save
+    fire_post_save(novel_id, "chapter", chapter_id)
 
-    query("UPDATE chapters SET status = 'written', updated_at = NOW() WHERE id = %s", (chapter_id,), fetch="none")
 
-    for fid in (rf or []):
-        _foreshadow_recall_internal(ch["novel_id"], fid, chapter_id)
-
-    if ability_level:
-        query(
-            "INSERT INTO dimension_changes (novel_id, chapter_id, dimension, change_type, "
-            "entity_name, after_value, description) VALUES (%s,%s,'ability','update','主角',%s,'等级变更')",
-            (ch["novel_id"], chapter_id, json.dumps({"level": ability_level})),
-            fetch="none"
-        )
-    if location:
-        query(
-            "INSERT INTO dimension_changes (novel_id, chapter_id, dimension, change_type, "
-            "entity_name, after_value, description) VALUES (%s,%s,'space','move','主角',%s,'位置变更')",
-            (ch["novel_id"], chapter_id, json.dumps({"location": location})),
-            fetch="none"
-        )
+def _wf_post_save(chapter_id: int, novel_id: int,
+                  resolved_foreshadows: list, timeline_events: list) -> None:
+    """Step 3: 伏笔回收 + 时间线索引。"""
+    for fid in (resolved_foreshadows or []):
+        _foreshadow_recall_internal(novel_id, fid, chapter_id)
 
     for evt in (timeline_events or []):
         if isinstance(evt, dict) and evt.get("event_description"):
             query(
                 "INSERT INTO timeline_events (novel_id, chapter_id, event_time, event_order, "
-                "event_description, characters_involved) VALUES (%s,%s,%s,%s,%s,%s)",
-                (ch["novel_id"], chapter_id,
+                "event_description, characters_involved) VALUES (?,?,?,?,?,?)",
+                (novel_id, chapter_id,
                  evt.get("event_time", ""), evt.get("event_order", 0),
                  evt["event_description"], evt.get("characters_involved", [])),
                 fetch="none"
             )
 
-    stats = validation["stats"]
+
+def _wf_quality(chapter_id: int, novel_id: int, validation_stats: dict,
+                validation: dict) -> None:
+    """Step 4: 质量统计。INSERT/UPDATE chapter_quality。"""
+    stats = validation_stats
+    db_viol_json = json.dumps(validation.get("db_violations", []), ensure_ascii=False)
     query(
         "INSERT INTO chapter_quality (chapter_id, novel_id, "
         "em_dash_count, ellipsis_count, semicolon_count, exclamation_count, wave_count, "
         "negation_count, word_count, long_paragraphs, avg_punct_types_per_para, "
-        "dialogue_breaks, banned_patterns, violations, passed) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+        "dialogue_breaks, banned_patterns, violations, db_violations, passed) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT (chapter_id) DO UPDATE SET "
-        "em_dash_count=%s, ellipsis_count=%s, semicolon_count=%s, exclamation_count=%s, wave_count=%s, "
-        "negation_count=%s, word_count=%s, long_paragraphs=%s, avg_punct_types_per_para=%s, "
-        "dialogue_breaks=%s, banned_patterns=%s, violations=%s, passed=%s",
-        (chapter_id, ch["novel_id"],
+        "em_dash_count=?, ellipsis_count=?, semicolon_count=?, exclamation_count=?, wave_count=?, "
+        "negation_count=?, word_count=?, long_paragraphs=?, avg_punct_types_per_para=?, "
+        "dialogue_breaks=?, banned_patterns=?, violations=?, db_violations=?, passed=?",
+        (chapter_id, novel_id,
          stats["em_dash_count"], stats["ellipsis_count"], stats["semicolon_count"],
          stats["exclamation_count"], stats["wave_count"],
          stats["negation_count"], stats["word_count"], stats["long_paragraphs"],
          stats["avg_punct_types_per_para"], stats["dialogue_breaks"],
-         stats["banned_patterns"], json.dumps(validation["violations"]), validation["passed"],
+         stats["banned_patterns"], json.dumps(validation["violations"]), db_viol_json, validation["passed"],
          stats["em_dash_count"], stats["ellipsis_count"], stats["semicolon_count"],
          stats["exclamation_count"], stats["wave_count"],
          stats["negation_count"], stats["word_count"], stats["long_paragraphs"],
          stats["avg_punct_types_per_para"], stats["dialogue_breaks"],
-         stats["banned_patterns"], json.dumps(validation["violations"]), validation["passed"]),
+         stats["banned_patterns"], json.dumps(validation["violations"]), db_viol_json, validation["passed"]),
         fetch="none"
     )
 
+
+@mcp.tool
+def writing_finish(novel_name: str, chapter_number: int, summary: str, chapter_text: str,
+                   key_events: list = None, characters_involved: list = None,
+                   new_foreshadows: list = None, resolved_foreshadows: list = None,
+                   ability_level: str = "", location: str = "",
+                   timeline_events: list = None,
+                   self_check: str = "") -> str:
+    """写章后一键更新所有状态：先校验正文→再自检→通过后存摘要+维度+伏笔+时间线。校验或自检不通过会拒绝存盘。
+    self_check: 必须传'passed'，表示正文自检已完成并全部通过。"""
+    novel_id = _resolve_novel_id(novel_name)
+    ch = query("SELECT id, novel_id, number FROM chapters WHERE novel_id=? AND number=?",
+               (novel_id, chapter_number), fetch="one")
+    if not ch:
+        return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
+    chapter_id = ch["id"]
+
+    # Step 1: 硬约束校验 + DB规则校验 + 自检门控
+    try:
+        result = _wf_validate(chapter_text, self_check, novel_id)
+    except ValidationError as e:
+        return str(e)
+
+    # Step 2: 保存摘要 + 更新章节状态
+    _wf_save_summary(chapter_id, ch["novel_id"], chapter_number, summary,
+                     key_events, characters_involved, new_foreshadows,
+                     resolved_foreshadows, ability_level, location)
+
+    # Step 3: 伏笔回收 + 时间线索引
+    _wf_post_save(chapter_id, ch["novel_id"],
+                  resolved_foreshadows, timeline_events)
+
+    # Step 4: 质量统计
+    _wf_quality(chapter_id, ch["novel_id"], result["stats"], result["validation"])
+
+    stats = result["stats"]
     return json.dumps({
         "ok": True,
-        "updated": ["summary", "status", "foreshadows", "dimensions", "timeline", "quality"],
+        "updated": ["summary", "status", "foreshadows", "timeline", "quality"],
         "quality": {"passed": True, "stats": stats},
-        "warnings": validation.get("warnings", []),
+        "warnings": result["validation"].get("warnings", []),
         "post_save_checklist": {
             "新地点": "本章是否出现了新地点？→ record_new_content(novel_name, 'location', '地名', json_data)",
             "新NPC": "本章是否出现了新NPC？→ record_new_content(novel_name, 'npc', '人名', json_data)",
@@ -289,24 +454,28 @@ def foreshadow_plant(novel_name: str, description: str,
     r = query(
         "INSERT INTO foreshadows (novel_id, description, planted_chapter_id, "
         "planned_recall_chapter, importance, related_characters, tags) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+        "VALUES (?,?,?,?,?,?,?)",
         (novel_id, description, planted_chapter_id, planned_recall_chapter,
-         importance, related_characters or [], tags or []), fetch="one"
+         importance, related_characters or [], tags or []), fetch="insert"
     )
     _record_db_hash(novel_id, "foreshadow", str(r["id"]), json.dumps({"description": description, "importance": importance}, ensure_ascii=False))
+    from .hooks import fire_post_save
+    fire_post_save(novel_id, "foreshadow", r["id"])
     return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
 
 
 def _foreshadow_recall_internal(novel_id: int, foreshadow_id: int, chapter_id: int) -> dict:
     """Internal: recall a foreshadow (shared between writing_finish and foreshadow_recall tool)."""
-    fs = query("SELECT id FROM foreshadows WHERE id=%s AND novel_id=%s", (foreshadow_id, novel_id), fetch="one")
+    fs = query("SELECT id FROM foreshadows WHERE id=? AND novel_id=?", (foreshadow_id, novel_id), fetch="one")
     if not fs:
         return {"ok": False, "error": f"伏笔 {foreshadow_id} 不存在或不属于该项目"}
     query(
-        "UPDATE foreshadows SET status = 'recalled', actual_recall_chapter_id = %s, updated_at = NOW() "
-        "WHERE id = %s", (chapter_id, foreshadow_id),
+        "UPDATE foreshadows SET status = 'recalled', actual_recall_chapter_id = ?, updated_at = datetime('now') "
+        "WHERE id = ?", (chapter_id, foreshadow_id),
         fetch="none"
     )
+    from .hooks import fire_post_save
+    fire_post_save(novel_id, "foreshadow", foreshadow_id)
     return {"ok": True}
 
 
@@ -330,10 +499,10 @@ def foreshadow_list(novel_name: str, status: str = "") -> str:
     novel_id = _resolve_novel_id(novel_name)
 
     if status:
-        rows = query("SELECT * FROM foreshadows WHERE novel_id = %s AND status = %s ORDER BY id",
+        rows = query("SELECT * FROM foreshadows WHERE novel_id = ? AND status = ? ORDER BY id",
                      (novel_id, status))
     else:
-        rows = query("SELECT * FROM foreshadows WHERE novel_id = %s ORDER BY id", (novel_id,))
+        rows = query("SELECT * FROM foreshadows WHERE novel_id = ? ORDER BY id", (novel_id,))
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
 
 
@@ -356,7 +525,7 @@ def foreshadow_update(novel_name: str, foreshadow_id: int,
       reason: 放弃/回收原因（仅 status=abandoned/recalled 时记录）
     """
     novel_id = _resolve_novel_id(novel_name)
-    fs = query("SELECT id FROM foreshadows WHERE id=%s AND novel_id=%s",
+    fs = query("SELECT id FROM foreshadows WHERE id=? AND novel_id=?",
                (foreshadow_id, novel_id), fetch="one")
     if not fs:
         return json.dumps({"error": f"伏笔 {foreshadow_id} 不存在"}, ensure_ascii=False)
@@ -378,9 +547,9 @@ def foreshadow_update(novel_name: str, foreshadow_id: int,
     if not fields:
         return json.dumps({"ok": False, "error": "no fields to update"}, ensure_ascii=False)
 
-    sets = [f"{k} = %s" for k in fields]
+    sets = [f"{k} = ?" for k in fields]
     vals = list(fields.values()) + [foreshadow_id]
-    query(f"UPDATE foreshadows SET {', '.join(sets)}, updated_at = NOW() WHERE id = %s",
+    query(f"UPDATE foreshadows SET {', '.join(sets)}, updated_at = datetime('now') WHERE id = ?",
           tuple(vals), fetch="none")
     _record_db_hash(novel_id, "foreshadow", str(foreshadow_id), json.dumps(fields, ensure_ascii=False))
     return json.dumps({"ok": True, "foreshadow_id": foreshadow_id, "updated_fields": list(fields.keys()), "reason": reason},
@@ -413,7 +582,7 @@ def echo_create(novel_name: str, source_chapter_id: int, echo_chapter_id: int,
 
     # Resolve volume_id from echo_chapter
     vol_id = None
-    ch = query("SELECT volume_id FROM chapters WHERE id = %s AND novel_id = %s",
+    ch = query("SELECT volume_id FROM chapters WHERE id = ? AND novel_id = ?",
                (echo_chapter_id, novel_id), fetch="one")
     if ch:
         vol_id = ch.get("volume_id")
@@ -421,11 +590,11 @@ def echo_create(novel_name: str, source_chapter_id: int, echo_chapter_id: int,
     r = query(
         "INSERT INTO echoes (novel_id, source_chapter_id, echo_chapter_id, volume_id, "
         "source_event, echo_type, echo_description, strong_related, tags) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (novel_id, source_chapter_id, echo_chapter_id, vol_id,
          source_event, echo_type, echo_description,
          1 if strong_related else 0,
-         tags or []), fetch="one"
+         tags or []), fetch="insert"
     )
     _record_db_hash(novel_id, "echo", str(r["id"]),
                     json.dumps({"source_event": source_event, "echo_type": echo_type}, ensure_ascii=False))
@@ -446,28 +615,28 @@ def echo_list(novel_name: str, volume_id: int = 0, echo_chapter_id: int = 0) -> 
                      "FROM echoes e "
                      "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
                      "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
-                     "WHERE e.novel_id = %s AND e.volume_id = %s ORDER BY e.id",
+                     "WHERE e.novel_id = ? AND e.volume_id = ? ORDER BY e.id",
                      (novel_id, volume_id))
     elif echo_chapter_id:
         rows = query("SELECT e.*, c1.number as source_ch, c2.number as echo_ch "
                      "FROM echoes e "
                      "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
                      "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
-                     "WHERE e.novel_id = %s AND e.echo_chapter_id = %s ORDER BY e.id",
+                     "WHERE e.novel_id = ? AND e.echo_chapter_id = ? ORDER BY e.id",
                      (novel_id, echo_chapter_id))
     else:
         rows = query("SELECT e.*, c1.number as source_ch, c2.number as echo_ch "
                      "FROM echoes e "
                      "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
                      "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
-                     "WHERE e.novel_id = %s ORDER BY e.id", (novel_id,))
+                     "WHERE e.novel_id = ? ORDER BY e.id", (novel_id,))
 
     # Density check: count non-strong echoes per volume
     density_warn = []
     if not volume_id:
         vol_counts = query(
             "SELECT e.volume_id, COUNT(*) as cnt FROM echoes e "
-            "WHERE e.novel_id = %s AND e.strong_related = 0 AND e.volume_id IS NOT NULL "
+            "WHERE e.novel_id = ? AND e.strong_related = 0 AND e.volume_id IS NOT NULL "
             "GROUP BY e.volume_id", (novel_id,))
         for vc in vol_counts:
             if vc["cnt"] > 2:
@@ -493,7 +662,7 @@ def echo_density_check(novel_name: str, volume_id: int) -> str:
         "FROM echoes e "
         "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
         "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
-        "WHERE e.novel_id = %s AND e.volume_id = %s AND e.strong_related = 0 "
+        "WHERE e.novel_id = ? AND e.volume_id = ? AND e.strong_related = 0 "
         "ORDER BY e.id",
         (novel_id, volume_id))
 
@@ -502,7 +671,7 @@ def echo_density_check(novel_name: str, volume_id: int) -> str:
         "FROM echoes e "
         "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
         "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
-        "WHERE e.novel_id = %s AND e.volume_id = %s AND e.strong_related = 1 "
+        "WHERE e.novel_id = ? AND e.volume_id = ? AND e.strong_related = 1 "
         "ORDER BY e.id",
         (novel_id, volume_id))
 
@@ -515,8 +684,8 @@ def echo_density_check(novel_name: str, volume_id: int) -> str:
         "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
         "LEFT JOIN chapters cv ON e.source_chapter_id = cv.id "
         "LEFT JOIN volumes v ON cv.volume_id = v.id "
-        "WHERE e.novel_id = %s AND e.volume_id = %s "
-        "AND cv.volume_id != %s "
+        "WHERE e.novel_id = ? AND e.volume_id = ? "
+        "AND cv.volume_id != ? "
         "ORDER BY e.id",
         (novel_id, volume_id, volume_id))
 

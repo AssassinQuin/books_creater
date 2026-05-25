@@ -70,62 +70,26 @@ skill操作 → MCP工具 → DB（直接写入）→ sync_db_to_files() → 文
 | 伏笔 | `templates/foreshadow.md` | `foreshadows` |
 | 卷级大纲 | `templates/volume.md` | `volumes` |
 
-### Chapter Writing: Multi-Agent Pipeline
+### Chapter Writing: Direct Pipeline (v2)
 
-章节写作采用 **4 子 Agent 流水线**：
+章节写作采用 **编排器直调 MCP + 模型**（v2 去掉了 4 子 Agent）：
 
 ```
-编排器 (novel-chapter-writer)
-  │  Step 1: 调 MCP 收集原始数据
+编排器 (novel-chapter-writer v2)
+  │  Step 1: get_chapter_context (MCP) → 精简上下文包（~36KB）
   ↓
-Agent 1: Context Curator     → 清洗、压缩、结构化 → 上下文包
+Step 2: 创意决策 → 创意蓝图（含新实体创建）+ 存档
+  ↓  🔒 检查点 A
+Step 3: resolve_engines (MCP) → 引擎指令
   ↓
-Agent 2: Creative Director   → 场面设计、因果链、角色弧线、创建新实体 → 创意蓝图
-  ↓
-Agent 3: Engine Coordinator  → 加载引擎、定制指令 → 引擎指令包
-  ↓
-Agent 4: Text Generator      → 逐场面写正文、自检 → 章节正文
-  ↓
-编排器: validate_chapter → writing_finish → 存盘
+Step 4: 逐场面生成正文 + 自检
+  ↓  🔒 检查点 B
+Step 5: validate_chapter → writing_finish → 存盘
 ```
 
-| Agent | 指令文件 | 职责 |
-|-------|---------|------|
-| Context Curator | `novel-chapter-writer/agents/context-curator.md` | 清洗压缩原始数据，产出上下文包 |
-| Creative Director | `novel-chapter-writer/agents/creative-director.md` | 场面设计+因果链+创建新实体，存档创意蓝图 |
-| Engine Coordinator | `novel-chapter-writer/agents/engine-coordinator.md` | 加载引擎文件，为每个场面定制指令 |
-| Text Generator | `novel-chapter-writer/agents/text-generator.md` | 逐场面生成正文+反AI自检+硬约束自检 |
-
-Agent 2 直接调 MCP 创建新人物/地点/物品/势力/伏笔，无需编排器中转。编排器负责数据采集、校验和存盘。
+v2 变更：4 子 Agent → 0；27+ 文件加载 → MCP 聚合查询；上下文 ~80KB → ~36KB；零信息损耗。
 
 ### Skill System
-
-#### 三层技能架构（SkillX 启发）
-
-Skill 按**规划/功能/原子**三层组织，模型每次只加载当前 Step 需要的约束和方法：
-
-| 层级 | 载体 | 职责 | 加载时机 |
-|------|------|------|---------|
-| **规划技能** | SKILL.md `<what-to-do>` | "先做什么后做什么"+硬约束+检查点 | skill 触发时 |
-| **功能技能** | `agents/*.md` + `shared/*.md` | "如何完成子任务"+工具组合+共享协议 | 执行对应 Step 时 |
-| **原子技能** | `engines/*.md` + MCP 工具 | "某个约束/工具怎么用"+参数+失败模式 | 按需加载 |
-
-原子技能三级加载策略：
-- **Tier 0（铁律层）**：writing-constraints + anti-ai + anti-ai-patterns + causality — 始终注入
-- **Tier 1（基础层）**：writing-style + author-voice + world-element-registry — skill 触发时加载
-- **Tier 2（按需层）**：其余 32 个引擎 — 执行对应 Step 时按需加载
-
-#### 共享协议层（`.claude/skills/shared/`）
-
-跨 skill 重复的功能技能，提取为共享模块：
-
-| 协议 | 用途 | 被 skill 引用 |
-|------|------|-------------|
-| `engine-loading-protocol.md` | 引擎加载→验证→失败处理 | planner/planner-volume/chapter-writer |
-| `db-save-protocol.md` | MCP调用→结果校验→错误中止 | planner/planner-volume/chapter-writer |
-| `checkpoint-protocol.md` | 展示→确认→修改循环 | planner/planner-volume/chapter-writer |
-| `three-perspective-protocol.md` | 三视角审查+红蓝对抗 | planner/planner-volume/qa |
-| `consistency-protocol.md` | consistency_guard 调用规范 | planner-volume/chapter-writer |
 
 #### Project Skills (`.claude/skills/`)
 
@@ -136,12 +100,9 @@ Skill 按**规划/功能/原子**三层组织，模型每次只加载当前 Step
 | **novel-character** | 设计人物/加人物/人物卡 | 角色蒸馏7步、外观模板、关系差异化 | 🔒 蒸馏7步+外观+对话完整 |
 | **novel-planner** | 规划卷/大纲 | 全书总纲、逐卷环境先行设计 | 🔒 每卷确认后才能进入场景 |
 | **novel-planner-volume** | 卷大纲/章节规划/事件设计 | 卷级章节设计（场景+事件+支线） | 🔒 场景清单确认后才能进入正文 |
-| **novel-chapter-writer** | 写第N章/继续写/写一章 | Multi-Agent Pipeline 编排器 | 🔒 writing_finish 不可跳过 |
-| **novel-creative-analyze** | 创意分析/评好/惊喜度/创意评估 | 创意质量评估（惊喜度/情感/节奏） | 🔒 评分卡确认 |
+| **novel-chapter-writer** | 写第N章/继续写/写一章 | 编排器直调 MCP+模型（v2，无子Agent） | 🔒 writing_finish 不可跳过 |
 | **novel-qa** | 审阅/检查/诊断/OOC | 三视角审查+AI指纹检测 | 🔒 P0/P1问题必须修复 |
 | **novel-reviser** | 修复/去重/修文/润色 | 文本修订、润色 | - |
-
-> **novel-qa vs novel-creative-analyze**：qa 找错（OOC/因果断裂/术语违规），creative-analyze 评好（惊喜度/情感冲击/节奏）。先过 qa（无P0），再过 creative-analyze（提升质量）。
 
 #### External Skills (`/home/z/my-project/skills/`)
 
@@ -159,7 +120,7 @@ Skill 按**规划/功能/原子**三层组织，模型每次只加载当前 Step
 
 | Bucket | Skills | Auto-routed |
 |--------|--------|-------------|
-| **core** | novel-writer, novel-setup, novel-character, novel-planner, novel-planner-volume, novel-chapter-writer, novel-creative-analyze | Yes |
+| **core** | novel-writer, novel-setup, novel-character, novel-planner, novel-planner-volume, novel-chapter-writer | Yes |
 | **quality** | novel-qa, novel-reviser | Yes |
 | **experimental** | darwin-skill | No |
 | **meta** | novel-skill-creator | No |
@@ -241,7 +202,7 @@ Priority on conflict: C3 > B2 > others. 阶段指令文件位于 `.claude/skills
 
 ### 规则 1: 全部强制
 
-- `engines/writing-constraints.md` 中所有约束**全部强制**，不通过则拒绝存盘
+- `writing-constraints.md` 中所有约束**全部强制**，不通过则拒绝存盘
 - `validate_chapter` 将所有约束作为 violations 返回，有 violations 必须修复后才能存盘
 
 ### 规则 2: 审计强制
@@ -304,7 +265,6 @@ L3 加事件（>50%）     → 强制从大纲找事件或加微事件
 - 创意蓝图 Ch1-8 已完成（存于 `创意决策/`）
 - DB 数据：28角色、200+世界观条、53伏笔、15卷大纲
 - 设定目录已完成重组（人物/世界观/大纲/锁定/参考/写作 分层）
-- Skill 体系重构完成：三层架构（规划/功能/原子）+ shared/ 共享协议层 + novel-creative-analyze 新增
 - 下一步：正文生成（B2），从 V1 开始
 
 ## Anti-AI Writing System (Critical)
@@ -319,10 +279,6 @@ L3 加事件（>50%）     → 强制从大纲找事件或加微事件
 | F4 否定泛滥 | "不是X，而是Y"过多 | 硬上限：≤1/章，≤5/书，提供8种替代写法 |
 | F5 意象重复 | 同一意象无变化 | 意象梯度系统+替换库 |
 | F6 环境白噪 | 同一环境音重复30+次 | 轮换库，≤2同类型/章 |
-
-## Platform & Command Rules
-
-**执行任何命令前必须先确认当前操作系统平台。** 本项目运行在 Windows 上，所有 shell 命令必须使用 PowerShell 语法，禁止使用 bash/zsh 语法（如 `&&`、`export`、`source`、`cat`、`rm -rf` 等）。如果需要跨平台兼容，使用 Python 脚本而非 shell 命令。Sub-agent 同样受此规则约束——在 task description 中明确标注"Windows PowerShell 环境"。
 
 ## Git Commit Convention
 

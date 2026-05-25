@@ -1,35 +1,45 @@
 import os
 import json
-import re
+import threading
 from typing import Any
 
 from fastmcp import FastMCP
 
-PROJECT_ROOT = os.environ.get(
+PROJECT_ROOT = os.path.abspath(os.environ.get(
     "NOVEL_PROJECT_ROOT",
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
+))
 
-LIBSQL_DB_PATH = os.environ.get(
+_raw_db_path = os.environ.get(
     "LIBSQL_DB_PATH",
     os.path.join(PROJECT_ROOT, "data", "novel.db")
 )
+LIBSQL_DB_PATH = _raw_db_path if os.path.isabs(_raw_db_path) else os.path.abspath(os.path.join(PROJECT_ROOT, _raw_db_path))
 
 mcp = FastMCP("novel-db", instructions="网文小说创作数据库 MCP，管理小说项目、世界观、人物、章节、伏笔、时间线等结构化数据。")
 
-# ─── SQLite Backend ──────────────────────────────────────
-# NOTE: Use sqlite3 instead of libsql_experimental to avoid segfaults
-# on connection close with Python 3.14. libsql_experimental has
-# compatibility issues that cause SIGSEGV when closing connections.
 import sqlite3
 
 os.makedirs(os.path.dirname(LIBSQL_DB_PATH), exist_ok=True)
 
+_local = threading.local()
+
+
 def get_conn():
-    return sqlite3.connect(LIBSQL_DB_PATH)
+    if not hasattr(_local, 'conn') or _local.conn is None:
+        _local.conn = sqlite3.connect(LIBSQL_DB_PATH)
+    return _local.conn
+
+
+def close_conn():
+    if hasattr(_local, 'conn') and _local.conn is not None:
+        try:
+            _local.conn.close()
+        except Exception:
+            pass
+        _local.conn = None
 
 def _adapt_param(p):
-    """Convert Python types to sqlite-compatible types."""
     if p is None:
         return None
     if isinstance(p, bool):
@@ -38,53 +48,19 @@ def _adapt_param(p):
         return json.dumps(p, ensure_ascii=False)
     return p
 
-def _adapt_sql(sql: str) -> tuple[str, bool]:
-    """Translate PostgreSQL SQL to SQLite compatible SQL.
-    Returns (adapted_sql, has_returning)
-    """
-    adapted = sql
-
-    # Placeholders: %s -> ?
-    adapted = adapted.replace("%s", "?")
-
-    # Functions
-    adapted = adapted.replace("NOW()", "datetime('now')")
-
-    # Booleans
-    adapted = adapted.replace("TRUE", "1").replace("FALSE", "0")
-
-    # Data types
-    adapted = adapted.replace("JSONB", "TEXT")
-    adapted = adapted.replace("TEXT[]", "TEXT")
-    adapted = adapted.replace("TIMESTAMP WITHOUT TIME ZONE", "TIMESTAMP")
-
-    # PostgreSQL cast syntax ::jsonb -> remove cast
-    adapted = re.sub(r'::\w+', '', adapted)
-
-    # RETURNING clause -> remove and track
-    has_returning = False
-    returning_match = re.search(r'\s+RETURNING\s+(\w+)', adapted, re.IGNORECASE)
-    if returning_match:
-        has_returning = True
-        adapted = re.sub(r'\s+RETURNING\s+\w+', '', adapted, flags=re.IGNORECASE)
-
-    return adapted, has_returning
-
 def query(sql: str, params: tuple = (), fetch: str = "all") -> Any:
-    adapted_sql, has_returning = _adapt_sql(sql)
     adapted_params = tuple(_adapt_param(p) for p in params)
 
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute(adapted_sql, adapted_params)
+        cur.execute(sql, adapted_params)
 
         if fetch == "none":
             conn.commit()
             return None
 
-        # For INSERT with RETURNING, return lastrowid
-        if has_returning and adapted_sql.strip().upper().startswith("INSERT"):
+        if fetch == "insert":
             conn.commit()
             return {"id": cur.lastrowid}
 
@@ -101,7 +77,6 @@ def query(sql: str, params: tuple = (), fetch: str = "all") -> Any:
                 return None
             return row[0]
 
-        # fetch == "all"
         rows = cur.fetchall()
         if not rows:
             return []
@@ -111,5 +86,21 @@ def query(sql: str, params: tuple = (), fetch: str = "all") -> Any:
     except Exception as e:
         conn.rollback()
         raise e
-    finally:
-        conn.close()
+
+
+def get_novel_config(novel_id: int, config_type: str, name: str, default=None):
+    row = query(
+        "SELECT data FROM novel_config WHERE novel_id = ? AND config_type = ? AND name = ?",
+        (novel_id, config_type, name), fetch="one"
+    )
+    if not row or not row.get("data"):
+        return default
+    raw = row["data"]
+    if isinstance(raw, (dict, list)):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except Exception:
+            return raw
+    return default

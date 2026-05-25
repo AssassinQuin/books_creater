@@ -1,5 +1,6 @@
 import os
 import re
+import json
 
 CONSTRAINTS_FILE = os.environ.get(
     "CONSTRAINTS_FILE",
@@ -94,6 +95,11 @@ def _get_constraints() -> dict:
     if _CONSTRAINTS_CACHE is None:
         _CONSTRAINTS_CACHE = _parse_constraints_md()
     return _CONSTRAINTS_CACHE
+
+
+def invalidate_constraints_cache():
+    global _CONSTRAINTS_CACHE
+    _CONSTRAINTS_CACHE = None
 
 
 def validate_chapter_text(text: str) -> dict:
@@ -212,3 +218,175 @@ def _enrichment_level(current_words: int, min_words: int) -> str:
             f"   - 找不出相关事件？说明你对大纲不够熟。再读一遍 `get_chapter_context` 返回的事件清单\n\n"
             f"加事件后重新调 `writing_finish`。不努力的话，有的是比你更能写的模型替你。"
         )
+
+
+# ═══════════════════════════════════════════════════════════
+# Data-driven rule engine
+# Rules stored in writing_rules table, executed generically.
+# ═══════════════════════════════════════════════════════════
+
+def _load_db_rules(novel_id: int) -> list[dict]:
+    """Load active writing rules from DB for a given novel."""
+    from .db import query as db_query
+    rows = db_query(
+        "SELECT * FROM writing_rules WHERE novel_id = ? AND is_active = 1 ORDER BY priority DESC",
+        (novel_id,)
+    )
+    return [dict(r) for r in rows] if rows else []
+
+
+def _parse_patterns(pattern_str: str) -> list[str]:
+    """Parse pattern field: JSON array or single string."""
+    if not pattern_str:
+        return []
+    pattern_str = pattern_str.strip()
+    if pattern_str.startswith("["):
+        try:
+            return json.loads(pattern_str)
+        except json.JSONDecodeError:
+            pass
+    return [pattern_str]
+
+
+def _check_keyword_ban(rule: dict, text: str, _paragraphs: list[str]) -> dict | None:
+    """keyword_ban: any occurrence = violation."""
+    patterns = _parse_patterns(rule["pattern"])
+    found = [p for p in patterns if p in text]
+    if found:
+        msg = rule.get("message") or f"违禁词：{', '.join(found)}"
+        msg = msg.replace("{found}", ", ".join(found))
+        return {"rule": rule["name"], "category": rule.get("category", ""), "severity": rule.get("severity", "error"), "message": msg, "found": found}
+    return None
+
+
+def _check_keyword_limit(rule: dict, text: str, _paragraphs: list[str]) -> dict | None:
+    """keyword_limit: count occurrences, check against min/max thresholds."""
+    patterns = _parse_patterns(rule["pattern"])
+    total = sum(text.count(p) for p in patterns)
+    threshold_max = rule.get("threshold_max")
+    threshold_min = rule.get("threshold_min")
+    violated = False
+    if threshold_max is not None and total > threshold_max:
+        violated = True
+    if threshold_min is not None and total < threshold_min:
+        violated = True
+    if violated:
+        msg = rule.get("message") or f"{rule['name']}：出现{total}次"
+        msg = msg.replace("{found}", str(total)).replace("{max}", str(int(threshold_max) if threshold_max else "")).replace("{min}", str(int(threshold_min) if threshold_min else ""))
+        return {"rule": rule["name"], "category": rule.get("category", ""), "severity": rule.get("severity", "error"), "message": msg, "found": total}
+    return None
+
+
+def _check_pattern_match(rule: dict, text: str, _paragraphs: list[str]) -> dict | None:
+    """pattern_match: regex match = violation."""
+    pattern = rule.get("pattern", "")
+    if not pattern:
+        return None
+    try:
+        matches = re.findall(pattern, text)
+    except re.error:
+        return None
+    if matches:
+        msg = rule.get("message") or f"模式匹配：{rule['name']}"
+        msg = msg.replace("{found}", str(len(matches)))
+        return {"rule": rule["name"], "category": rule.get("category", ""), "severity": rule.get("severity", "error"), "message": msg, "found": len(matches)}
+    return None
+
+
+def _check_term_replace(rule: dict, text: str, _paragraphs: list[str]) -> dict | None:
+    """term_replace: wrong term should be replaced."""
+    patterns = _parse_patterns(rule["pattern"])
+    replacement = rule.get("replacement", "")
+    found = [p for p in patterns if p in text]
+    if found:
+        msg = rule.get("message") or f"术语替换：{', '.join(found)} → {replacement}"
+        msg = msg.replace("{found}", ", ".join(found)).replace("{replacement}", replacement)
+        return {"rule": rule["name"], "category": rule.get("category", ""), "severity": rule.get("severity", "warning"), "message": msg, "found": found}
+    return None
+
+
+def _check_absence(rule: dict, text: str, _paragraphs: list[str]) -> dict | None:
+    """absence_check: pattern A exists but pattern B doesn't appear nearby = violation.
+    E.g. 灵站 appears but no negative words (剥削/打八折/克扣) nearby.
+    Checks ALL occurrences of trigger patterns — violation if ANY occurrence lacks context."""
+    trigger_patterns = _parse_patterns(rule["pattern"])
+    context_patterns = _parse_patterns(rule.get("context_pattern", ""))
+    context_range = rule.get("context_range", 0)
+
+    if not trigger_patterns or not context_patterns:
+        return None
+
+    for tp in trigger_patterns:
+        start = 0
+        while True:
+            pos = text.find(tp, start)
+            if pos == -1:
+                break
+            check_start = max(0, pos - context_range) if context_range > 0 else 0
+            check_end = min(len(text), pos + len(tp) + context_range) if context_range > 0 else len(text)
+            vicinity = text[check_start:check_end]
+            has_context = any(cp in vicinity for cp in context_patterns)
+            if not has_context:
+                msg = rule.get("message") or f"{rule['name']}：缺少配套描写"
+                return {"rule": rule["name"], "category": rule.get("category", ""), "severity": rule.get("severity", "warning"), "message": msg, "found": [tp]}
+            start = pos + len(tp)
+
+    return None
+
+
+def _check_co_occurrence(rule: dict, text: str, _paragraphs: list[str]) -> dict | None:
+    """co_occurrence: pattern A and pattern B must (or must not) co-occur.
+    threshold_max = 0 means forbidden co-occurrence."""
+    patterns_a = _parse_patterns(rule["pattern"])
+    patterns_b = _parse_patterns(rule.get("context_pattern", ""))
+    threshold_max = rule.get("threshold_max")
+
+    if not patterns_a or not patterns_b:
+        return None
+
+    found_a = [p for p in patterns_a if p in text]
+    found_b = [p for p in patterns_b if p in text]
+
+    # If threshold_max == 0: co-occurrence is forbidden
+    if threshold_max == 0 and found_a and found_b:
+        msg = rule.get("message") or f"禁止共现：{found_a} 与 {found_b}"
+        return {"rule": rule["name"], "category": rule.get("category", ""), "severity": rule.get("severity", "error"), "message": msg}
+
+    return None
+
+
+_RULE_CHECKERS = {
+    "keyword_ban": _check_keyword_ban,
+    "keyword_limit": _check_keyword_limit,
+    "pattern_match": _check_pattern_match,
+    "term_replace": _check_term_replace,
+    "absence_check": _check_absence,
+    "co_occurrence": _check_co_occurrence,
+}
+
+
+def validate_with_db_rules(novel_id: int, text: str) -> dict:
+    """Run all DB-stored rules against chapter text. Returns {violations, rule_stats}."""
+    rules = _load_db_rules(novel_id)
+    violations = []
+    rule_stats = {"total_rules": len(rules), "by_category": {}}
+
+    paragraphs = re.split(r'\n\s*\n', text)
+
+    for rule in rules:
+        check_type = rule.get("rule_type", "")
+        checker = _RULE_CHECKERS.get(check_type)
+        if not checker:
+            continue
+
+        cat = rule.get("category", "other")
+        if cat not in rule_stats["by_category"]:
+            rule_stats["by_category"][cat] = {"checked": 0, "violated": 0}
+        rule_stats["by_category"][cat]["checked"] += 1
+
+        result = checker(rule, text, paragraphs)
+        if result:
+            violations.append(result)
+            rule_stats["by_category"][cat]["violated"] += 1
+
+    return {"violations": violations, "rule_stats": rule_stats}

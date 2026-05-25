@@ -21,31 +21,39 @@ def health_check(novel_name: str) -> str:
 
     result = {}
 
-    novel = query("SELECT * FROM novels WHERE id = %s", (novel_id,), fetch="one")
+    novel = query("SELECT * FROM novels WHERE id = ?", (novel_id,), fetch="one")
     if not novel:
         return json.dumps({"error": "novel not found"}, ensure_ascii=False)
 
     chapters = query("SELECT id, number, status, chapter_type, volume_id FROM chapters "
-                     "WHERE novel_id = %s ORDER BY number", (novel_id,))
+                     "WHERE novel_id = ? ORDER BY number", (novel_id,))
     total_chapters = len(chapters)
     written = [c for c in chapters if c["status"] == "written"]
     result["progress"] = {"total": total_chapters, "written": len(written)}
 
     planted = query("SELECT id, description, planted_chapter_id, importance FROM foreshadows "
-                    "WHERE novel_id = %s AND status = 'planted' ORDER BY id", (novel_id,))
+                    "WHERE novel_id = ? AND status = 'planted' ORDER BY id", (novel_id,))
     recalled = query("SELECT COUNT(*) as cnt FROM foreshadows "
-                     "WHERE novel_id = %s AND status = 'recalled'", (novel_id,), fetch="val")
+                     "WHERE novel_id = ? AND status = 'recalled'", (novel_id,), fetch="val")
     total_foreshadows = len(planted) + (recalled or 0)
     recall_rate = (recalled or 0) / total_foreshadows if total_foreshadows > 0 else 1.0
 
     planted_list = [dict(f) for f in planted]
     if written:
         latest_num = max(c["number"] for c in written)
+        planted_ch_ids = [f["planted_chapter_id"] for f in planted_list if f.get("planted_chapter_id")]
+        ch_num_map = {}
+        if planted_ch_ids:
+            placeholders = ",".join(["?"] * len(planted_ch_ids))
+            ch_rows = query(
+                f"SELECT id, number FROM chapters WHERE id IN ({placeholders})",
+                tuple(planted_ch_ids)
+            )
+            ch_num_map = {r["id"]: r["number"] for r in ch_rows}
         for f in planted_list:
-            planted_ch = query("SELECT number FROM chapters WHERE id = %s",
-                              (f["planted_chapter_id"],), fetch="one")
-            if planted_ch:
-                f["age_chapters"] = latest_num - planted_ch["number"]
+            pcid = f.get("planted_chapter_id")
+            if pcid and pcid in ch_num_map:
+                f["age_chapters"] = latest_num - ch_num_map[pcid]
     result["foreshadow"] = {
         "planted": len(planted), "recalled": recalled or 0,
         "recall_rate": round(recall_rate, 2),
@@ -54,38 +62,49 @@ def health_check(novel_name: str) -> str:
     }
 
     chars = query("SELECT id, name, role FROM characters "
-                  "WHERE novel_id = %s AND is_active = TRUE AND role != 'protagonist'", (novel_id,))
+                  "WHERE novel_id = ? AND is_active = 1 AND role != 'protagonist'", (novel_id,))
     core_chars = [c for c in chars if c["role"] in ("ally", "rival", "mentor", "love_interest")]
     char_activity = []
-    for cc in core_chars:
-        recent = query(
-            "SELECT cs.chapter_id FROM chapter_summaries cs "
-            "JOIN chapters ch ON cs.chapter_id = ch.id "
-            "WHERE ch.novel_id = %s AND %s = ANY(cs.characters_involved) "
-            "ORDER BY ch.number DESC LIMIT 1",
-            (novel_id, cc["id"])
+
+    if core_chars and written:
+        core_char_ids = [cc["id"] for cc in core_chars]
+        placeholders = ",".join(["?"] * len(core_char_ids))
+        latest_num = max(c["number"] for c in written)
+
+        recent_rows = query(
+            f"SELECT cs.chapter_id, ch.id as char_id, ch2.number as ch_number "
+            f"FROM chapter_summaries cs "
+            f"JOIN chapters ch2 ON cs.chapter_id = ch2.id, "
+            f"json_each(cs.characters_involved) je "
+            f"JOIN characters ch ON je.value = ch.id "
+            f"WHERE ch2.novel_id = ? AND ch.id IN ({placeholders}) "
+            f"ORDER BY ch.id, ch2.number DESC",
+            (novel_id, *core_char_ids)
         )
-        last_ch = None
-        if recent and written:
-            ch_num = query("SELECT number FROM chapters WHERE id = %s",
-                           (recent[0]["chapter_id"],), fetch="val")
-            if ch_num:
-                last_ch = ch_num
-                latest_num = max(c["number"] for c in written)
-                gap = latest_num - ch_num
-            else:
-                gap = None
-        else:
-            gap = None
-        char_activity.append({"name": cc["name"], "role": cc["role"],
-                              "last_chapter": last_ch, "gap": gap,
-                              "warning": gap is not None and gap > 10})
+
+        char_last_ch = {}
+        for r in (recent_rows or []):
+            cid = r.get("char_id")
+            if cid and cid not in char_last_ch:
+                char_last_ch[cid] = r.get("ch_number")
+
+        for cc in core_chars:
+            last_ch = char_last_ch.get(cc["id"])
+            gap = (latest_num - last_ch) if last_ch is not None else None
+            char_activity.append({"name": cc["name"], "role": cc["role"],
+                                  "last_chapter": last_ch, "gap": gap,
+                                  "warning": gap is not None and gap > 10})
+    else:
+        for cc in core_chars:
+            char_activity.append({"name": cc["name"], "role": cc["role"],
+                                  "last_chapter": None, "gap": None,
+                                  "warning": False})
     result["character_activity"] = char_activity
 
     ability_changes = query(
         "SELECT dc.after_value, c.number FROM dimension_changes dc "
         "JOIN chapters c ON dc.chapter_id = c.id "
-        "WHERE dc.novel_id = %s AND dc.dimension = 'ability' ORDER BY c.number",
+        "WHERE dc.novel_id = ? AND dc.dimension = 'ability' ORDER BY c.number",
         (novel_id,)
     )
     result["ability_progression"] = [dict(r) for r in ability_changes]
@@ -94,7 +113,7 @@ def health_check(novel_name: str) -> str:
         "SELECT v.*, "
         "(SELECT COUNT(*) FROM chapters WHERE volume_id = v.id AND status = 'written') as written_count, "
         "(SELECT COUNT(*) FROM chapters WHERE volume_id = v.id) as total_count "
-        "FROM volumes v WHERE v.novel_id = %s ORDER BY v.number",
+        "FROM volumes v WHERE v.novel_id = ? ORDER BY v.number",
         (novel_id,)
     )
     result["volumes"] = [dict(v) for v in volumes]
@@ -206,43 +225,114 @@ def skill_loader(skill: str, level: str, resource: str, project: str = "") -> st
 
 
 @mcp.tool
-def db_search(novel_name: str, keyword: str) -> str:
-    """在小说所有数据中搜索关键词（世界观/人物/章节/伏笔/时间线）
+def db_search(novel_name: str, keyword: str, top_k: int = 20) -> str:
+    """搜索小说数据（世界观/人物/章节/伏笔），返回排序摘要结果。
+
+    搜索策略：用索引列（name/keys/tags）匹配，不扫 data blob。
+    评分：name 匹配=10分，keys 匹配=5分，tags 匹配=3分。
+    返回格式：每个结果只包含 name/category/summary(150字)/score，不返回完整 data。
+
       novel_name: 小说名称
+      keyword: 搜索关键词
+      top_k: 返回最多结果数(默认20)
     """
     novel_id = _resolve_novel_id(novel_name)
-    result: dict = {}
     kw = f"%{keyword}%"
-    world = query(
-        "SELECT category, name, data FROM world_settings "
-        "WHERE novel_id = %s AND (name ILIKE %s OR data::text ILIKE %s)",
-        (novel_id, kw, kw)
-    )
-    if world:
-        result["world_settings"] = [dict(r) for r in world]
-    chars = query(
-        "SELECT id, name, role, personality FROM characters "
-        "WHERE novel_id = %s AND is_active = TRUE AND "
-        "(name ILIKE %s OR personality ILIKE %s OR background ILIKE %s OR goals ILIKE %s)",
-        (novel_id, kw, kw, kw, kw)
-    )
-    if chars:
-        result["characters"] = [dict(r) for r in chars]
-    chapters = query(
-        "SELECT number, title, outline FROM chapters "
-        "WHERE novel_id = %s AND (title ILIKE %s OR outline ILIKE %s)",
-        (novel_id, kw, kw)
-    )
-    if chapters:
-        result["chapters"] = [dict(r) for r in chapters]
-    foreshadows = query(
-        "SELECT id, description, status FROM foreshadows "
-        "WHERE novel_id = %s AND description ILIKE %s",
-        (novel_id, kw)
-    )
-    if foreshadows:
-        result["foreshadows"] = [dict(r) for r in foreshadows]
-    return json.dumps(result, ensure_ascii=False, default=str)
+    results = []
+
+    _SEARCH_SPECS = [
+        {
+            "sql": ("SELECT id, category, name, data, keys, tags FROM world_settings "
+                    "WHERE novel_id = ? AND status = 'active' AND "
+                    "(name LIKE ? OR keys LIKE ? OR tags LIKE ?)"),
+            "params": (novel_id, kw, kw, kw),
+            "result_type": "world_setting",
+            "name_col": "name",
+            "category_col": "category",
+            "score_fn": lambda r, kw=keyword: (
+                (10 if kw.lower() in (r.get("name") or "").lower() else 0)
+                + (5 if isinstance(r.get("keys"), str) and kw.lower() in r["keys"].lower() else 0)
+                + (3 if isinstance(r.get("tags"), str) and kw.lower() in r["tags"].lower() else 0)
+                or 1
+            ),
+            "summary_fn": lambda r: _extract_world_summary(r),
+        },
+        {
+            "sql": ("SELECT id, name, role, personality FROM characters "
+                    "WHERE novel_id = ? AND is_active = 1 AND "
+                    "(name LIKE ? OR personality LIKE ?)"),
+            "params": (novel_id, kw, kw),
+            "result_type": "character",
+            "name_col": "name",
+            "category_col": "role",
+            "score_fn": lambda r, kw=keyword: (
+                10 if kw.lower() in (r.get("name") or "").lower() else 5
+            ),
+            "summary_fn": lambda r: (r.get("personality") or "")[:150],
+        },
+        {
+            "sql": ("SELECT number, title, outline FROM chapters "
+                    "WHERE novel_id = ? AND (title LIKE ? OR outline LIKE ?)"),
+            "params": (novel_id, kw, kw),
+            "result_type": "chapter",
+            "name_col": "title",
+            "category_col": None,
+            "score_fn": lambda r, kw=keyword: (
+                10 if kw.lower() in (r.get("title") or "").lower() else 5
+            ),
+            "summary_fn": lambda r: (r.get("outline") or "")[:150],
+            "name_fmt": lambda r: r.get("title") or f"第{r['number']}章",
+            "category_fmt": lambda r: f"Ch{r['number']}",
+        },
+        {
+            "sql": ("SELECT id, description, status, tags FROM foreshadows "
+                    "WHERE novel_id = ? AND (description LIKE ? OR tags LIKE ?)"),
+            "params": (novel_id, kw, kw),
+            "result_type": "foreshadow",
+            "name_col": None,
+            "category_col": "status",
+            "score_fn": lambda r, kw=keyword: (
+                5 if kw.lower() in (r.get("description") or "").lower() else 3
+            ),
+            "summary_fn": lambda r: (r.get("description") or "")[:150],
+            "name_fmt": lambda r: f"伏笔#{r['id']}",
+        },
+    ]
+
+    for spec in _SEARCH_SPECS:
+        rows = query(spec["sql"], spec["params"])
+        for r in (rows or []):
+            name = spec.get("name_fmt", lambda r: r.get(spec["name_col"], ""))(r)
+            category = spec.get("category_fmt", lambda r: r.get(spec["category_col"], ""))(r) if spec.get("category_col") or spec.get("category_fmt") else ""
+            results.append({
+                "type": spec["result_type"],
+                "category": category,
+                "name": name,
+                "summary": spec["summary_fn"](r),
+                "score": spec["score_fn"](r),
+            })
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    results = results[:top_k]
+
+    return json.dumps({
+        "keyword": keyword,
+        "total": len(results),
+        "results": results,
+    }, ensure_ascii=False, default=str)
+
+
+def _extract_world_summary(r: dict) -> str:
+    data = r.get("data", {})
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, TypeError):
+            data = {}
+    if isinstance(data, dict):
+        content = data.get("content", "")
+        return content[:150] if content else json.dumps(data, ensure_ascii=False)[:150]
+    return ""
 
 
 @mcp.tool
@@ -318,8 +408,7 @@ def sync_startup(novel_name: str, data_type: str = "") -> str:
         "consistent": [],
         "summary": {}
     }
-    # 获取引擎已注册的类型列表，YAML manifest 可动态扩展
-    default_types = [t for t in _sync_engine.available_types if t != "world"]
+    default_types = _sync_engine.available_types
     types_to_check = [data_type] if data_type else default_types
 
     for etype in types_to_check:
@@ -334,38 +423,6 @@ def sync_startup(novel_name: str, data_type: str = "") -> str:
         except Exception as e:
             results["errors"] = results.get("errors", [])
             results["errors"].append({"type": etype, "error": str(e)})
-
-    # 世界观使用专用diff逻辑（many→one 聚合文件）
-    if (not data_type or data_type == "world") and "world" in _sync_engine.available_types:
-        novel_id = _resolve_novel_id(novel_name)
-        db_rows = query(
-            "SELECT * FROM world_settings WHERE novel_id = %s",
-            (novel_id,)
-        )
-        from .sync_engine import _resolve_category_file
-        for row in db_rows:
-            key = f"{row['category']}:{row['name']}"
-            db_hash = _compute_hash(_db_row_to_hashable(dict(row)))
-            cat_file = _resolve_category_file(row['category'], row)
-            file_path = os.path.join(_NOVELS_BASE, novel_name, "设定", "世界观", f"{cat_file}.md")
-            if os.path.exists(file_path):
-                with open(file_path, "r", encoding="utf-8") as f:
-                    file_content = f.read()
-                marker = f"## {row['category']}: {row['name']}"
-                if marker in file_content:
-                    file_hash = _compute_hash(file_content)
-                    if db_hash != file_hash:
-                        results["conflict"].append({
-                            "type": "world", "key": key,
-                            "resolution": "DB→file"
-                        })
-                    else:
-                        results["consistent"].append({"type": "world", "key": key})
-                else:
-                    results["db_only"].append({"type": "world", "key": key, "note": "DB有但文件中无对应章节"})
-            else:
-                results["db_only"].append({"type": "world", "key": key, "note": "文件不存在"})
-            _record_db_hash(novel_id, "world", key, db_hash)
 
     results["summary"] = {
         "novel_name": novel_name,
@@ -507,3 +564,32 @@ def sync_roundtrip(novel_name: str, data_type: str = "") -> str:
         "details": results,
     }
     return json.dumps(summary, ensure_ascii=False, default=str)
+
+
+@mcp.tool
+def semantic_search(novel_name: str, query_text: str, top_k: int = 10) -> str:
+    """语义搜索：用自然语言查询找到相关实体（TF-IDF 零依赖方案）。
+
+    与 db_search 的区别：db_search 做关键词精确匹配，semantic_search 做语义相似度匹配。
+    例如搜"战斗方式"可以找到"铸造能力"，搜"生病"可以找到"灵衰症"。
+
+    参数:
+      novel_name: 小说名称
+      query_text: 自然语言查询文本
+      top_k: 返回最多结果数(默认10)
+    """
+    from .embedding import get_engine_for_novel
+
+    novel_id = _resolve_novel_id(novel_name)
+    engine = get_engine_for_novel(novel_id, query)
+    results = engine.search(query_text, top_k=top_k)
+
+    for r in results:
+        text = r.pop("text", "")
+        r["summary"] = text[:200]
+
+    return json.dumps({
+        "query": query_text,
+        "total": len(results),
+        "results": results,
+    }, ensure_ascii=False, default=str)

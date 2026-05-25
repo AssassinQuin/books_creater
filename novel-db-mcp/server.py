@@ -39,6 +39,9 @@ from novel_db.tools_misc import (  # noqa: F401
     health_check, skill_loader, db_search, engine_list,
     sync_startup, sync_db_to_files, sync_files_to_db,
 )
+from novel_db.tools_graph import (  # noqa: F401
+    graph_query, graph_neighbors, graph_cascade,
+)
 
 if __name__ == "__main__":
     mcp.run()

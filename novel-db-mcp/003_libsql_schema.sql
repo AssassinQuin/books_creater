@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS volumes (
     -- 可选扩展组（V2+才有数据）
     info_pacing TEXT DEFAULT '[]',
     rhythm_allocation TEXT DEFAULT '[]',
+    world_state TEXT DEFAULT '',       -- 当前卷世界状态（衰退曲线锚点+危险等级+环境基调）
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(novel_id, number)
@@ -117,12 +118,31 @@ CREATE TABLE IF NOT EXISTS character_relations (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ─── Relation State Snapshots ──────────────────────────
+CREATE TABLE IF NOT EXISTS relation_state_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    relation_id INTEGER NOT NULL REFERENCES character_relations(id) ON DELETE CASCADE,
+    chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+    intensity INTEGER DEFAULT 5,
+    status TEXT DEFAULT 'active',
+    notes TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(relation_id, chapter_id)
+);
+
 -- ─── Character State Snapshots ─────────────────────────
 CREATE TABLE IF NOT EXISTS character_state_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
     chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
-    snapshot_data TEXT DEFAULT '{}',
+    location TEXT DEFAULT '',
+    arc_phase TEXT DEFAULT '',
+    emotional_state TEXT DEFAULT '',
+    physical_state TEXT DEFAULT '',
+    ability_snapshot TEXT DEFAULT '[]',
+    inventory_snapshot TEXT DEFAULT '[]',
+    knowledge_snapshot TEXT DEFAULT '{}',
+    notes TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(character_id, chapter_id)
 );
@@ -281,10 +301,50 @@ CREATE TABLE IF NOT EXISTS chapter_quality (
     dialogue_breaks INTEGER DEFAULT 0,
     banned_patterns TEXT DEFAULT '[]',
     violations TEXT DEFAULT '[]',
+    db_violations TEXT DEFAULT '[]',
     passed INTEGER DEFAULT 0,  -- BOOLEAN as INTEGER
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(chapter_id)
 );
+
+-- ─── Novel Config ───────────────────────────────────────
+CREATE TABLE IF NOT EXISTS novel_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+    config_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    data TEXT DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(novel_id, config_type, name)
+);
+CREATE INDEX IF NOT EXISTS idx_config_novel ON novel_config(novel_id);
+CREATE INDEX IF NOT EXISTS idx_config_type ON novel_config(novel_id, config_type);
+
+-- ─── Writing Rules (Data-driven constraint engine) ──────
+CREATE TABLE IF NOT EXISTS writing_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+    rule_type TEXT NOT NULL,            -- 'keyword_ban'|'keyword_limit'|'pattern_match'|'term_replace'|'absence_check'|'co_occurrence'
+    category TEXT NOT NULL DEFAULT '',   -- 'ai_flavor'|'cruelty'|'term'|'npc'|'micro_action'|'world_tone'|'punctuation'|'structure'
+    name TEXT NOT NULL,                 -- human-readable name for error messages
+    pattern TEXT NOT NULL DEFAULT '',    -- regex pattern or keyword; JSON array for multiple items
+    replacement TEXT DEFAULT '',         -- for term_replace: the correct term
+    threshold_min REAL,                 -- min threshold (null = no min)
+    threshold_max REAL,                 -- max threshold (null = no max)
+    scope TEXT NOT NULL DEFAULT 'chapter', -- 'chapter'|'paragraph'|'scene'
+    severity TEXT NOT NULL DEFAULT 'error', -- 'error'|'warning'
+    message TEXT NOT NULL DEFAULT '',    -- violation message; {found} {max} {min} placeholders
+    context_pattern TEXT DEFAULT '',     -- for absence_check/co_occurrence: secondary pattern to check proximity
+    context_range INTEGER DEFAULT 0,     -- character range for context check (0 = whole chapter)
+    is_active INTEGER NOT NULL DEFAULT 1,
+    priority INTEGER NOT NULL DEFAULT 30,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_writing_rules_novel ON writing_rules(novel_id);
+CREATE INDEX IF NOT EXISTS idx_writing_rules_category ON writing_rules(novel_id, category);
+CREATE INDEX IF NOT EXISTS idx_writing_rules_active ON writing_rules(novel_id, is_active);
 
 -- ─── Indexes ────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_volumes_novel ON volumes(novel_id);
@@ -307,9 +367,28 @@ CREATE INDEX IF NOT EXISTS idx_distillation_novel ON character_distillation_evol
 CREATE INDEX IF NOT EXISTS idx_distillation_character ON character_distillation_evolution(character_id);
 CREATE INDEX IF NOT EXISTS idx_distillation_chapter ON character_distillation_evolution(chapter_id);
 CREATE INDEX IF NOT EXISTS idx_char_snap_novel ON character_state_snapshots(character_id);
+CREATE INDEX IF NOT EXISTS idx_rel_snap_relation ON relation_state_snapshots(relation_id);
 -- ─── Layered Loading Indexes ──────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_world_region ON world_settings(region);
 CREATE INDEX IF NOT EXISTS idx_world_faction ON world_settings(faction_id);
 CREATE INDEX IF NOT EXISTS idx_world_volume_range ON world_settings(volume_range);
 CREATE INDEX IF NOT EXISTS idx_world_category_region ON world_settings(category, region);
 CREATE INDEX IF NOT EXISTS idx_world_status ON world_settings(status);
+
+-- ─── Entity Edges (关系图) ──────────────────────────────
+CREATE TABLE IF NOT EXISTS entity_edges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+    from_type TEXT NOT NULL,
+    from_id INTEGER NOT NULL,
+    to_type TEXT NOT NULL,
+    to_id INTEGER NOT NULL,
+    edge_type TEXT NOT NULL,
+    weight REAL DEFAULT 1.0,
+    metadata TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(novel_id, from_type, from_id, to_type, to_id, edge_type)
+);
+CREATE INDEX IF NOT EXISTS idx_edges_from ON entity_edges(novel_id, from_type, from_id);
+CREATE INDEX IF NOT EXISTS idx_edges_to ON entity_edges(novel_id, to_type, to_id);
+CREATE INDEX IF NOT EXISTS idx_edges_type ON entity_edges(novel_id, edge_type);

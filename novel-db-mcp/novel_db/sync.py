@@ -39,34 +39,34 @@ def _upsert_hash(novel_id: int, data_type: str, data_key: str,
     if db_hash and not file_hash:
         query(
             "INSERT INTO data_hashes (novel_id, data_type, data_key, db_hash, db_updated_at) "
-            "VALUES (%s, %s, %s, %s, NOW()) "
-            "ON CONFLICT (novel_id, data_type, data_key) DO UPDATE SET db_hash = %s, db_updated_at = NOW()",
+            "VALUES (?, ?, ?, ?, datetime('now')) "
+            "ON CONFLICT (novel_id, data_type, data_key) DO UPDATE SET db_hash = ?, db_updated_at = datetime('now')",
             (novel_id, data_type, data_key, db_hash, db_hash), fetch="none"
         )
     elif file_hash and not db_hash:
         query(
             "INSERT INTO data_hashes (novel_id, data_type, data_key, file_hash, file_updated_at) "
-            "VALUES (%s, %s, %s, %s, NOW()) "
-            "ON CONFLICT (novel_id, data_type, data_key) DO UPDATE SET file_hash = %s, file_updated_at = NOW()",
+            "VALUES (?, ?, ?, ?, datetime('now')) "
+            "ON CONFLICT (novel_id, data_type, data_key) DO UPDATE SET file_hash = ?, file_updated_at = datetime('now')",
             (novel_id, data_type, data_key, file_hash, file_hash), fetch="none"
         )
     else:
         sets = []
         vals = []
         if db_hash:
-            sets.append("db_hash = %s")
-            sets.append("db_updated_at = NOW()")
+            sets.append("db_hash = ?")
+            sets.append("db_updated_at = datetime('now')")
             vals.append(db_hash)
         if file_hash:
-            sets.append("file_hash = %s")
-            sets.append("file_updated_at = NOW()")
+            sets.append("file_hash = ?")
+            sets.append("file_updated_at = datetime('now')")
             vals.append(file_hash)
         if not sets:
             return
         vals.extend([novel_id, data_type, data_key])
         query(
             f"INSERT INTO data_hashes (novel_id, data_type, data_key, {', '.join(['db_hash','file_hash'][:len(sets)])}) "
-            f"VALUES (%s, %s, %s, {', '.join(['%s','%s'][:len(sets)])}) "
+            f"VALUES (?, ?, ?, {', '.join(['?','?'][:len(sets)])}) "
             f"ON CONFLICT (novel_id, data_type, data_key) DO UPDATE SET {', '.join(sets)}",
             tuple(vals), fetch="none"
         )

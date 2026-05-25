@@ -1,47 +1,17 @@
-# ============================================================
-# 卷级大纲同步模板 — DB↔File 桥梁定义
-# ============================================================
-# 权威源：文件（大纲为创作起点，DB存结构化摘要）
-# 映射：volumes 表 ← → V{N}-{title}.md
-# 基数：1行 ↔ 1文件
-# 注意：大纲文件包含多张表的引用数据（伏笔/回响/人物弧光等）
-#       File→DB 目前仅同步 notes 字段（截断2000字符）
-#       DB→File 为 overwrite 模式，默认跳过已有文件
-# ============================================================
-
 name: volume
 display_name: 卷级大纲
-authority: file
-
-# --- DB 映射 ---
 db_table: volumes
 id_field: number
+file_dir: "设定/大纲"
+authority: db
+merge_mode: overwrite
+file_pattern: "V{number:02d}-{title}.md"
+file_title: "V{number} {title}"
+header_template: "# V{number} {title}"
+skip_existing: false
 order_by: "number ASC"
 
-# --- 文件映射 ---
-file_dir: "设定/大纲"
-file_pattern: "V{number}-{title}.md"
-merge_mode: overwrite
-skip_existing: true
-header_template: "# V{number}：{title}"
-
-# --- 段落定义（17个section，来自实际V01-V15产出） ---
 sections:
-
-  # ---- 基础信息 ----
-  - heading: 卷级信息
-    type: fields
-    fields:
-      - column: number
-        type: int
-        optional: false
-      - column: title
-        optional: false
-      - column: main_plotlines
-        type: list
-        optional: true
-
-  # ---- 元信息（引用格式） ----
   - heading: 元信息
     type: blockquote
     blockquotes:
@@ -54,59 +24,68 @@ sections:
       - column: voice_mapping
         label: 声音适配
 
-  # ---- 结构层 ----
   - heading: 卷级因果链
     type: raw
     raw_column: causal_chain
 
-  - heading: 故事脉络
+  - heading: 起
     type: acts
     acts:
-      - ["起", act_intro]
-      - ["承", act_rise]
-      - ["转", act_twist]
-      - ["合", act_resolution]
+      - ["起", "act_intro"]
 
-  # ---- 分析表 ----
+  - heading: 承
+    type: acts
+    acts:
+      - ["承", "act_rise"]
+
+  - heading: 转
+    type: acts
+    acts:
+      - ["转", "act_twist"]
+
+  - heading: 合
+    type: acts
+    acts:
+      - ["合", "act_resolution"]
+
   - heading: 下卷衔接
-    type: table
-    table_column: next_volume_bridge
+    type: jsonb
+    jsonb_column: next_volume_bridge
+    jsonb_key: next_volume_bridge
 
   - heading: 人物弧光
     type: table
     table_column: character_arcs
 
-  - heading: 人物互动矩阵
+  - heading: 互动矩阵
     type: table
     table_column: interaction_matrix
 
   - heading: 不做的
-    type: table
-    table_column: boundaries
+    type: jsonb
+    jsonb_column: boundaries
+    jsonb_key: boundaries
 
-  # ---- 嵌套结构 ----
   - heading: 悬念锚点
     type: jsonb
     jsonb_column: suspense_anchors
-    # 顶层 dict{answered:[], new_questions:[]}
-    # 内部 new_questions 是 list[dict]，自动检测 #/question 作为 title_key
+    jsonb_key: suspense_anchors
 
-  - heading: 核心对话锚点
-    type: table
-    table_column: key_dialogues
+  - heading: 关键对话
+    type: jsonb
+    jsonb_column: key_dialogues
+    jsonb_key: key_dialogues
 
   - heading: 写作优先级
     type: jsonb
     jsonb_column: writing_priorities
-    # 顶层 dict{P0:[], P1:[], P2:[]} — dict of list[str]，无 list[dict]
+    jsonb_key: writing_priorities
 
-  - heading: 硬约束自检
+  - heading: 硬约束
     type: jsonb
     jsonb_column: hard_constraints
-    # 顶层 dict{事件密度:list[dict], ...}
-    # 内部 list[dict] 用自动检测
+    jsonb_key: hard_constraints
 
-  # ---- 节奏与信息 ----
   - heading: 信息投放节奏
     type: table
     table_column: info_pacing
@@ -115,21 +94,18 @@ sections:
     type: table
     table_column: rhythm_allocation
 
-  # ---- 备注 ----
+  - heading: 世界状态
+    type: raw
+    raw_column: world_state
+
+  - heading: 主线脉络
+    type: jsonb
+    jsonb_column: main_plotlines
+    jsonb_key: main_plotlines
+
   - heading: 备注
     type: raw
     raw_column: notes
 
-# --- File→DB 反向同步 ---
 file_to_db:
   enabled: true
-  note: "大纲文件为权威源，反向同步通过引擎结构化解析全部17段（无截断）。"
-  strategy: full_parse
-  # 旧方案已废弃：notes_truncate + truncate_length: 2000
-
-# --- 多表引用说明 ---
-# 大纲文件内包含以下数据引用（不参与自动同步，仅供skill参考）：
-#   - 伏笔清单 → foreshadows 表（通过 skill 写入DB）
-#   - 回响清单 → echoes 表（通过 skill 写入DB）
-#   - 人物弧光 → volumes.character_arcs JSONB（通过 volume_update 写入）
-#   - 关键对话 → volumes.key_dialogues JSONB（通过 volume_update 写入）

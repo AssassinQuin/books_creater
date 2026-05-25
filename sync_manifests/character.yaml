@@ -1,144 +1,112 @@
-# ============================================================
-# 人物同步模板 — DB↔File 桥梁定义
-# ============================================================
-# 权威源：DB characters 表
-# 映射：characters + character_relations → 设定/人物/{name}.md
-# 基数：1行(+关系JOIN) → 1文件（overwrite）
-# ============================================================
-
 name: character
 display_name: 人物
-authority: db
-
-# --- DB 映射 ---
 db_table: characters
 id_field: name
-query_extra: "AND is_active = TRUE"
-order_by: "name ASC"
-
-# --- 文件映射 ---
 file_dir: "设定/人物"
-file_pattern: "{name}.md"
+authority: db
 merge_mode: overwrite
+file_pattern: "{name}.md"
+file_title: "{name}"
 header_template: "# {name}"
+skip_existing: false
+transforms:
+  faction_id: builtin.resolve_faction
+  first_appearance_chapter: builtin.resolve_chapter_number
 
-# --- 段落定义（有序） ---
 sections:
-
-  # ---- 基础信息层 ----
   - heading: 基本信息
     type: fields
     fields:
       - column: role
-        optional: false
       - column: race
-        optional: true
       - column: ability_level
-        optional: true
       - column: faction_id
         md_key: faction
         transform: resolve_faction
-        optional: true
 
   - heading: 外观与性格
     type: fields
     fields:
       - column: appearance
-        optional: false
       - column: personality
-        optional: false
       - column: speech_style
-        optional: false
       - column: catchphrase
-        optional: true
 
   - heading: 背景与动机
     type: fields
     fields:
       - column: background
-        optional: false
       - column: goals
-        optional: false
       - column: weaknesses
-        optional: false
 
   - heading: 弧线
     type: fields
     fields:
       - column: arc_notes
-        optional: false
       - column: first_appearance_chapter
-        type: int
-        optional: false
+        md_key: first_appearance
+        transform: resolve_chapter_number
       - column: status
-        optional: true
+        type: jsonb
+      - column: is_active
+        md_key: distillation_tracked
 
-  # ---- 丰富数据层（JSONB字段 — 人物蒸馏7步产出） ----
   - heading: 外观描写库
     type: jsonb
     jsonb_column: appearance_detail
-    # 无 title_key: 顶层是 dict，内部 list[dict] 用自动检测
+    title_key: name
 
   - heading: 决策引擎
     type: jsonb
     jsonb_column: decision_engine
-    # 无 title_key: 顶层是 dict
+    title_key: name
 
   - heading: 对话声音指纹
     type: jsonb
     jsonb_column: voice_fingerprint
-    # 无 title_key: 顶层是 dict
+    title_key: name
 
   - heading: 能力体系
     type: jsonb
     jsonb_column: ability_system
-    # stages 是 dict（key=阶段名），非 list[dict]; 自动检测即可
+    title_key: name
 
   - heading: 行为模式
     type: jsonb
     jsonb_column: behavior_pattern
-    # 无 title_key: 顶层是 dict
+    title_key: name
 
-  # ---- 终局快照 ----
-  - heading: "当前快照（终局）"
+  - heading: 当前快照（终局）
     type: jsonb
     jsonb_column: current_snapshot
-    fallback_columns:
-      - current_location
-      - current_arc_phase
-      - emotional_state
-      - physical_state
-      - ability_progression
-      - inventory
-      - knowledge_state
+    title_key: name
 
-  # ---- 动态追踪占位 ----
-  - heading: "动态追踪（不在此文件维护）"
+  - heading: 成长轨迹
+    type: jsonb
+    jsonb_column: growth_trajectory
+    title_key: name
+
+  - heading: 动态追踪（不在此文件维护）
     type: static
-    static_content: "人物动态状态见 DB：`character_state_snapshots`（状态快照）/ `character_distillation_evolution`（蒸馏演化）"
+    static_content: |
+      > 人物动态状态见 DB：
+      > - `character_state_snapshots` — 每章状态快照
+      > - `character_distillation_evolution` — 蒸馏模型演化记录
+      >
+      > 文件只保留静态档案，动态内容通过 MCP 工具查询。
 
-# --- 关联查询（多表JOIN） ---
 relations:
-  heading: 关系
   sql: |
     SELECT cr.relation_type, cr.description, cr.intensity,
-           c1.name as from_name, c2.name as to_name,
-           cr.dialogue_adjustment, cr.micro_expressions, cr.subtext_design
+           cr.subtext_design, cr.dialogue_adjustment,
+           c1.name AS from_name, c2.name AS to_name
     FROM character_relations cr
     JOIN characters c1 ON cr.from_character_id = c1.id
     JOIN characters c2 ON cr.to_character_id = c2.id
-    WHERE cr.novel_id = %s
-      AND (cr.from_character_id = %s OR cr.to_character_id = %s)
-      AND cr.status = 'active'
+    WHERE cr.novel_id = ? AND (cr.from_character_id = ? OR cr.to_character_id = ?)
     ORDER BY cr.intensity DESC
   param_columns: [novel_id, id, id]
+  heading: 关系
 
-# --- 变换函数 ---
-transforms:
-  resolve_faction: builtin.resolve_faction
-
-# --- File→DB 反向同步 ---
 file_to_db:
   enabled: true
-  note: "人物以DB为权威源，但支持文件→DB反向解析用于round-trip验证和应急恢复。通过引擎结构化解析全部字段。"
-  strategy: full_parse
