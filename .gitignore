@@ -22,6 +22,8 @@ Thumbs.db
 # SQLite 数据库文件（二进制，不入库）
 novel-db-mcp/novel.db
 data/novel.db
+data/novel.db-shm
+data/novel.db-wal
 mydatabase.db
 
 # Python
