@@ -1,3 +1,4 @@
+import functools
 import json
 
 
@@ -18,15 +19,12 @@ class ConflictError(NovelDBError):
 
 
 def mcp_tool(func):
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except NotFoundError as e:
+        except NovelDBError as e:
             return json.dumps({"error": str(e)}, ensure_ascii=False)
-        except ValidationError as e:
-            return json.dumps({"error": str(e)}, ensure_ascii=False)
-        except ConflictError as e:
-            return json.dumps({"error": str(e)}, ensure_ascii=False)
-    wrapper.__name__ = func.__name__
-    wrapper.__doc__ = func.__doc__
+        except Exception as e:
+            return json.dumps({"error": f"{type(e).__name__}: {e}"}, ensure_ascii=False)
     return wrapper

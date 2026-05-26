@@ -1,6 +1,7 @@
 import json
 
 from .db import mcp, query, transaction
+from .errors import mcp_tool
 from .resolvers import _resolve_novel_id, _UNSET
 from .sql_utils import build_update_sql
 
@@ -17,6 +18,7 @@ _TEXT_FIELDS = {
 
 
 @mcp.tool
+@mcp_tool
 def volume_create(novel_name: str, number: int, title: str = "",
                   main_plotlines: list = None, notes: str = "") -> str:
     """创建卷。main_plotlines: [{name, description, purpose}]
@@ -35,6 +37,7 @@ def volume_create(novel_name: str, number: int, title: str = "",
 
 
 @mcp.tool
+@mcp_tool
 def volume_list(novel_name: str) -> str:
     """列出小说所有卷
       novel_name: 小说名称
@@ -73,8 +76,6 @@ def _volume_update_by_id(volume_id: int, **kwargs) -> str:
                 continue
             fields[key] = json.dumps(val, ensure_ascii=False)
         elif key in _TEXT_FIELDS:
-            if val is _UNSET:
-                continue
             fields[key] = val
         else:
             continue
@@ -87,6 +88,7 @@ def _volume_update_by_id(volume_id: int, **kwargs) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def volume_get(novel_name: str, number: int) -> str:
     """按卷号获取卷详情（无需volume_id）。
       novel_name: 小说名称
@@ -100,6 +102,7 @@ def volume_get(novel_name: str, number: int) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def volume_update(novel_name: str, number: int, title=_UNSET,
                   main_plotlines=_UNSET, notes=_UNSET,
                   core_emotion=_UNSET, pov_anchor=_UNSET,
@@ -113,7 +116,7 @@ def volume_update(novel_name: str, number: int, title=_UNSET,
                   hard_constraints=_UNSET,
                   next_volume_bridge=_UNSET, info_pacing=_UNSET,
                   rhythm_allocation=_UNSET) -> str:
-    """按卷号更新卷信息（无需volume_id）。传入需要修改的字段，空值会被忽略。支持富数据字段（因果链/四幕/人物弧光等）。
+    """按卷号更新卷信息（无需volume_id）。传入需要修改的字段，未传的字段不会被修改。支持富数据字段（因果链/四幕/人物弧光等）。
       novel_name: 小说名称
       number: 卷号
       core_emotion: 核心情绪（如"紧迫——妹妹要死了"）

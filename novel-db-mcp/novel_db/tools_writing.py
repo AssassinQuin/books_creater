@@ -7,11 +7,12 @@ from .tools_chapter import _save_chapter_summary_internal
 from .constraints import validate_chapter_text, _get_constraints, _enrichment_level, validate_with_db_rules
 from .prompts import _build_event_checklist
 from .sync import _record_db_hash
-from .errors import ValidationError, NotFoundError
+from .errors import ValidationError, NotFoundError, mcp_tool
 from .sql_utils import build_update_sql
 
 
 @mcp.tool
+@mcp_tool
 def rule_detail(rule_key: str) -> str:
     """查看某条创作原则的完整说明。从 writing-constraints.md 加载。"""
     c = _get_constraints()
@@ -25,6 +26,7 @@ def rule_detail(rule_key: str) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def record_new_content(novel_name: str, content_type: str, name: str = "",
                         data: str = "", file_path: str = "") -> str:
     """记录写作中新出现的设定/物品/地点/NPC到DB。
@@ -106,6 +108,7 @@ def record_new_content(novel_name: str, content_type: str, name: str = "",
 
 
 @mcp.tool
+@mcp_tool
 def event_checklist(novel_name: str, chapter_number: int) -> str:
     """获取本章事件清单+检查表。基于大纲自动解析，写前确认事件序列，写中逐项勾选。
       novel_name: 小说名称
@@ -132,6 +135,7 @@ def event_checklist(novel_name: str, chapter_number: int) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def validate_chapter(chapter_text: str, novel_name: str = "") -> str:
     """校验正文是否满足硬约束。返回 violations + stats + enrichment + db_violations。
     novel_name: 可选。传入后额外加载该小说的 writing_rules 表规则执行数据驱动校验。
@@ -169,6 +173,7 @@ def validate_chapter(chapter_text: str, novel_name: str = "") -> str:
 
 
 @mcp.tool
+@mcp_tool
 def writing_rule_upsert(novel_name: str, rule_type: str, name: str, category: str = "",
                         pattern: str = "", replacement: str = "",
                         threshold_min: float = None, threshold_max: float = None,
@@ -240,6 +245,7 @@ def writing_rule_upsert(novel_name: str, rule_type: str, name: str, category: st
 
 
 @mcp.tool
+@mcp_tool
 def writing_rule_list(novel_name: str, category: str = "", is_active: bool = True) -> str:
     """列出写作校验规则。可按 category 过滤。
     novel_name: 小说名称
@@ -388,6 +394,7 @@ def _wf_quality(chapter_id: int, novel_id: int, validation_stats: dict,
 
 
 @mcp.tool
+@mcp_tool
 def writing_finish(novel_name: str, chapter_number: int, summary: str, chapter_text: str,
                    key_events: list = None, characters_involved: list = None,
                    new_foreshadows: list = None, resolved_foreshadows: list = None,
@@ -440,6 +447,7 @@ def writing_finish(novel_name: str, chapter_number: int, summary: str, chapter_t
 
 
 @mcp.tool
+@mcp_tool
 def foreshadow_plant(novel_name: str, description: str,
                      planted_chapter_id: int = None,
                      planned_recall_chapter: int = None,
@@ -482,6 +490,7 @@ def _foreshadow_recall_internal(novel_id: int, foreshadow_id: int, chapter_id: i
 
 
 @mcp.tool
+@mcp_tool
 def foreshadow_recall(novel_name: str, foreshadow_id: int, actual_recall_chapter_id: int) -> str:
     """回收伏笔。
       novel_name: 小说名称（验证归属）
@@ -494,6 +503,7 @@ def foreshadow_recall(novel_name: str, foreshadow_id: int, actual_recall_chapter
 
 
 @mcp.tool
+@mcp_tool
 def foreshadow_list(novel_name: str, status: str = "") -> str:
     """列出伏笔。status 可选: planted/recalled/abandoned
       novel_name: 小说名称
@@ -509,13 +519,14 @@ def foreshadow_list(novel_name: str, status: str = "") -> str:
 
 
 @mcp.tool
+@mcp_tool
 def foreshadow_update(novel_name: str, foreshadow_id: int,
                       description: str = _UNSET, importance: str = _UNSET,
                       planned_recall_chapter: int = _UNSET,
-                      related_characters: list = None,
-                      tags: list = None,
+                      related_characters=_UNSET,
+                      tags=_UNSET,
                       status: str = _UNSET, reason: str = "") -> str:
-    """更新伏笔（只传需要修改的字段，空值会被忽略）。可修改描述、重要性、计划回收章、状态等。
+    """更新伏笔（只传需要修改的字段，未传的字段不会被修改）。可修改描述、重要性、计划回收章、状态等。
       novel_name: 小说名称
       foreshadow_id: 伏笔ID
       description: 新描述
@@ -539,9 +550,9 @@ def foreshadow_update(novel_name: str, foreshadow_id: int,
         fields["importance"] = importance
     if planned_recall_chapter is not _UNSET:
         fields["planned_recall_chapter"] = planned_recall_chapter
-    if related_characters is not None:
+    if related_characters is not _UNSET:
         fields["related_characters"] = json.dumps(related_characters, ensure_ascii=False)
-    if tags is not None:
+    if tags is not _UNSET:
         fields["tags"] = json.dumps(tags, ensure_ascii=False)
     if status is not _UNSET:
         fields["status"] = status
@@ -560,6 +571,7 @@ def foreshadow_update(novel_name: str, foreshadow_id: int,
 
 
 @mcp.tool
+@mcp_tool
 def echo_create(novel_name: str, source_chapter_id: int, echo_chapter_id: int,
                 source_event: str, echo_type: str,
                 echo_description: str = "", strong_related: bool = False,
@@ -602,6 +614,7 @@ def echo_create(novel_name: str, source_chapter_id: int, echo_chapter_id: int,
 
 
 @mcp.tool
+@mcp_tool
 def echo_list(novel_name: str, volume_id: int = 0, echo_chapter_id: int = 0) -> str:
     """列出回响记录。可按卷或章节过滤，用于检查密度是否超标（普通回响≤2次/卷）。
       novel_name: 小说名称
@@ -650,6 +663,7 @@ def echo_list(novel_name: str, volume_id: int = 0, echo_chapter_id: int = 0) -> 
 
 
 @mcp.tool
+@mcp_tool
 def echo_density_check(novel_name: str, volume_id: int) -> str:
     """检查某卷的回响密度。返回普通回响/强相关回响/跨卷回响的数量和具体列表。
       novel_name: 小说名称
@@ -728,6 +742,7 @@ ENGINE_MATRIX: dict[str, list[str]] = {
 
 
 @mcp.tool
+@mcp_tool
 def resolve_engines(scene_types: list[str]) -> str:
     """根据 Agent 3 标注的场面 AES 类型，自动解析需加载的引擎文件内容。
 

@@ -2,12 +2,13 @@ import json
 
 from .db import mcp, query, transaction
 from .resolvers import _resolve_novel_id, _resolve_chapter_id, _UNSET, _resolve_entity
-from .errors import NotFoundError
+from .errors import NotFoundError, mcp_tool
 from .sql_utils import build_update_sql
 from .sync import _record_db_hash
 
 
 @mcp.tool
+@mcp_tool
 def character_create(novel_name: str, name: str, role: str = "npc",
                      faction_id: int = None, race: str = "", ability_level: str = "",
                      appearance: str = "", personality: str = "", background: str = "",
@@ -124,6 +125,7 @@ def _character_update_by_id(character_id: int, name=_UNSET, role=_UNSET, faction
 
 
 @mcp.tool
+@mcp_tool
 def character_list(novel_name: str, role: str = "") -> str:
     """列出小说人物。role 可选过滤
       novel_name: 小说名称
@@ -202,6 +204,7 @@ def _relation_create_by_id(novel_name: str, from_character_id: int, to_character
 
 
 @mcp.tool
+@mcp_tool
 def relation_list(novel_name: str) -> str:
     """列出小说的所有人物关系
       novel_name: 小说名称
@@ -220,6 +223,7 @@ def relation_list(novel_name: str) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def character_get(novel_name: str, character_name: str) -> str:
     """按角色名获取人物详情（无需ID）。
       novel_name: 小说名称
@@ -234,6 +238,7 @@ def character_get(novel_name: str, character_name: str) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def character_detail(novel_name: str, character_name: str, chapter_number: int = None) -> str:
     """按角色名获取角色蒸馏卡片（无需ID）。
       novel_name: 小说名称
@@ -249,6 +254,7 @@ def character_detail(novel_name: str, character_name: str, chapter_number: int =
 
 
 @mcp.tool
+@mcp_tool
 def character_update(novel_name: str, character_name: str, name=_UNSET, role=_UNSET, faction_id=_UNSET,
                              race=_UNSET, ability_level=_UNSET, status=_UNSET,
                              appearance=_UNSET, personality=_UNSET, background=_UNSET,
@@ -260,7 +266,7 @@ def character_update(novel_name: str, character_name: str, name=_UNSET, role=_UN
                              behavior_pattern=_UNSET, current_snapshot=_UNSET,
                              growth_trajectory=_UNSET,
                              distillation_tracked=_UNSET) -> str:
-    """按角色名更新人物信息（无需ID）。传入需要修改的字段，空值/零值会被忽略。
+    """按角色名更新人物信息（无需ID）。传入需要修改的字段，未传的字段不会被修改。
     distillation_tracked: 人物蒸馏追踪开关（默认True），设为False可关闭临时NPC的蒸馏记录。
     status_json: 传入完整 JSON 字符串作为 status 字段值（优先于 status 参数）。
       novel_name: 小说名称
@@ -280,6 +286,7 @@ def character_update(novel_name: str, character_name: str, name=_UNSET, role=_UN
 
 
 @mcp.tool
+@mcp_tool
 def relation_create(novel_name: str, from_name: str, to_name: str,
                             relation_type: str, description: str = "",
                             chapter_established: int = None, intensity: int = 5) -> str:
@@ -305,6 +312,7 @@ def relation_create(novel_name: str, from_name: str, to_name: str,
 
 
 @mcp.tool
+@mcp_tool
 def relation_update(novel_name: str, from_name: str, to_name: str,
                     relation_type: str = "", description: str = "",
                     intensity: int = 0, status: str = "") -> str:
@@ -352,6 +360,7 @@ def relation_update(novel_name: str, from_name: str, to_name: str,
 
 
 @mcp.tool
+@mcp_tool
 def character_snapshot(novel_name: str, character_name: str, chapter_number: int,
                                 location: str = "", arc_phase: str = "",
                                 emotional_state: str = "", physical_state: str = "",
@@ -386,6 +395,7 @@ def character_snapshot(novel_name: str, character_name: str, chapter_number: int
 
 
 @mcp.tool
+@mcp_tool
 def character_get_latest(novel_name: str, character_name: str) -> str:
     """获取角色最新状态快照（按名称查询，无需ID）。
 
@@ -413,6 +423,7 @@ def character_get_latest(novel_name: str, character_name: str) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def relation_snapshot(novel_name: str, from_name: str, to_name: str, chapter_number: int,
                               intensity: int = 5, status: str = "active", notes: str = "") -> str:
     """按角色名保存关系快照（无需查ID）。关系变化时调用。
@@ -444,6 +455,7 @@ def relation_snapshot(novel_name: str, from_name: str, to_name: str, chapter_num
 
 
 @mcp.tool
+@mcp_tool
 def character_increment(novel_name: str, character_name: str,
                         chapter_number: int = 0,
                         location: str = "", arc_phase: str = "",
@@ -559,6 +571,7 @@ def character_increment(novel_name: str, character_name: str,
 
 
 @mcp.tool
+@mcp_tool
 def plot_thread_create(novel_name: str, name: str,
                         thread_type: str = "mainline",
                         description: str = "",
@@ -598,6 +611,7 @@ def plot_thread_create(novel_name: str, name: str,
 
 
 @mcp.tool
+@mcp_tool
 def plot_thread_list(novel_name: str, thread_type: str = "") -> str:
     """列出线索/暗线。thread_type可选过滤。
       novel_name: 小说名称
@@ -614,6 +628,7 @@ def plot_thread_list(novel_name: str, thread_type: str = "") -> str:
 
 
 @mcp.tool
+@mcp_tool
 def plot_thread_update(novel_name: str, thread_id: int, status: str = "",
                        end_chapter_number: int = 0,
                        progress_notes: str = "[]") -> str:
@@ -695,6 +710,7 @@ def _relation_snapshot_by_id(relation_id: int, chapter_id: int,
 
 
 @mcp.tool
+@mcp_tool
 def character_batch_detail(novel_name: str, character_names: list) -> str:
     """批量获取多个角色的完整档案。避免N次单独调用。
       novel_name: 小说名称
@@ -732,6 +748,7 @@ def character_batch_detail(novel_name: str, character_names: list) -> str:
 # ═══════════════════════════════════════════════════════
 
 @mcp.tool
+@mcp_tool
 def distillation_evolve(novel_name: str, character_name: str, chapter_number: int,
                         decision_delta: str = "[]", new_knowledge: str = "[]",
                         changed_beliefs: str = "[]", relation_shifts: str = "[]",
@@ -781,6 +798,7 @@ def distillation_evolve(novel_name: str, character_name: str, chapter_number: in
 
 
 @mcp.tool
+@mcp_tool
 def distillation_get(novel_name: str, character_name: str, chapter_number: int = 0) -> str:
     """获取人物蒸馏演化记录。可查询特定章节或全部历史。
 
@@ -827,6 +845,7 @@ def distillation_get(novel_name: str, character_name: str, chapter_number: int =
 
 
 @mcp.tool
+@mcp_tool
 def distillation_timeline(novel_name: str, character_name: str,
                           dimension: str = "decision_delta") -> str:
     """获取人物在某一维度的完整时间线。用于分析人物如何逐步演变。
@@ -877,6 +896,7 @@ def distillation_timeline(novel_name: str, character_name: str,
 
 
 @mcp.tool
+@mcp_tool
 def distillation_compare(novel_name: str, character_name: str,
                          chapter_a: int, chapter_b: int) -> str:
     """对比人物在两个章节之间的蒸馏模型变化。用于检验人物一致性/演变合理性。

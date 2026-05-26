@@ -2,25 +2,25 @@ import json
 
 from .db import mcp, query
 from .resolvers import _resolve_novel_id, _UNSET
+from .errors import mcp_tool
 from .sql_utils import build_update_sql
 
 
 @mcp.tool
+@mcp_tool
 def novel_create(name: str, genre: str = "", target_platform: str = "",
                  notes: str = "") -> str:
     """创建小说项目"""
-    try:
-        r = query(
-            "INSERT INTO novels (name, genre, target_platform, notes, status) "
-            "VALUES (?, ?, ?, ?, 'brainstorming')",
-            (name, genre, target_platform, notes), fetch="insert"
-        )
-        return json.dumps({"ok": True, "id": r, "name": name}, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+    r = query(
+        "INSERT INTO novels (name, genre, target_platform, notes, status) "
+        "VALUES (?, ?, ?, ?, 'brainstorming')",
+        (name, genre, target_platform, notes), fetch="insert"
+    )
+    return json.dumps({"ok": True, "id": r, "name": name}, ensure_ascii=False)
 
 
 @mcp.tool
+@mcp_tool
 def novel_list() -> str:
     """列出所有小说项目"""
     rows = query("SELECT id, name, genre, status, current_chapter, target_platform FROM novels ORDER BY updated_at DESC")
@@ -28,6 +28,7 @@ def novel_list() -> str:
 
 
 @mcp.tool
+@mcp_tool
 def novel_get(novel_name: str) -> str:
     """获取小说项目详情
       novel_name: 小说名称
@@ -39,10 +40,11 @@ def novel_get(novel_name: str) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def novel_update(novel_name: str, genre=_UNSET, target_platform=_UNSET,
                  status=_UNSET, current_chapter=_UNSET,
                  notes=_UNSET) -> str:
-    """更新小说项目。传入需要修改的字段，空值/零值会被忽略
+    """更新小说项目。传入需要修改的字段，未传的字段不会被修改
       novel_name: 小说名称
     """
     novel_id = _resolve_novel_id(novel_name)

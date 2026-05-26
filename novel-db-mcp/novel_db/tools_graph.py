@@ -2,6 +2,7 @@ import json
 import logging
 
 from .db import mcp, query
+from .errors import mcp_tool
 from .resolvers import _resolve_novel_id
 
 logger = logging.getLogger(__name__)
@@ -248,6 +249,7 @@ def _sync_chapter_edges(novel_id: int, chapter_id: int):
 
 
 @mcp.tool
+@mcp_tool
 def graph_query(novel_name: str, entity_type: str, entity_name: str,
                 depth: int = 2, edge_types: list = None,
                 direction: str = "both", max_results: int = 50) -> str:
@@ -343,6 +345,7 @@ def graph_query(novel_name: str, entity_type: str, entity_name: str,
 
 
 @mcp.tool
+@mcp_tool
 def graph_neighbors(novel_name: str, entity_type: str, entity_name: str,
                     edge_types: list = None) -> str:
     """获取实体的直接关系邻居（单层遍历）。
@@ -402,6 +405,7 @@ def graph_neighbors(novel_name: str, entity_type: str, entity_name: str,
 
 
 @mcp.tool
+@mcp_tool
 def graph_cascade(novel_name: str, entity_type: str, entity_name: str) -> str:
     """级联影响分析：修改该实体会影响哪些其他实体。从实体出发全图遍历，返回影响范围。
 

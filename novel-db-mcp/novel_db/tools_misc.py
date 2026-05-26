@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .db import mcp, query, PROJECT_ROOT
 from .resolvers import _resolve_novel_id, _resolve_entity
-from .errors import NotFoundError
+from .errors import NotFoundError, mcp_tool
 from .sync import (
     _ensure_data_hashes_table, _compute_hash, _record_db_hash, _record_file_hash,
     _db_row_to_hashable, _NOVELS_BASE,
@@ -14,6 +14,7 @@ from .sync_engine import engine as _sync_engine
 
 
 @mcp.tool
+@mcp_tool
 def health_check(novel_name: str) -> str:
     """一键健康诊断：伏笔积压+配角活跃+升级节奏+日常密度+暗线推进+卷完成度
       novel_name: 小说名称
@@ -180,6 +181,7 @@ def _load_skill_file(skill: str, level: str, resource: str, project: str = None)
 
 
 @mcp.tool
+@mcp_tool
 def skill_loader(skill: str, level: str, resource: str, project: str = "") -> str:
     """渐进式加载协议：按需加载 skill 子文件。三级优先级：project overrides > skill专属 > 全局共享。
 
@@ -226,6 +228,7 @@ def skill_loader(skill: str, level: str, resource: str, project: str = "") -> st
 
 
 @mcp.tool
+@mcp_tool
 def db_search(novel_name: str, keyword: str, top_k: int = 20) -> str:
     """搜索小说数据（世界观/人物/章节/伏笔），返回排序摘要结果。
 
@@ -337,6 +340,7 @@ def _extract_world_summary(r: dict) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def engine_list() -> str:
     """罗列可用写作引擎文件，自动解析 # Title + > Summary。
 
@@ -387,6 +391,7 @@ def engine_list() -> str:
 
 
 @mcp.tool
+@mcp_tool
 def sync_startup(novel_name: str, data_type: str = "") -> str:
     """启动时双向对比DB与文件状态，检测冲突，返回差异报告供用户确认。
     新数据流：skill→DB直接操作，文件为可选副本。启动时对比两端，冲突默认以DB为准。
@@ -438,6 +443,7 @@ def sync_startup(novel_name: str, data_type: str = "") -> str:
 
 
 @mcp.tool
+@mcp_tool
 def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = False) -> str:
     """将DB数据同步到文件（单向：DB→file）。skill操作只写DB，用户选择何时同步到文件。
     通过 SyncEngine 模板驱动，支持 YAML manifest 扩展的实体类型。
@@ -483,6 +489,7 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
 
 
 @mcp.tool
+@mcp_tool
 def sync_files_to_db(novel_name: str, data_type: str = "") -> str:
     """将文件数据结构化解析后同步回DB（单向：file→DB，无损转换）。
 
@@ -529,6 +536,7 @@ def sync_files_to_db(novel_name: str, data_type: str = "") -> str:
 
 
 @mcp.tool
+@mcp_tool
 def sync_roundtrip(novel_name: str, data_type: str = "") -> str:
     """双向无损验证：File→DB→File round-trip 测试。
 
@@ -568,6 +576,7 @@ def sync_roundtrip(novel_name: str, data_type: str = "") -> str:
 
 
 @mcp.tool
+@mcp_tool
 def semantic_search(novel_name: str, query_text: str, top_k: int = 10) -> str:
     """语义搜索：用自然语言查询找到相关实体（TF-IDF 零依赖方案）。
 

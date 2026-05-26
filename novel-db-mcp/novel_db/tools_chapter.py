@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from .db import mcp, query, transaction
 from .resolvers import _resolve_novel_id, _resolve_chapter_id, _UNSET, _resolve_entity
-from .errors import NotFoundError
+from .errors import NotFoundError, mcp_tool
 from .sql_utils import build_update_sql
 
 
@@ -40,6 +40,7 @@ def _save_chapter_summary_internal(chapter_id: int, summary: str,
 
 
 @mcp.tool
+@mcp_tool
 def chapter_plan(novel_name: str, number: int, title: str = "",
                  outline: str = "", chapter_type: str = "normal",
                  volume_id: int = None) -> str:
@@ -59,6 +60,7 @@ def chapter_plan(novel_name: str, number: int, title: str = "",
 
 
 @mcp.tool
+@mcp_tool
 def chapter_list(novel_name: str, status: str = "") -> str:
     """列出章节。status 可选过滤: planned/drafting/written/reviewed/published
       novel_name: 小说名称
@@ -89,6 +91,7 @@ def _chapter_update_by_id(chapter_id: int, title=_UNSET, status=_UNSET,
 
 
 @mcp.tool
+@mcp_tool
 def chapter_save_summary(novel_name: str, chapter_number: int, summary: str,
                          key_events: list = None, characters_involved: list = None,
                          new_foreshadows: list = None, resolved_foreshadows: list = None,
@@ -108,6 +111,7 @@ def chapter_save_summary(novel_name: str, chapter_number: int, summary: str,
 
 
 @mcp.tool
+@mcp_tool
 def get_chapter_context(novel_name: str, chapter_number: int,
                          load_mode: str = "smart",
                          regions: str = "", faction_names: str = "",
@@ -569,6 +573,7 @@ def _load_world_context(result: dict, novel_id: int, volume_str: str,
 
 
 @mcp.tool
+@mcp_tool
 def scene_create(novel_name: str, chapter_number: int, scene_number: int,
                  location: str = "", characters_involved: list = None,
                  conflict: str = "", emotion_type: str = "",
@@ -596,6 +601,7 @@ def scene_create(novel_name: str, chapter_number: int, scene_number: int,
 
 
 @mcp.tool
+@mcp_tool
 def scene_list(novel_name: str, chapter_number: int) -> str:
     """列出章节的场景大纲
       novel_name: 小说名称
@@ -608,6 +614,7 @@ def scene_list(novel_name: str, chapter_number: int) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def dimension_log(novel_name: str, chapter_id: int, dimension: str,
                   change_type: str, entity_name: str,
                   before_value: dict = None, after_value: dict = None,
@@ -617,6 +624,7 @@ def dimension_log(novel_name: str, chapter_id: int, dimension: str,
 
 
 @mcp.tool
+@mcp_tool
 def dimension_query(novel_name: str, dimension: str = "", from_chapter: int = 0,
                     to_chapter: int = 99999) -> str:
     """[DEPRECATED] 此工具已废弃，维度变更已由 character_state_snapshots 追踪。请使用 character_state_snapshots 替代。"""
@@ -624,6 +632,7 @@ def dimension_query(novel_name: str, dimension: str = "", from_chapter: int = 0,
 
 
 @mcp.tool
+@mcp_tool
 def timeline_add(novel_name: str, chapter_number: int, event_time: str,
                  event_order: int, event_description: str,
                  characters_involved: list = None,
@@ -654,6 +663,7 @@ def timeline_add(novel_name: str, chapter_number: int, event_time: str,
 
 
 @mcp.tool
+@mcp_tool
 def timeline_query(novel_name: str, from_chapter: int = 0, to_chapter: int = 99999) -> str:
     """查询时间线事件，可按章节范围过滤
       novel_name: 小说名称
@@ -670,11 +680,12 @@ def timeline_query(novel_name: str, from_chapter: int = 0, to_chapter: int = 999
 
 
 @mcp.tool
+@mcp_tool
 def scene_update(novel_name: str, chapter_number: int, scene_number: int,
                  location=_UNSET, characters_involved=_UNSET,
                  conflict=_UNSET, emotion_type=_UNSET,
                  key_beats=_UNSET, notes=_UNSET) -> str:
-    """更新场景大纲（只传需要修改的字段，空值会被忽略）
+    """更新场景大纲（只传需要修改的字段，未传的字段不会被修改）
       novel_name: 小说名称
       chapter_number: 章节序号
       scene_number: 场景序号
@@ -703,6 +714,7 @@ def scene_update(novel_name: str, chapter_number: int, scene_number: int,
 
 
 @mcp.tool
+@mcp_tool
 def scene_delete(novel_name: str, chapter_number: int, scene_number: int) -> str:
     """删除场景大纲
       novel_name: 小说名称
@@ -716,6 +728,7 @@ def scene_delete(novel_name: str, chapter_number: int, scene_number: int) -> str
 
 
 @mcp.tool
+@mcp_tool
 def timeline_update(novel_name: str, event_id: int,
                     event_description=_UNSET, event_time=_UNSET,
                     characters_involved=_UNSET,
@@ -742,6 +755,7 @@ def timeline_update(novel_name: str, event_id: int,
 
 
 @mcp.tool
+@mcp_tool
 def timeline_delete(novel_name: str, event_id: int) -> str:
     """删除时间线事件
       novel_name: 小说名称

@@ -5,9 +5,10 @@ import re
 
 from .db import mcp, query, transaction
 from .resolvers import _resolve_novel_id, _UNSET, _resolve_entity
-from .errors import NotFoundError
+from .errors import NotFoundError, mcp_tool
 from .sql_utils import build_update_sql
 from .sync import _record_db_hash, _NOVELS_BASE
+from .md_parser import split_sections, parse_bullet_fields
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ def _volume_in_range(volume_number: int, volume_range: str) -> bool:
 # ═══════════════════════════════════════════════════════════
 
 @mcp.tool
+@mcp_tool
 def world_upsert(novel_name: str, category: str, name: str, data: dict,
                   keys=_UNSET, secondary_keys=_UNSET, tags=_UNSET,
                   related_ids=_UNSET, volume_range=_UNSET, writing_guide=_UNSET,
@@ -194,6 +196,7 @@ def world_upsert(novel_name: str, category: str, name: str, data: dict,
 
 
 @mcp.tool
+@mcp_tool
 def world_query(novel_name: str, category: str = "", name: str = "",
                 region: str = "", volume: str = "", faction_id: int = None,
                 include_constants: bool = True) -> str:
@@ -250,6 +253,7 @@ def world_query(novel_name: str, category: str = "", name: str = "",
 
 
 @mcp.tool
+@mcp_tool
 def world_load_context(novel_name: str, volume: str = "", regions: str = "",
                        faction_names: str = "", categories: str = "",
                        include_constants: bool = True) -> str:
@@ -369,6 +373,7 @@ def world_load_context(novel_name: str, volume: str = "", regions: str = "",
 
 
 @mcp.tool
+@mcp_tool
 def world_delete(novel_name: str, category: str, name: str) -> str:
     """删除世界观设定
       novel_name: 小说名称
@@ -381,6 +386,7 @@ def world_delete(novel_name: str, category: str, name: str) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def world_deactivate(novel_name: str, category: str, name: str, reason: str = "") -> str:
     """世界观元素停用（不可逆型：地点毁灭、势力解散、物品消耗等）。
     参数:
@@ -414,6 +420,7 @@ def world_deactivate(novel_name: str, category: str, name: str, reason: str = ""
 
 
 @mcp.tool
+@mcp_tool
 def world_batch_update_meta(novel_name: str, updates_json: str) -> str:
     """批量更新世界观条目的元数据(region/volume_range/faction_id/priority/is_constant)。
     
@@ -456,6 +463,7 @@ def world_batch_update_meta(novel_name: str, updates_json: str) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def sync_lorebook(novel_name: str) -> str:
     """从 设定/世界观/ 目录下的 MD 文件同步数据到 DB。
     递归扫描子目录，解析 ## category: name 格式，upsert 到 world_settings 表。
@@ -481,13 +489,11 @@ def sync_lorebook(novel_name: str) -> str:
         with open(fpath, "r", encoding="utf-8") as f:
             text = f.read()
 
-        parts = re.split(r"^## (.+)$", text, flags=re.MULTILINE)
-        if len(parts) < 3:
-            continue
+        sections = split_sections(text)
 
-        for i in range(1, len(parts), 2):
-            header = parts[i].strip()
-            body = parts[i + 1].strip()
+        for sec in sections:
+            header = sec["heading"].strip()
+            body = sec["body"].strip()
 
             m = re.match(r"^(\w+):\s+(.+)$", header)
             if not m:
@@ -496,24 +502,13 @@ def sync_lorebook(novel_name: str) -> str:
             category = m.group(1)
             name = m.group(2)
 
-            meta = {}
+            meta = parse_bullet_fields(body)
+
             content_lines = []
             in_meta = True
-
             for line in body.split("\n"):
                 if in_meta and line.startswith("- **"):
-                    fm = re.match(r"^- \*\*(\w+)\*\*:\s*(.+)$", line)
-                    if fm:
-                        key = fm.group(1)
-                        val_str = fm.group(2).strip()
-                        try:
-                            val = json.loads(val_str)
-                        except (json.JSONDecodeError, ValueError):
-                            val = val_str
-                        meta[key] = val
-                    else:
-                        in_meta = False
-                        content_lines.append(line)
+                    continue
                 elif in_meta and line.strip() == "":
                     in_meta = False
                 else:
@@ -596,6 +591,7 @@ def sync_lorebook(novel_name: str) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def engine_detail(engine_type: str, novel_name: str) -> str:
     """加载写作引擎参考。从 world_settings 读取，模型可自定义覆盖。
       novel_name: 小说名称
@@ -624,6 +620,7 @@ def engine_detail(engine_type: str, novel_name: str) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def author_voice(novel_name: str) -> str:
     """加载本小说的作者声音维度。存储在 world_settings(category='author_voice') 中。
       novel_name: 小说名称
@@ -649,6 +646,7 @@ def author_voice(novel_name: str) -> str:
 
 
 @mcp.tool
+@mcp_tool
 def writing_spec(novel_name: str) -> str:
     """加载本小说的写作执行规范。存储在 world_settings(category='writing_spec') 中。
       novel_name: 小说名称
