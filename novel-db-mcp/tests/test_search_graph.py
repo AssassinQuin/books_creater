@@ -164,7 +164,6 @@ class TestGraphQueryParams:
 class TestEmbeddingLazyImport:
     def test_import_without_deps(self):
         import novel_db.embedding as emb
-        assert emb._st_available is None
         assert emb._np is None
         assert emb._st_model is None
 

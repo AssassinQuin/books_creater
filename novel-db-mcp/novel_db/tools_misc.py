@@ -578,7 +578,7 @@ def sync_roundtrip(novel_name: str, data_type: str = "") -> str:
 @mcp.tool
 @mcp_tool
 def semantic_search(novel_name: str, query_text: str, top_k: int = 10) -> str:
-    """语义搜索：用自然语言查询找到相关实体（TF-IDF 零依赖方案）。
+    """语义搜索：用自然语言查询找到相关实体（sentence-transformers 向量匹配）。
 
     与 db_search 的区别：db_search 做关键词精确匹配，semantic_search 做语义相似度匹配。
     例如搜"战斗方式"可以找到"铸造能力"，搜"生病"可以找到"灵衰症"。

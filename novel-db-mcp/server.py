@@ -42,6 +42,9 @@ from novel_db.tools_misc import (  # noqa: F401
 from novel_db.tools_graph import (  # noqa: F401
     graph_query, graph_neighbors, graph_cascade,
 )
+from novel_db.tools_vector import (  # noqa: F401
+    vector_find_incomplete, vector_search, vector_search_and_update,
+)
 
 if __name__ == "__main__":
     mcp.run()

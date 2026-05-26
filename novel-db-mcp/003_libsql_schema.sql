@@ -392,3 +392,20 @@ CREATE TABLE IF NOT EXISTS entity_edges (
 CREATE INDEX IF NOT EXISTS idx_edges_from ON entity_edges(novel_id, from_type, from_id);
 CREATE INDEX IF NOT EXISTS idx_edges_to ON entity_edges(novel_id, to_type, to_id);
 CREATE INDEX IF NOT EXISTS idx_edges_type ON entity_edges(novel_id, edge_type);
+
+-- ─── Embedding Vectors (持久化向量存储) ──────────────────
+CREATE TABLE IF NOT EXISTS embedding_vectors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+    entity_type TEXT NOT NULL,
+    entity_id INTEGER NOT NULL,
+    text_hash TEXT NOT NULL,
+    vector BLOB NOT NULL,
+    source_text TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(novel_id, entity_type, entity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_embedding_novel ON embedding_vectors(novel_id);
+CREATE INDEX IF NOT EXISTS idx_embedding_entity ON embedding_vectors(novel_id, entity_type);
+CREATE INDEX IF NOT EXISTS idx_embedding_type_id ON embedding_vectors(entity_type, entity_id);

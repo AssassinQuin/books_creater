@@ -508,6 +508,10 @@ class SyncEngine:
 
         result = {"synced": 0, "skipped": 0, "errors": []}
         for row in rows:
+            entity_name = row.get("name", "")
+            if entity_name in self._SKIP_ENTITY_NAMES:
+                result["skipped"] += 1
+                continue
             try:
                 did_write = self._sync_one_to_file(tpl, novel_id, novel_name, row, overwrite)
                 if did_write:
@@ -957,9 +961,15 @@ class SyncEngine:
 
         return row if row else None
 
+    _SKIP_ENTITY_NAMES = frozenset({"元数据", "详细内容", "写作执行检查清单"})
+
     def _parse_heading_for_entity(
         self, tpl: SyncTemplate, heading: str, fields: dict, novel_id: int, row: dict, file_category: str | None = None
     ) -> bool:
+        stripped = heading.strip()
+        if stripped in self._SKIP_ENTITY_NAMES:
+            return False
+
         if tpl.name in ("foreshadow", "echo"):
             m = re.match(rf"{tpl.name}:\s*(\d+)", heading)
             if m:
