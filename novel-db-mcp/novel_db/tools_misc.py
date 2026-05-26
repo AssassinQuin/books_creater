@@ -4,7 +4,8 @@ import re
 from pathlib import Path
 
 from .db import mcp, query, PROJECT_ROOT
-from .resolvers import _resolve_novel_id
+from .resolvers import _resolve_novel_id, _resolve_entity
+from .errors import NotFoundError
 from .sync import (
     _ensure_data_hashes_table, _compute_hash, _record_db_hash, _record_file_hash,
     _db_row_to_hashable, _NOVELS_BASE,

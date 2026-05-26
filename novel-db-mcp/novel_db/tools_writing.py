@@ -2,12 +2,13 @@ import json
 from pathlib import Path
 
 from .db import mcp, query, PROJECT_ROOT, transaction
-from .resolvers import _resolve_novel_id, _resolve_chapter_id
+from .resolvers import _resolve_novel_id, _resolve_chapter_id, _UNSET
 from .tools_chapter import _save_chapter_summary_internal
 from .constraints import validate_chapter_text, _get_constraints, _enrichment_level, validate_with_db_rules
 from .prompts import _build_event_checklist
 from .sync import _record_db_hash
-from .errors import ValidationError
+from .errors import ValidationError, NotFoundError
+from .sql_utils import build_update_sql
 
 
 @mcp.tool
@@ -71,12 +72,11 @@ def record_new_content(novel_name: str, content_type: str, name: str = "",
     }
 
     if content_type == "npc":
-        existing = query(
-            "SELECT id FROM characters WHERE novel_id = ? AND name = ?",
-            (novel_id, name), fetch="one"
-        )
-        if existing:
-            return json.dumps({"ok": True, "action": "already_exists", "id": existing["id"], "name": name}, ensure_ascii=False)
+        try:
+            entity_id = _resolve_entity(novel_id, "characters", name, "角色")
+            return json.dumps({"ok": True, "action": "already_exists", "id": entity_id, "name": name}, ensure_ascii=False)
+        except NotFoundError:
+            pass
         desc = parsed_data.get("背景", parsed_data.get("notes", "")) if parsed_data else ""
         r = query(
             "INSERT INTO characters (novel_id, name, role, appearance, personality, speech_style, background, status) "
@@ -215,17 +215,15 @@ def writing_rule_upsert(novel_name: str, rule_type: str, name: str, category: st
         )
 
         if existing:
-            query(
-                "UPDATE writing_rules SET rule_type=?, category=?, pattern=?, replacement=?, "
-                "threshold_min=?, threshold_max=?, scope=?, severity=?, message=?, "
-                "context_pattern=?, context_range=?, is_active=?, priority=?, "
-                "updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (rule_type, category, pattern, replacement,
-                 threshold_min, threshold_max, scope, severity, message,
-                 context_pattern, context_range, active_int, priority,
-                 existing["id"]),
-                fetch="none"
-            )
+            update_fields = {
+                "rule_type": rule_type, "category": category, "pattern": pattern,
+                "replacement": replacement, "threshold_min": threshold_min,
+                "threshold_max": threshold_max, "scope": scope, "severity": severity,
+                "message": message, "context_pattern": context_pattern,
+                "context_range": context_range, "is_active": active_int, "priority": priority,
+            }
+            sql, params = build_update_sql("writing_rules", update_fields, "id = ?", [existing["id"]])
+            query(sql, params, fetch="none")
             return json.dumps({"ok": True, "action": "updated", "name": name}, ensure_ascii=False)
         else:
             query(
@@ -512,11 +510,11 @@ def foreshadow_list(novel_name: str, status: str = "") -> str:
 
 @mcp.tool
 def foreshadow_update(novel_name: str, foreshadow_id: int,
-                      description: str = "", importance: str = "",
-                      planned_recall_chapter: int = 0,
+                      description: str = _UNSET, importance: str = _UNSET,
+                      planned_recall_chapter: int = _UNSET,
                       related_characters: list = None,
                       tags: list = None,
-                      status: str = "", reason: str = "") -> str:
+                      status: str = _UNSET, reason: str = "") -> str:
     """更新伏笔（只传需要修改的字段，空值会被忽略）。可修改描述、重要性、计划回收章、状态等。
       novel_name: 小说名称
       foreshadow_id: 伏笔ID
@@ -535,26 +533,24 @@ def foreshadow_update(novel_name: str, foreshadow_id: int,
         return json.dumps({"error": f"伏笔 {foreshadow_id} 不存在"}, ensure_ascii=False)
 
     fields = {}
-    if description:
+    if description is not _UNSET:
         fields["description"] = description
-    if importance:
+    if importance is not _UNSET:
         fields["importance"] = importance
-    if planned_recall_chapter != 0:
+    if planned_recall_chapter is not _UNSET:
         fields["planned_recall_chapter"] = planned_recall_chapter
     if related_characters is not None:
         fields["related_characters"] = json.dumps(related_characters, ensure_ascii=False)
     if tags is not None:
         fields["tags"] = json.dumps(tags, ensure_ascii=False)
-    if status:
+    if status is not _UNSET:
         fields["status"] = status
 
     if not fields:
         return json.dumps({"ok": False, "error": "no fields to update"}, ensure_ascii=False)
 
-    sets = [f"{k} = ?" for k in fields]
-    vals = list(fields.values()) + [foreshadow_id]
-    query(f"UPDATE foreshadows SET {', '.join(sets)}, updated_at = datetime('now') WHERE id = ?",
-          tuple(vals), fetch="none")
+    sql, params = build_update_sql("foreshadows", fields, "id = ?", [foreshadow_id])
+    query(sql, params, fetch="none")
     _record_db_hash(novel_id, "foreshadow", str(foreshadow_id), json.dumps(fields, ensure_ascii=False))
     return json.dumps({"ok": True, "foreshadow_id": foreshadow_id, "updated_fields": list(fields.keys()), "reason": reason},
                       ensure_ascii=False)

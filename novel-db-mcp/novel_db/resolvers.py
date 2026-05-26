@@ -2,6 +2,35 @@ from .db import query
 from .errors import NotFoundError
 
 
+class _UnsetType:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self):
+        return "_UNSET"
+
+    def __bool__(self):
+        return False
+
+
+_UNSET = _UnsetType()
+
+
+def _resolve_entity(novel_id: int, table: str, name: str, entity_label: str = "实体") -> int:
+    """Resolve an entity name to its ID. Raises NotFoundError if not found."""
+    row = query(
+        f"SELECT id FROM {table} WHERE novel_id = ? AND name = ?",
+        (novel_id, name), fetch="one"
+    )
+    if not row:
+        raise NotFoundError(f"{entity_label} '{name}' 不存在")
+    return row["id"]
+
+
 def _resolve_novel_id(novel_name_or_id) -> int:
     if isinstance(novel_name_or_id, int):
         return novel_name_or_id

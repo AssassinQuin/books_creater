@@ -21,34 +21,35 @@ mcp = FastMCP("novel-db", instructions="网文小说创作数据库 MCP，管理
 
 import sqlite3
 
-os.makedirs(os.path.dirname(LIBSQL_DB_PATH), exist_ok=True)
-
 _local = threading.local()
 _db_initialized = False
+_db_init_lock = threading.Lock()
 
 
 def _init_db_schema(conn: sqlite3.Connection):
     """自动初始化数据库表结构（如果表不存在）。"""
     global _db_initialized
-    if _db_initialized:
-        return
+    with _db_init_lock:
+        if _db_initialized:
+            return
 
-    schema_path = os.path.join(PROJECT_ROOT, "novel-db-mcp", "003_libsql_schema.sql")
-    if not os.path.exists(schema_path):
-        schema_path = os.path.join(os.path.dirname(__file__), "..", "003_libsql_schema.sql")
+        schema_path = os.path.join(PROJECT_ROOT, "novel-db-mcp", "003_libsql_schema.sql")
+        if not os.path.exists(schema_path):
+            schema_path = os.path.join(os.path.dirname(__file__), "..", "003_libsql_schema.sql")
 
-    if os.path.exists(schema_path):
-        with open(schema_path, "r", encoding="utf-8") as f:
-            schema = f.read()
-        conn.executescript(schema)
-        conn.commit()
-        _db_initialized = True
-    else:
-        raise FileNotFoundError(f"DB schema file not found: {schema_path}")
+        if os.path.exists(schema_path):
+            with open(schema_path, "r", encoding="utf-8") as f:
+                schema = f.read()
+            conn.executescript(schema)
+            conn.commit()
+            _db_initialized = True
+        else:
+            raise FileNotFoundError(f"DB schema file not found: {schema_path}")
 
 
 def get_conn():
     if not hasattr(_local, 'conn') or _local.conn is None:
+        os.makedirs(os.path.dirname(LIBSQL_DB_PATH), exist_ok=True)
         _local.conn = sqlite3.connect(LIBSQL_DB_PATH)
         _local.conn.execute("PRAGMA journal_mode=WAL")
         _local.conn.execute("PRAGMA busy_timeout=5000")

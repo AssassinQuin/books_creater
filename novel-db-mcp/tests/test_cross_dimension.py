@@ -58,36 +58,12 @@ def roundtrip(data, jsonb_key="content", indent=1, title_key=None):
 # Fixtures
 # ============================================================================
 
-@pytest.fixture(scope="session")
-def test_db(tmp_path_factory):
-    """创建一个临时测试数据库，所有测试共享。"""
-    db_path = str(tmp_path_factory.mktemp("db") / "test_novel.db")
-
-    # 读取并执行 schema
-    schema_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "003_libsql_schema.sql"
-    )
-    with open(schema_path, "r", encoding="utf-8") as f:
-        schema_sql = f.read()
-
-    import sqlite3
-    conn = sqlite3.connect(db_path)
-    conn.executescript(schema_sql)
-    conn.close()
-
-    # 临时替换全局 DB 路径
-    import novel_db.db as db_mod
-    original_db_path = db_mod.LIBSQL_DB_PATH
-    db_mod.LIBSQL_DB_PATH = db_path
-
-    yield db_path
-
-    db_mod.LIBSQL_DB_PATH = original_db_path
-
+# ============================================================================
+# Fixtures
+# ============================================================================
 
 @pytest.fixture(autouse=True)
-def clean_db(test_db):
+def clean_db():
     """每个测试前清空数据表，保证测试隔离。"""
     priority_order = [
         "data_hashes", "chapter_quality", "dimension_changes",
@@ -105,7 +81,7 @@ def clean_db(test_db):
 
 
 @pytest.fixture
-def novel_id(test_db):
+def novel_id():
     """创建测试小说并返回 novel_id。"""
     r = query(
         "INSERT INTO novels (name, genre, status) VALUES (?, ?, ?)",

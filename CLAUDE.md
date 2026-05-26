@@ -292,6 +292,14 @@ ch{N}: {标题}                      # chapter commits
 
 Configured in `.mcp.json`. `novel-db` MCP server at `novel-db-mcp/server.py`，**libsql** 后端，DB 文件 `data/novel.db`。~56 tools，按 name 操作（不需要 ID）。
 
+## Repository Map
+
+完整代码地图位于 `codemap.md`（项目根目录）。开始任何任务前先阅读。
+
+- `codemap.md` — 项目总览、架构图、数据流、跨模块集成
+- `novel-db-mcp/codemap.md` — MCP 服务器详细架构（~79 工具、SQLite 层、验证引擎）
+- `.claude/skills/codemap.md` — Skill 系统详细架构（17 技能、38 引擎、8 阶段）
+
 ## Memory Integration
 
 Memory MCP 提供 16 个工具用于跨会话持久化知识管理。**需要先加载 memory skill 再调用**。

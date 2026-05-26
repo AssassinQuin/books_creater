@@ -2,7 +2,19 @@ import json
 from collections import defaultdict
 
 from .db import mcp, query, transaction
-from .resolvers import _resolve_novel_id, _resolve_chapter_id
+from .resolvers import _resolve_novel_id, _resolve_chapter_id, _UNSET, _resolve_entity
+from .errors import NotFoundError
+from .sql_utils import build_update_sql
+
+
+def _resolve_chapter_id_by_number(novel_id: int, number: int) -> int:
+    row = query(
+        "SELECT id FROM chapters WHERE novel_id = ? AND number = ?",
+        (novel_id, number), fetch="one"
+    )
+    if not row:
+        raise NotFoundError(f"章节 {number} 不存在")
+    return row["id"]
 
 
 def _save_chapter_summary_internal(chapter_id: int, summary: str,
@@ -60,20 +72,19 @@ def chapter_list(novel_name: str, status: str = "") -> str:
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
 
 
-def _chapter_update_by_id(chapter_id: int, title: str = "", status: str = "",
-                   outline: str = "", chapter_type: str = "",
-                   volume_id: int = None) -> str:
+def _chapter_update_by_id(chapter_id: int, title=_UNSET, status=_UNSET,
+                   outline=_UNSET, chapter_type=_UNSET,
+                   volume_id=_UNSET) -> str:
     fields = {}
-    if title: fields["title"] = title
-    if status: fields["status"] = status
-    if outline: fields["outline"] = outline
-    if chapter_type: fields["chapter_type"] = chapter_type
-    if volume_id is not None: fields["volume_id"] = volume_id
+    if title is not _UNSET: fields["title"] = title
+    if status is not _UNSET: fields["status"] = status
+    if outline is not _UNSET: fields["outline"] = outline
+    if chapter_type is not _UNSET: fields["chapter_type"] = chapter_type
+    if volume_id is not _UNSET: fields["volume_id"] = volume_id
     if not fields:
         return json.dumps({"ok": False, "error": "no valid fields"}, ensure_ascii=False)
-    sets = [f"{k} = ?" for k in fields]
-    vals = list(fields.values()) + [chapter_id]
-    query(f"UPDATE chapters SET {', '.join(sets)}, updated_at = datetime('now') WHERE id = ?", tuple(vals), fetch="none")
+    sql, params = build_update_sql("chapters", fields, "id = ?", (chapter_id,))
+    query(sql, params, fetch="none")
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
@@ -135,10 +146,11 @@ def get_chapter_context(novel_name: str, chapter_number: int,
 
     result = {"chapter_number": chapter_number, "_version": 2}
 
-    ch = query("SELECT * FROM chapters WHERE novel_id = ? AND number = ?",
-               (novel_id, chapter_number), fetch="one")
-    if not ch:
-        return json.dumps({"error": f"chapter {chapter_number} not found"}, ensure_ascii=False)
+    try:
+        chapter_id = _resolve_chapter_id_by_number(novel_id, chapter_number)
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+    ch = query("SELECT * FROM chapters WHERE id = ?", (chapter_id,), fetch="one")
     result["chapter"] = dict(ch)
 
     vol_num = 0
@@ -626,10 +638,10 @@ def timeline_add(novel_name: str, chapter_number: int, event_time: str,
     novel_id = _resolve_novel_id(novel_name)
 
     if chapter_number and not chapter_id:
-        ch = query("SELECT id FROM chapters WHERE novel_id = ? AND number = ?",
-                   (novel_id, chapter_number), fetch="one")
-        if ch:
-            chapter_id = ch["id"]
+        try:
+            chapter_id = _resolve_chapter_id_by_number(novel_id, chapter_number)
+        except NotFoundError:
+            pass
 
     r = query(
         "INSERT INTO timeline_events (novel_id, chapter_id, event_time, event_order, "
@@ -659,9 +671,9 @@ def timeline_query(novel_name: str, from_chapter: int = 0, to_chapter: int = 999
 
 @mcp.tool
 def scene_update(novel_name: str, chapter_number: int, scene_number: int,
-                 location: str = "", characters_involved: list = None,
-                 conflict: str = "", emotion_type: str = "",
-                 key_beats: list = None, notes: str = "") -> str:
+                 location=_UNSET, characters_involved=_UNSET,
+                 conflict=_UNSET, emotion_type=_UNSET,
+                 key_beats=_UNSET, notes=_UNSET) -> str:
     """更新场景大纲（只传需要修改的字段，空值会被忽略）
       novel_name: 小说名称
       chapter_number: 章节序号
@@ -669,26 +681,24 @@ def scene_update(novel_name: str, chapter_number: int, scene_number: int,
     """
     chapter_id = _resolve_chapter_id(novel_name, chapter_number)
     fields = {}
-    if location:
+    if location is not _UNSET:
         fields["location"] = location
-    if characters_involved is not None:
+    if characters_involved is not _UNSET:
         fields["characters_involved"] = characters_involved
-    if conflict:
+    if conflict is not _UNSET:
         fields["conflict"] = conflict
-    if emotion_type:
+    if emotion_type is not _UNSET:
         fields["emotion_type"] = emotion_type
-    if key_beats is not None:
+    if key_beats is not _UNSET:
         fields["key_beats"] = json.dumps(key_beats, ensure_ascii=False)
-    if notes:
+    if notes is not _UNSET:
         fields["notes"] = notes
     if not fields:
         return json.dumps({"ok": False, "error": "no fields to update"}, ensure_ascii=False)
-    sets = [f"{k} = ?" for k in fields]
-    vals = list(fields.values()) + [chapter_id, scene_number]
-    query(
-        f"UPDATE scene_outlines SET {', '.join(sets)} WHERE chapter_id = ? AND scene_number = ?",
-        tuple(vals), fetch="none"
-    )
+    sql, params = build_update_sql("scene_outlines", fields,
+                                   "chapter_id = ? AND scene_number = ?",
+                                   (chapter_id, scene_number))
+    query(sql, params, fetch="none")
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
@@ -707,29 +717,27 @@ def scene_delete(novel_name: str, chapter_number: int, scene_number: int) -> str
 
 @mcp.tool
 def timeline_update(novel_name: str, event_id: int,
-                    event_description: str = "", event_time: str = "",
-                    characters_involved: list = None,
-                    significance: str = "") -> str:
+                    event_description=_UNSET, event_time=_UNSET,
+                    characters_involved=_UNSET,
+                    significance=_UNSET) -> str:
     """更新时间线事件（只传需要修改的字段）
       novel_name: 小说名称
       event_id: 时间线事件ID
     """
     _resolve_novel_id(novel_name)
     fields = {}
-    if event_description:
+    if event_description is not _UNSET:
         fields["event_description"] = event_description
-    if event_time:
+    if event_time is not _UNSET:
         fields["event_time"] = event_time
-    if characters_involved is not None:
+    if characters_involved is not _UNSET:
         fields["characters_involved"] = characters_involved
-    if significance:
+    if significance is not _UNSET:
         fields["significance"] = significance
     if not fields:
         return json.dumps({"ok": False, "error": "no fields to update"}, ensure_ascii=False)
-    sets = [f"{k} = ?" for k in fields]
-    vals = list(fields.values()) + [event_id]
-    query(f"UPDATE timeline_events SET {', '.join(sets)} WHERE id = ?",
-          tuple(vals), fetch="none")
+    sql, params = build_update_sql("timeline_events", fields, "id = ?", (event_id,))
+    query(sql, params, fetch="none")
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 

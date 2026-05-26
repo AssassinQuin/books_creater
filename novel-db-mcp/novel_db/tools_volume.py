@@ -1,16 +1,15 @@
 import json
 
 from .db import mcp, query, transaction
-from .resolvers import _resolve_novel_id
+from .resolvers import _resolve_novel_id, _UNSET
+from .sql_utils import build_update_sql
 
-# JSON-type fields that need json.dumps serialization
 _JSON_FIELDS = {
     'main_plotlines', 'act_intro', 'act_rise', 'act_twist', 'act_resolution',
     'character_arcs', 'interaction_matrix', 'boundaries', 'suspense_anchors',
     'key_dialogues', 'writing_priorities', 'hard_constraints',
     'next_volume_bridge', 'info_pacing', 'rhythm_allocation',
 }
-# Plain text fields — empty string means "no update"
 _TEXT_FIELDS = {
     'title', 'notes', 'core_emotion', 'pov_anchor',
     'time_span', 'voice_mapping', 'causal_chain',
@@ -67,12 +66,14 @@ def _volume_get_by_id(volume_id: int) -> str:
 def _volume_update_by_id(volume_id: int, **kwargs) -> str:
     fields = {}
     for key, val in kwargs.items():
+        if val is _UNSET:
+            continue
         if key in _JSON_FIELDS:
             if val is None:
                 continue
             fields[key] = json.dumps(val, ensure_ascii=False)
         elif key in _TEXT_FIELDS:
-            if not val:
+            if val is _UNSET:
                 continue
             fields[key] = val
         else:
@@ -80,9 +81,8 @@ def _volume_update_by_id(volume_id: int, **kwargs) -> str:
 
     if not fields:
         return json.dumps({"ok": False, "error": "no valid fields"}, ensure_ascii=False)
-    sets = [f"{k} = ?" for k in fields]
-    vals = list(fields.values()) + [volume_id]
-    query(f"UPDATE volumes SET {', '.join(sets)}, updated_at = datetime('now') WHERE id = ?", tuple(vals), fetch="none")
+    sql, params = build_update_sql("volumes", fields, "id = ?", (volume_id,))
+    query(sql, params, fetch="none")
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
@@ -100,19 +100,19 @@ def volume_get(novel_name: str, number: int) -> str:
 
 
 @mcp.tool
-def volume_update(novel_name: str, number: int, title: str = "",
-                  main_plotlines: list = None, notes: str = "",
-                  core_emotion: str = "", pov_anchor: str = "",
-                  time_span: str = "", voice_mapping: str = "",
-                  causal_chain: str = "",
-                  act_intro: dict = None, act_rise: dict = None,
-                  act_twist: dict = None, act_resolution: dict = None,
-                  character_arcs: list = None, interaction_matrix: list = None,
-                  boundaries: list = None, suspense_anchors: dict = None,
-                  key_dialogues: list = None, writing_priorities: dict = None,
-                  hard_constraints: dict = None,
-                  next_volume_bridge: list = None, info_pacing: list = None,
-                  rhythm_allocation: list = None) -> str:
+def volume_update(novel_name: str, number: int, title=_UNSET,
+                  main_plotlines=_UNSET, notes=_UNSET,
+                  core_emotion=_UNSET, pov_anchor=_UNSET,
+                  time_span=_UNSET, voice_mapping=_UNSET,
+                  causal_chain=_UNSET,
+                  act_intro=_UNSET, act_rise=_UNSET,
+                  act_twist=_UNSET, act_resolution=_UNSET,
+                  character_arcs=_UNSET, interaction_matrix=_UNSET,
+                  boundaries=_UNSET, suspense_anchors=_UNSET,
+                  key_dialogues=_UNSET, writing_priorities=_UNSET,
+                  hard_constraints=_UNSET,
+                  next_volume_bridge=_UNSET, info_pacing=_UNSET,
+                  rhythm_allocation=_UNSET) -> str:
     """按卷号更新卷信息（无需volume_id）。传入需要修改的字段，空值会被忽略。支持富数据字段（因果链/四幕/人物弧光等）。
       novel_name: 小说名称
       number: 卷号

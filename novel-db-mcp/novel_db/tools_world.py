@@ -4,10 +4,22 @@ import os
 import re
 
 from .db import mcp, query, transaction
+from .resolvers import _resolve_novel_id, _UNSET, _resolve_entity
+from .errors import NotFoundError
+from .sql_utils import build_update_sql
+from .sync import _record_db_hash, _NOVELS_BASE
 
 logger = logging.getLogger(__name__)
-from .resolvers import _resolve_novel_id
-from .sync import _record_db_hash, _NOVELS_BASE
+
+
+def _resolve_world_setting_id(novel_id: int, category: str, name: str) -> int:
+    row = query(
+        "SELECT id FROM world_settings WHERE novel_id = ? AND category = ? AND name = ?",
+        (novel_id, category, name), fetch="one"
+    )
+    if not row:
+        raise NotFoundError(f"世界观设定 '{category}:{name}' 不存在")
+    return row["id"]
 
 
 # ═══════════════════════════════════════════════════════════
@@ -65,10 +77,10 @@ def _volume_in_range(volume_number: int, volume_range: str) -> bool:
 
 @mcp.tool
 def world_upsert(novel_name: str, category: str, name: str, data: dict,
-                  keys: str = "", secondary_keys: str = "", tags: str = "",
-                  related_ids: str = "", volume_range: str = "", writing_guide: str = "",
-                  lorebook_id: str = "", priority: int = 30, is_constant: bool = False,
-                  region: str = "", faction_id: int = None) -> str:
+                  keys=_UNSET, secondary_keys=_UNSET, tags=_UNSET,
+                  related_ids=_UNSET, volume_range=_UNSET, writing_guide=_UNSET,
+                  lorebook_id=_UNSET, priority=_UNSET, is_constant=_UNSET,
+                  region=_UNSET, faction_id=_UNSET) -> str:
     """新增或更新世界观设定。
     
     参数:
@@ -93,67 +105,91 @@ def world_upsert(novel_name: str, category: str, name: str, data: dict,
     with transaction():
         data_json = json.dumps(data, ensure_ascii=False)
 
-        extra_cols = ["region", "faction_id"]
-        extra_vals_insert = [region if region else "全域", faction_id]
-        extra_vals_update = [region if region else "全域", faction_id]
-
-        if keys:
-            parsed_keys = json.loads(keys)
-            extra_cols.append("keys")
-            extra_vals_insert.append(parsed_keys)
-            extra_vals_update.append(parsed_keys)
-        if secondary_keys:
-            parsed_skeys = json.loads(secondary_keys)
-            extra_cols.append("secondary_keys")
-            extra_vals_insert.append(parsed_skeys)
-            extra_vals_update.append(parsed_skeys)
-        if tags:
-            parsed_tags = json.loads(tags)
-            extra_cols.append("tags")
-            extra_vals_insert.append(parsed_tags)
-            extra_vals_update.append(parsed_tags)
-        if related_ids:
-            parsed_rids = json.loads(related_ids)
-            extra_cols.append("related_ids")
-            extra_vals_insert.append(parsed_rids)
-            extra_vals_update.append(parsed_rids)
-        if volume_range:
-            extra_cols.append("volume_range")
-            extra_vals_insert.append(volume_range)
-            extra_vals_update.append(volume_range)
-        if writing_guide:
-            extra_cols.append("writing_guide")
-            extra_vals_insert.append(writing_guide)
-            extra_vals_update.append(writing_guide)
-        if lorebook_id:
-            extra_cols.append("lorebook_id")
-            extra_vals_insert.append(lorebook_id)
-            extra_vals_update.append(lorebook_id)
-        if priority != 30:
-            extra_cols.append("priority")
-            extra_vals_insert.append(priority)
-            extra_vals_update.append(priority)
-        if is_constant:
-            extra_cols.append("is_constant")
-            extra_vals_insert.append(is_constant)
-            extra_vals_update.append(is_constant)
-
-        col_str = ", ".join(extra_cols)
-        insert_placeholders = ", ".join(["?"] * len(extra_cols))
-        update_sets = ", ".join([f"{c} = ?" for c in extra_cols])
-        query(
-            f"INSERT INTO world_settings (novel_id, category, name, data, {col_str}) "
-            f"VALUES (?, ?, ?, ?, {insert_placeholders}) "
-            f"ON CONFLICT (novel_id, category, name) DO UPDATE SET data = ?, {update_sets}, updated_at = datetime('now')",
-            (novel_id, category, name, data_json, *extra_vals_insert, data_json, *extra_vals_update),
-            fetch="none"
+        existing = query(
+            "SELECT id FROM world_settings WHERE novel_id = ? AND category = ? AND name = ?",
+            (novel_id, category, name), fetch="one"
         )
+
+        if existing:
+            fields = {"data": data_json}
+            if region is not _UNSET:
+                fields["region"] = region if region else "全域"
+            if faction_id is not _UNSET:
+                fields["faction_id"] = faction_id
+            if keys is not _UNSET:
+                fields["keys"] = json.loads(keys)
+            if secondary_keys is not _UNSET:
+                fields["secondary_keys"] = json.loads(secondary_keys)
+            if tags is not _UNSET:
+                fields["tags"] = json.loads(tags)
+            if related_ids is not _UNSET:
+                fields["related_ids"] = json.loads(related_ids)
+            if volume_range is not _UNSET:
+                fields["volume_range"] = volume_range
+            if writing_guide is not _UNSET:
+                fields["writing_guide"] = writing_guide
+            if lorebook_id is not _UNSET:
+                fields["lorebook_id"] = lorebook_id
+            if priority is not _UNSET:
+                fields["priority"] = priority
+            if is_constant is not _UNSET:
+                fields["is_constant"] = is_constant
+
+            sql, params = build_update_sql(
+                "world_settings", fields,
+                "novel_id = ? AND category = ? AND name = ?",
+                [novel_id, category, name]
+            )
+            query(sql, params, fetch="none")
+        else:
+            insert_cols = ["novel_id", "category", "name", "data"]
+            insert_vals = [novel_id, category, name, data_json]
+
+            insert_cols.append("region")
+            insert_vals.append(region if region is not _UNSET and region else "全域")
+            insert_cols.append("priority")
+            insert_vals.append(priority if priority is not _UNSET else 30)
+            insert_cols.append("is_constant")
+            insert_vals.append(is_constant if is_constant is not _UNSET else False)
+            if faction_id is not _UNSET:
+                insert_cols.append("faction_id")
+                insert_vals.append(faction_id)
+            if keys is not _UNSET:
+                insert_cols.append("keys")
+                insert_vals.append(json.loads(keys))
+            if secondary_keys is not _UNSET:
+                insert_cols.append("secondary_keys")
+                insert_vals.append(json.loads(secondary_keys))
+            if tags is not _UNSET:
+                insert_cols.append("tags")
+                insert_vals.append(json.loads(tags))
+            if related_ids is not _UNSET:
+                insert_cols.append("related_ids")
+                insert_vals.append(json.loads(related_ids))
+            if volume_range is not _UNSET:
+                insert_cols.append("volume_range")
+                insert_vals.append(volume_range)
+            if writing_guide is not _UNSET:
+                insert_cols.append("writing_guide")
+                insert_vals.append(writing_guide)
+            if lorebook_id is not _UNSET:
+                insert_cols.append("lorebook_id")
+                insert_vals.append(lorebook_id)
+
+            col_str = ", ".join(insert_cols)
+            placeholders = ", ".join(["?"] * len(insert_cols))
+            query(
+                f"INSERT INTO world_settings ({col_str}) VALUES ({placeholders})",
+                tuple(insert_vals), fetch="none"
+            )
+
         _record_db_hash(novel_id, "world", f"{category}:{name}", data_json)
         from .hooks import fire_post_save
-        ws = query("SELECT id FROM world_settings WHERE novel_id = ? AND category = ? AND name = ?",
-                   (novel_id, category, name), fetch="one")
-        if ws:
-            fire_post_save(novel_id, "world_setting", ws["id"])
+        try:
+            ws_id = _resolve_world_setting_id(novel_id, category, name)
+            fire_post_save(novel_id, "world_setting", ws_id)
+        except NotFoundError:
+            pass
     return json.dumps({"ok": True, "category": category, "name": name}, ensure_ascii=False)
 
 
@@ -354,10 +390,11 @@ def world_deactivate(novel_name: str, category: str, name: str, reason: str = ""
       reason: 停用原因
     """
     novel_id = _resolve_novel_id(novel_name)
-    ws = query("SELECT id, data FROM world_settings WHERE novel_id=? AND category=? AND name=?",
-               (novel_id, category, name), fetch="one")
-    if not ws:
-        return json.dumps({"error": f"世界元素 '{category}:{name}' 不存在"}, ensure_ascii=False)
+    try:
+        ws_id = _resolve_world_setting_id(novel_id, category, name)
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+    ws = query("SELECT data FROM world_settings WHERE id=?", (ws_id,), fetch="one")
     data = ws["data"]
     if isinstance(data, str):
         try:
@@ -368,8 +405,11 @@ def world_deactivate(novel_name: str, category: str, name: str, reason: str = ""
         data = {}
     data["_deactivated"] = True
     data["_deactivation_reason"] = reason
-    query("UPDATE world_settings SET status='inactive', data=?, updated_at=datetime('now') WHERE id=?",
-          (json.dumps(data, ensure_ascii=False), ws["id"]), fetch="none")
+    sql, params = build_update_sql(
+        "world_settings", {"status": "inactive", "data": json.dumps(data, ensure_ascii=False)},
+        "id = ?", [ws_id]
+    )
+    query(sql, params, fetch="none")
     return json.dumps({"ok": True, "category": category, "name": name, "status": "inactive", "reason": reason}, ensure_ascii=False)
 
 
@@ -395,33 +435,21 @@ def world_batch_update_meta(novel_name: str, updates_json: str) -> str:
         if not cat or not name:
             errors.append({"category": cat, "name": name, "error": "missing category or name"})
             continue
-        
-        sets = []
-        vals = []
-        if "region" in u:
-            sets.append("region = ?")
-            vals.append(u["region"])
-        if "volume_range" in u:
-            sets.append("volume_range = ?")
-            vals.append(u["volume_range"])
-        if "faction_id" in u:
-            sets.append("faction_id = ?")
-            vals.append(u["faction_id"])
-        if "priority" in u:
-            sets.append("priority = ?")
-            vals.append(u["priority"])
-        if "is_constant" in u:
-            sets.append("is_constant = ?")
-            vals.append(u["is_constant"])
-        
-        if not sets:
+
+        fields = {}
+        for field in ("region", "volume_range", "faction_id", "priority", "is_constant"):
+            if field in u:
+                fields[field] = u[field]
+
+        if not fields:
             continue
-        
-        vals.extend([novel_id, cat, name])
-        query(
-            f"UPDATE world_settings SET {', '.join(sets)}, updated_at = datetime('now') WHERE novel_id = ? AND category = ? AND name = ?",
-            tuple(vals), fetch="none"
+
+        sql, params = build_update_sql(
+            "world_settings", fields,
+            "novel_id = ? AND category = ? AND name = ?",
+            [novel_id, cat, name]
         )
+        query(sql, params, fetch="none")
         updated += 1
     
     return json.dumps({"ok": True, "updated": updated, "errors": errors}, ensure_ascii=False)
@@ -436,10 +464,10 @@ def sync_lorebook(novel_name: str) -> str:
     if not os.path.isdir(novel_dir):
         return json.dumps({"error": f"novel dir not found: {novel_dir}"}, ensure_ascii=False)
 
-    novel = query("SELECT id FROM novels WHERE name = ?", (novel_name,), fetch="one")
-    if not novel:
-        return json.dumps({"error": f"novel '{novel_name}' not found in DB"}, ensure_ascii=False)
-    novel_id = novel["id"]
+    try:
+        novel_id = _resolve_novel_id(novel_name)
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
 
     changes = {}
     md_files = []

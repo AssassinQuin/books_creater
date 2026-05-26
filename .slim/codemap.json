@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "created_at": "2026-05-26",
+    "include_patterns": [
+      "novel-db-mcp/**/*.py",
+      ".claude/skills/**/SKILL.md",
+      ".claude/skills/engines/*.md",
+      ".claude/skills/phases/*.md",
+      ".claude/skills/shared/*.md",
+      ".claude/skills/templates/*.md",
+      "CLAUDE.md",
+      "NOVEL-CONTEXT.md",
+      "SENTENCE-PATTERNS.md"
+    ],
+    "exclude_patterns": [
+      "novel-db-mcp/tests/**",
+      "novel-db-mcp/scripts/**",
+      "novels/**",
+      "novel-db-mcp/*.sql"
+    ]
+  },
+  "file_hashes": {},
+  "folder_hashes": {}
+}

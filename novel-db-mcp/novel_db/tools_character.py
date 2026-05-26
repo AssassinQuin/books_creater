@@ -1,7 +1,9 @@
 import json
 
 from .db import mcp, query, transaction
-from .resolvers import _resolve_novel_id, _resolve_chapter_id
+from .resolvers import _resolve_novel_id, _resolve_chapter_id, _UNSET, _resolve_entity
+from .errors import NotFoundError
+from .sql_utils import build_update_sql
 from .sync import _record_db_hash
 
 
@@ -70,50 +72,49 @@ def character_create(novel_name: str, name: str, role: str = "npc",
     return json.dumps({"ok": True, "id": r["id"], "name": name}, ensure_ascii=False)
 
 
-def _character_update_by_id(character_id: int, name: str = "", role: str = "", faction_id: int = 0,
-                     race: str = "", ability_level: str = "", status: str = "",
-                     appearance: str = "", personality: str = "", background: str = "",
-                     goals: str = "", weaknesses: str = "", speech_style: str = "",
-                     catchphrase: str = "", arc_notes: str = "", is_active: bool = True,
-                     status_json: str = "",
-                     appearance_detail: str = "", decision_engine: str = "",
-                     voice_fingerprint: str = "", ability_system: str = "",
-                     behavior_pattern: str = "", current_snapshot: str = "",
-                     growth_trajectory: str = "",
-                     distillation_tracked: bool = True) -> str:
+def _character_update_by_id(character_id: int, name=_UNSET, role=_UNSET, faction_id=_UNSET,
+                     race=_UNSET, ability_level=_UNSET, status=_UNSET,
+                     appearance=_UNSET, personality=_UNSET, background=_UNSET,
+                     goals=_UNSET, weaknesses=_UNSET, speech_style=_UNSET,
+                     catchphrase=_UNSET, arc_notes=_UNSET, is_active=_UNSET,
+                     status_json=_UNSET,
+                     appearance_detail=_UNSET, decision_engine=_UNSET,
+                     voice_fingerprint=_UNSET, ability_system=_UNSET,
+                     behavior_pattern=_UNSET, current_snapshot=_UNSET,
+                     growth_trajectory=_UNSET,
+                     distillation_tracked=_UNSET) -> str:
     fields = {}
-    if name: fields["name"] = name
-    if role: fields["role"] = role
-    if faction_id: fields["faction_id"] = faction_id
-    if race: fields["race"] = race
-    if ability_level: fields["ability_level"] = ability_level
-    if status_json:
+    if name is not _UNSET: fields["name"] = name
+    if role is not _UNSET: fields["role"] = role
+    if faction_id is not _UNSET: fields["faction_id"] = faction_id
+    if race is not _UNSET: fields["race"] = race
+    if ability_level is not _UNSET: fields["ability_level"] = ability_level
+    if status_json is not _UNSET:
         fields["status"] = status_json
-    elif status:
+    elif status is not _UNSET:
         fields["status"] = status
-    if appearance: fields["appearance"] = appearance
-    if personality: fields["personality"] = personality
-    if background: fields["background"] = background
-    if goals: fields["goals"] = goals
-    if weaknesses: fields["weaknesses"] = weaknesses
-    if speech_style: fields["speech_style"] = speech_style
-    if catchphrase: fields["catchphrase"] = catchphrase
-    if arc_notes: fields["arc_notes"] = arc_notes
-    if not is_active: fields["is_active"] = False
-    if appearance_detail: fields["appearance_detail"] = json.loads(appearance_detail)
-    if decision_engine: fields["decision_engine"] = json.loads(decision_engine)
-    if voice_fingerprint: fields["voice_fingerprint"] = json.loads(voice_fingerprint)
-    if ability_system: fields["ability_system"] = json.loads(ability_system)
-    if behavior_pattern: fields["behavior_pattern"] = json.loads(behavior_pattern)
-    if current_snapshot: fields["current_snapshot"] = json.loads(current_snapshot)
-    if growth_trajectory: fields["growth_trajectory"] = json.loads(growth_trajectory)
-    if not distillation_tracked: fields["distillation_tracked"] = False
+    if appearance is not _UNSET: fields["appearance"] = appearance
+    if personality is not _UNSET: fields["personality"] = personality
+    if background is not _UNSET: fields["background"] = background
+    if goals is not _UNSET: fields["goals"] = goals
+    if weaknesses is not _UNSET: fields["weaknesses"] = weaknesses
+    if speech_style is not _UNSET: fields["speech_style"] = speech_style
+    if catchphrase is not _UNSET: fields["catchphrase"] = catchphrase
+    if arc_notes is not _UNSET: fields["arc_notes"] = arc_notes
+    if is_active is not _UNSET: fields["is_active"] = is_active
+    if appearance_detail is not _UNSET: fields["appearance_detail"] = json.loads(appearance_detail)
+    if decision_engine is not _UNSET: fields["decision_engine"] = json.loads(decision_engine)
+    if voice_fingerprint is not _UNSET: fields["voice_fingerprint"] = json.loads(voice_fingerprint)
+    if ability_system is not _UNSET: fields["ability_system"] = json.loads(ability_system)
+    if behavior_pattern is not _UNSET: fields["behavior_pattern"] = json.loads(behavior_pattern)
+    if current_snapshot is not _UNSET: fields["current_snapshot"] = json.loads(current_snapshot)
+    if growth_trajectory is not _UNSET: fields["growth_trajectory"] = json.loads(growth_trajectory)
+    if distillation_tracked is not _UNSET: fields["distillation_tracked"] = distillation_tracked
     if not fields:
         return json.dumps({"ok": False, "error": "no valid fields"}, ensure_ascii=False)
     with transaction():
-        sets = [f"{k} = ?" for k in fields]
-        vals = list(fields.values()) + [character_id]
-        query(f"UPDATE characters SET {', '.join(sets)}, updated_at = datetime('now') WHERE id = ?", tuple(vals), fetch="none")
+        sql, params = build_update_sql("characters", fields, "id = ?", (character_id,))
+        query(sql, params, fetch="none")
         char = query("SELECT novel_id, name FROM characters WHERE id = ?", (character_id,), fetch="one")
         if char:
             _record_db_hash(char["novel_id"], "character", char["name"], json.dumps(fields, ensure_ascii=False))
@@ -225,10 +226,11 @@ def character_get(novel_name: str, character_name: str) -> str:
       character_name: 角色名
     """
     novel_id = _resolve_novel_id(novel_name)
-    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
-    if not char:
-        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
-    return _character_get_by_id(char["id"])
+    try:
+        char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+    return _character_get_by_id(char_id)
 
 
 @mcp.tool
@@ -239,24 +241,25 @@ def character_detail(novel_name: str, character_name: str, chapter_number: int =
       chapter_number: 章节序号（可选，用于获取该章状态快照）
     """
     novel_id = _resolve_novel_id(novel_name)
-    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
-    if not char:
-        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
-    return _character_detail_by_id(char["id"], chapter_number)
+    try:
+        char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+    return _character_detail_by_id(char_id, chapter_number)
 
 
 @mcp.tool
-def character_update(novel_name: str, character_name: str, name: str = "", role: str = "", faction_id: int = 0,
-                             race: str = "", ability_level: str = "", status: str = "",
-                             appearance: str = "", personality: str = "", background: str = "",
-                             goals: str = "", weaknesses: str = "", speech_style: str = "",
-                             catchphrase: str = "", arc_notes: str = "", is_active: bool = True,
-                             status_json: str = "",
-                             appearance_detail: str = "", decision_engine: str = "",
-                             voice_fingerprint: str = "", ability_system: str = "",
-                             behavior_pattern: str = "", current_snapshot: str = "",
-                             growth_trajectory: str = "",
-                             distillation_tracked: bool = True) -> str:
+def character_update(novel_name: str, character_name: str, name=_UNSET, role=_UNSET, faction_id=_UNSET,
+                             race=_UNSET, ability_level=_UNSET, status=_UNSET,
+                             appearance=_UNSET, personality=_UNSET, background=_UNSET,
+                             goals=_UNSET, weaknesses=_UNSET, speech_style=_UNSET,
+                             catchphrase=_UNSET, arc_notes=_UNSET, is_active=_UNSET,
+                             status_json=_UNSET,
+                             appearance_detail=_UNSET, decision_engine=_UNSET,
+                             voice_fingerprint=_UNSET, ability_system=_UNSET,
+                             behavior_pattern=_UNSET, current_snapshot=_UNSET,
+                             growth_trajectory=_UNSET,
+                             distillation_tracked=_UNSET) -> str:
     """按角色名更新人物信息（无需ID）。传入需要修改的字段，空值/零值会被忽略。
     distillation_tracked: 人物蒸馏追踪开关（默认True），设为False可关闭临时NPC的蒸馏记录。
     status_json: 传入完整 JSON 字符串作为 status 字段值（优先于 status 参数）。
@@ -264,10 +267,11 @@ def character_update(novel_name: str, character_name: str, name: str = "", role:
       character_name: 角色名
     """
     novel_id = _resolve_novel_id(novel_name)
-    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
-    if not char:
-        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
-    return _character_update_by_id(char["id"], name, role, faction_id, race, ability_level, status,
+    try:
+        char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+    return _character_update_by_id(char_id, name, role, faction_id, race, ability_level, status,
                             appearance, personality, background, goals, weaknesses, speech_style,
                             catchphrase, arc_notes, is_active, status_json,
                             appearance_detail, decision_engine, voice_fingerprint, ability_system,
@@ -289,13 +293,15 @@ def relation_create(novel_name: str, from_name: str, to_name: str,
       intensity: 关系强度(1-10)
     """
     novel_id = _resolve_novel_id(novel_name)
-    from_char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, from_name), fetch="one")
-    if not from_char:
-        return json.dumps({"error": f"角色 '{from_name}' 不存在"}, ensure_ascii=False)
-    to_char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, to_name), fetch="one")
-    if not to_char:
-        return json.dumps({"error": f"角色 '{to_name}' 不存在"}, ensure_ascii=False)
-    return _relation_create_by_id(novel_name, from_char["id"], to_char["id"], relation_type, description, chapter_established, intensity)
+    try:
+        from_id = _resolve_entity(novel_id, "characters", from_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+    try:
+        to_id = _resolve_entity(novel_id, "characters", to_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+    return _relation_create_by_id(novel_name, from_id, to_id, relation_type, description, chapter_established, intensity)
 
 
 @mcp.tool
@@ -368,13 +374,14 @@ def character_snapshot(novel_name: str, character_name: str, chapter_number: int
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
-    if not char:
-        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+    try:
+        char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
     ch = query("SELECT id FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_number), fetch="one")
     if not ch:
         return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
-    return _character_snapshot_by_id(char["id"], ch["id"], location, arc_phase, emotional_state,
+    return _character_snapshot_by_id(char_id, ch["id"], location, arc_phase, emotional_state,
                              physical_state, ability_snapshot, inventory_snapshot, knowledge_snapshot, notes)
 
 
@@ -388,14 +395,15 @@ def character_get_latest(novel_name: str, character_name: str) -> str:
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
-    if not char:
-        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+    try:
+        char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
     r = query(
         "SELECT css.*, c.number as chapter_number FROM character_state_snapshots css "
         "JOIN chapters c ON css.chapter_id = c.id "
         "WHERE css.character_id = ? ORDER BY c.number DESC LIMIT 1",
-        (char["id"],), fetch="one"
+        (char_id,), fetch="one"
     )
     if not r:
         return json.dumps({"error": f"'{character_name}' 暂无快照", "character_name": character_name}, ensure_ascii=False)
@@ -463,10 +471,13 @@ def character_increment(novel_name: str, character_name: str,
     """
     novel_id = _resolve_novel_id(novel_name)
 
+    try:
+        char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
     char = query("SELECT id, current_snapshot, growth_trajectory "
-                 "FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
-    if not char:
-        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+                 "FROM characters WHERE id=?", (char_id,), fetch="one")
 
     updates = []
 
@@ -745,9 +756,10 @@ def distillation_evolve(novel_name: str, character_name: str, chapter_number: in
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
-    if not char:
-        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+    try:
+        char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
     ch = query("SELECT id FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_number), fetch="one")
     if not ch:
         return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
@@ -760,7 +772,7 @@ def distillation_evolve(novel_name: str, character_name: str, chapter_number: in
             "arc_transition, key_decision, notes) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT DO NOTHING",
-            (novel_id, char["id"], ch["id"],
+            (novel_id, char_id, ch["id"],
              decision_delta, new_knowledge, changed_beliefs, relation_shifts,
              voice_changes, ability_changes, arc_transition, key_decision, notes),
             fetch="none"
@@ -779,9 +791,10 @@ def distillation_get(novel_name: str, character_name: str, chapter_number: int =
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
-    if not char:
-        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+    try:
+        char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
 
     if chapter_number > 0:
         ch = query("SELECT id FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_number), fetch="one")
@@ -793,7 +806,7 @@ def distillation_get(novel_name: str, character_name: str, chapter_number: int =
             "JOIN chapters c ON cde.chapter_id = c.id "
             "WHERE cde.character_id = ? AND cde.chapter_id = ? "
             "ORDER BY c.number",
-            (char["id"], ch["id"])
+            (char_id, ch["id"])
         )
     else:
         rows = query(
@@ -802,7 +815,7 @@ def distillation_get(novel_name: str, character_name: str, chapter_number: int =
             "JOIN chapters c ON cde.chapter_id = c.id "
             "WHERE cde.character_id = ? "
             "ORDER BY c.number",
-            (char["id"],)
+            (char_id,)
         )
 
     result = {
@@ -825,9 +838,10 @@ def distillation_timeline(novel_name: str, character_name: str,
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
-    if not char:
-        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+    try:
+        char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
 
     _COL_MAP = {
         "decision_delta": "decision_delta",
@@ -852,7 +866,7 @@ def distillation_timeline(novel_name: str, character_name: str,
         f"AND cde.{col} != '{{}}' AND cde.{col} != '[]' "
         "ORDER BY c.number"
     )
-    rows = query(sql, (char["id"],))
+    rows = query(sql, (char_id,))
 
     result = {
         "character": character_name,
@@ -875,9 +889,10 @@ def distillation_compare(novel_name: str, character_name: str,
     """
     novel_id = _resolve_novel_id(novel_name)
 
-    char = query("SELECT id FROM characters WHERE novel_id=? AND name=?", (novel_id, character_name), fetch="one")
-    if not char:
-        return json.dumps({"error": f"角色 '{character_name}' 不存在"}, ensure_ascii=False)
+    try:
+        char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
+    except NotFoundError as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
 
     ch_a = query("SELECT id, number FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_a), fetch="one")
     ch_b = query("SELECT id, number FROM chapters WHERE novel_id=? AND number=?", (novel_id, chapter_b), fetch="one")
@@ -889,11 +904,11 @@ def distillation_compare(novel_name: str, character_name: str,
 
     snap_a = query(
         "SELECT * FROM character_state_snapshots WHERE character_id=? AND chapter_id=?",
-        (char["id"], ch_a["id"]), fetch="one"
+        (char_id, ch_a["id"]), fetch="one"
     )
     snap_b = query(
         "SELECT * FROM character_state_snapshots WHERE character_id=? AND chapter_id=?",
-        (char["id"], ch_b["id"]), fetch="one"
+        (char_id, ch_b["id"]), fetch="one"
     )
 
     evolutions = query(
@@ -902,7 +917,7 @@ def distillation_compare(novel_name: str, character_name: str,
         "JOIN chapters c ON cde.chapter_id = c.id "
         "WHERE cde.character_id = ? AND c.number > ? AND c.number <= ? "
         "ORDER BY c.number",
-        (char["id"], chapter_a, chapter_b)
+        (char_id, chapter_a, chapter_b)
     )
 
     result = {
