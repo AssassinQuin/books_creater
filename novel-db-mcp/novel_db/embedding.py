@@ -26,7 +26,11 @@ import sys
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = os.environ.get(
-    "EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2"
+    "EMBEDDING_MODEL",
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "models", "paraphrase-multilingual-MiniLM-L12-v2"
+    )
 )
 
 _np = None
@@ -441,6 +445,108 @@ class VectorStore:
             "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
             "UNIQUE(novel_id, entity_type, entity_id))"
         )
+
+    def _query_row(self, entity_type: str, entity_id: int) -> dict | None:
+        """查询单行数据，用于单实体向量更新。"""
+        spec = _ENTITY_FIELD_SPECS.get(entity_type)
+        if not spec:
+            return None
+        table = spec["table"]
+
+        if entity_type == "chapter_summary":
+            return self._query_fn(
+                f"SELECT cs.chapter_id as id, cs.summary, cs.key_events, "
+                f"cs.characters_involved, c.number, c.title "
+                f"FROM {table} cs JOIN chapters c ON cs.chapter_id = c.id "
+                f"WHERE cs.chapter_id = ?",
+                (entity_id,), fetch="one"
+            )
+        elif entity_type == "foreshadow":
+            return self._query_fn(
+                f"SELECT id, description, tags, clue_type, reveal_strategy "
+                f"FROM {table} WHERE id = ?",
+                (entity_id,), fetch="one"
+            )
+        elif entity_type == "echo":
+            return self._query_fn(
+                f"SELECT id, source_event, echo_description, echo_type "
+                f"FROM {table} WHERE id = ?",
+                (entity_id,), fetch="one"
+            )
+        elif entity_type == "timeline":
+            return self._query_fn(
+                f"SELECT id, event_description, event_time, characters_involved "
+                f"FROM {table} WHERE id = ?",
+                (entity_id,), fetch="one"
+            )
+        elif entity_type == "world_setting":
+            return self._query_fn(
+                f"SELECT id, category, name, data, keys, tags, writing_guide "
+                f"FROM {table} WHERE id = ? AND status = 'active'",
+                (entity_id,), fetch="one"
+            )
+        elif entity_type == "character":
+            return self._query_fn(
+                f"SELECT id, name, role, personality, speech_style, goals, background, "
+                f"weaknesses, catchphrase, appearance_detail, decision_engine, "
+                f"voice_fingerprint, ability_system, behavior_pattern, current_snapshot "
+                f"FROM {table} WHERE id = ? AND is_active = 1",
+                (entity_id,), fetch="one"
+            )
+        elif entity_type == "volume":
+            return self._query_fn(
+                f"SELECT id, number, title, core_emotion, causal_chain, character_arcs, "
+                f"act_intro, act_rise, act_twist, act_resolution "
+                f"FROM {table} WHERE id = ?",
+                (entity_id,), fetch="one"
+            )
+        return None
+
+    def update_entity_vector(self, novel_id: int, entity_type: str, entity_id: int):
+        """计算并更新单个实体的向量（增量 upcert）。"""
+        _ensure_deps()
+        self._ensure_table()
+        spec = _ENTITY_FIELD_SPECS.get(entity_type)
+        if not spec:
+            return
+
+        row = self._query_row(entity_type, entity_id)
+        if not row:
+            return
+
+        text = spec["text_fn"](row)
+        text_hash = _compute_text_hash(text)
+        embedding = _st_model.encode(
+            [text], normalize_embeddings=True, show_progress_bar=False
+        )[0]
+        vector_blob = _encode_vector_to_blob(embedding)
+
+        existing = self._query_fn(
+            "SELECT text_hash FROM embedding_vectors "
+            "WHERE novel_id = ? AND entity_type = ? AND entity_id = ?",
+            (novel_id, entity_type, entity_id), fetch="one"
+        )
+
+        if existing and existing.get("text_hash") == text_hash:
+            return
+
+        if existing:
+            self._query_fn(
+                "UPDATE embedding_vectors SET vector = ?, text_hash = ?, "
+                "source_text = ?, updated_at = datetime('now') "
+                "WHERE novel_id = ? AND entity_type = ? AND entity_id = ?",
+                (vector_blob, text_hash, text[:500],
+                 novel_id, entity_type, entity_id),
+                fetch="none"
+            )
+        else:
+            self._query_fn(
+                "INSERT INTO embedding_vectors "
+                "(novel_id, entity_type, entity_id, text_hash, vector, source_text) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (novel_id, entity_type, entity_id, text_hash, vector_blob, text[:500]),
+                fetch="none"
+            )
 
     def rebuild_index(self, novel_id: int, entity_types: list[str] = None):
         _ensure_deps()

@@ -21,8 +21,12 @@ def _sync_edges_hook(novel_id: int, entity_type: str, entity_id: int):
 
 
 def _invalidate_embedding_hook(novel_id: int, entity_type: str, entity_id: int):
-    from .embedding import invalidate_cache
+    from .embedding import invalidate_cache, VectorStore
+    from .db import query
     invalidate_cache(novel_id)
+    # 同步更新持久化向量索引
+    vs = VectorStore(query)
+    vs.update_entity_vector(novel_id, entity_type, entity_id)
 
 
 _HOOKS = [
