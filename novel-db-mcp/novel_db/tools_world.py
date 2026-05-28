@@ -186,10 +186,10 @@ def world_upsert(novel_name: str, category: str, name: str, data: dict,
             )
 
         _record_db_hash(novel_id, "world", f"{category}:{name}", data_json)
-        from .hooks import fire_post_save
+        from .hooks import fire_and_report
         try:
             ws_id = _resolve_world_setting_id(novel_id, category, name)
-            fire_post_save(novel_id, "world_setting", ws_id)
+            fire_and_report(novel_id, "world_setting", ws_id)
         except NotFoundError:
             pass
     return json.dumps({"ok": True, "category": category, "name": name}, ensure_ascii=False)

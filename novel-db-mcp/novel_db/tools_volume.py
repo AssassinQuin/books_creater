@@ -66,7 +66,7 @@ def _volume_get_by_id(volume_id: int) -> str:
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
-def _volume_update_by_id(volume_id: int, **kwargs) -> str:
+def _volume_update_by_id(volume_id: int, novel_id: int = 0, **kwargs) -> str:
     fields = {}
     for key, val in kwargs.items():
         if val is _UNSET:
@@ -84,6 +84,9 @@ def _volume_update_by_id(volume_id: int, **kwargs) -> str:
         return json.dumps({"ok": False, "error": "no valid fields"}, ensure_ascii=False)
     sql, params = build_update_sql("volumes", fields, "id = ?", (volume_id,))
     query(sql, params, fetch="none")
+    if novel_id:
+        from .hooks import fire_and_report
+        fire_and_report(novel_id, "volume", volume_id)
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
@@ -140,7 +143,7 @@ def volume_update(novel_name: str, number: int, title=_UNSET,
     vol = query("SELECT id FROM volumes WHERE novel_id=? AND number=?", (novel_id, number), fetch="one")
     if not vol:
         return json.dumps({"error": f"卷 {number} 不存在"}, ensure_ascii=False)
-    return _volume_update_by_id(vol["id"],
+    return _volume_update_by_id(vol["id"], novel_id=novel_id,
         title=title, main_plotlines=main_plotlines, notes=notes,
         core_emotion=core_emotion, pov_anchor=pov_anchor,
         time_span=time_span, voice_mapping=voice_mapping,

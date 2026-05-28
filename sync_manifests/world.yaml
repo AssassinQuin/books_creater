@@ -4,7 +4,7 @@ db_table: world_settings
 id_field: name
 file_dir: "设定/世界观"
 authority: db
-merge_mode: section_replace
+merge_mode: overwrite
 section_marker: "## {category}: {name}"
 file_pattern: "{category_file}/{name}.md"
 file_title: "{name}"

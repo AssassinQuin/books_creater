@@ -29,7 +29,7 @@ _DEFAULT_MODEL = os.environ.get(
     "EMBEDDING_MODEL",
     os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "models", "paraphrase-multilingual-MiniLM-L12-v2"
+        "models", "Qwen3-Embedding-0.6B"
     )
 )
 
@@ -300,8 +300,28 @@ class EmbeddingEngine:
 
 _engine_cache: dict[int, EmbeddingEngine] = {}
 
+# Dirty tracking: entities whose vectors need rebuilding on next search
+_DIRTY_ENTITIES: dict[int, set[tuple[str, int]]] = {}
 
-def get_engine_for_novel(novel_id: int, query_fn) -> EmbeddingEngine:
+
+def mark_dirty(novel_id: int, entity_type: str, entity_id: int):
+    """Mark entity vector as stale — will be rebuilt on next search."""
+    if novel_id not in _DIRTY_ENTITIES:
+        _DIRTY_ENTITIES[novel_id] = set()
+    _DIRTY_ENTITIES[novel_id].add((entity_type, entity_id))
+
+
+def _flush_dirty(store, novel_id: int):
+    """Rebuild vectors for all dirty entities of a novel."""
+    dirty = _DIRTY_ENTITIES.pop(novel_id, set())
+    if not dirty:
+        return
+    _ensure_deps()
+    for entity_type, entity_id in dirty:
+        try:
+            store.update_entity_vector(novel_id, entity_type, entity_id)
+        except Exception as e:
+            logger.error(f"flush dirty vector failed {entity_type}:{entity_id}: {e}")
     if novel_id in _engine_cache:
         return _engine_cache[novel_id]
 
@@ -658,6 +678,7 @@ class VectorStore:
                entity_types: list[str] = None, min_score: float = 0.1) -> list[dict]:
         _ensure_deps()
         self._ensure_table()
+        _flush_dirty(self, novel_id)
 
         query_emb = _st_model.encode(
             [query_text], normalize_embeddings=True, show_progress_bar=False

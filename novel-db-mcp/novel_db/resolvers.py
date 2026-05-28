@@ -22,6 +22,8 @@ _UNSET = _UnsetType()
 
 def _resolve_entity(novel_id: int, table: str, name: str, entity_label: str = "实体") -> int:
     """Resolve an entity name to its ID. Raises NotFoundError if not found."""
+    from .sql_utils import _validate_table
+    _validate_table(table)
     row = query(
         f"SELECT id FROM {table} WHERE novel_id = ? AND name = ?",
         (novel_id, name), fetch="one"

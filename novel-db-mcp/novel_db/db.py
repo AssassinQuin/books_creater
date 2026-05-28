@@ -1,3 +1,4 @@
+import atexit
 import os
 import json
 import threading
@@ -53,6 +54,7 @@ def get_conn():
         _local.conn = sqlite3.connect(LIBSQL_DB_PATH)
         _local.conn.execute("PRAGMA journal_mode=WAL")
         _local.conn.execute("PRAGMA busy_timeout=5000")
+        _local.conn.execute("PRAGMA foreign_keys = ON")
         _local.in_transaction = 0
         _init_db_schema(_local.conn)
     return _local.conn
@@ -65,6 +67,17 @@ def close_conn():
         except Exception:
             pass
         _local.conn = None
+
+
+def _cleanup_conns():
+    conn = getattr(_local, 'conn', None)
+    if conn:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+atexit.register(_cleanup_conns)
 
 
 @contextmanager

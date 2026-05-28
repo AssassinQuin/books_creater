@@ -3,7 +3,7 @@ import json
 from .db import mcp, query, transaction
 from .resolvers import _resolve_novel_id, _resolve_chapter_id, _UNSET, _resolve_entity
 from .errors import NotFoundError, mcp_tool
-from .sql_utils import build_update_sql
+from .sql_utils import build_update_sql, safe_json_loads
 from .sync import _record_db_hash
 
 
@@ -30,19 +30,19 @@ def character_create(novel_name: str, name: str, role: str = "npc",
     with transaction():
         _json_fields = {}
         if appearance_detail:
-            _json_fields["appearance_detail"] = json.loads(appearance_detail)
+            _json_fields["appearance_detail"] = safe_json_loads(appearance_detail, "appearance_detail")
         if decision_engine:
-            _json_fields["decision_engine"] = json.loads(decision_engine)
+            _json_fields["decision_engine"] = safe_json_loads(decision_engine, "decision_engine")
         if voice_fingerprint:
-            _json_fields["voice_fingerprint"] = json.loads(voice_fingerprint)
+            _json_fields["voice_fingerprint"] = safe_json_loads(voice_fingerprint, "voice_fingerprint")
         if ability_system:
-            _json_fields["ability_system"] = json.loads(ability_system)
+            _json_fields["ability_system"] = safe_json_loads(ability_system, "ability_system")
         if behavior_pattern:
-            _json_fields["behavior_pattern"] = json.loads(behavior_pattern)
+            _json_fields["behavior_pattern"] = safe_json_loads(behavior_pattern, "behavior_pattern")
         if current_snapshot:
-            _json_fields["current_snapshot"] = json.loads(current_snapshot)
+            _json_fields["current_snapshot"] = safe_json_loads(current_snapshot, "current_snapshot")
         if growth_trajectory:
-            _json_fields["growth_trajectory"] = json.loads(growth_trajectory)
+            _json_fields["growth_trajectory"] = safe_json_loads(growth_trajectory, "growth_trajectory")
         if not distillation_tracked:
             _json_fields["distillation_tracked"] = False
 
@@ -68,8 +68,8 @@ def character_create(novel_name: str, name: str, role: str = "npc",
             all_vals, fetch="insert"
         )
         _record_db_hash(novel_id, "character", name, json.dumps({"name": name, "role": role, "race": race, "appearance": appearance}, ensure_ascii=False))
-        from .hooks import fire_post_save
-        fire_post_save(novel_id, "character", r["id"])
+        from .hooks import fire_and_report
+        fire_and_report(novel_id, "character", r["id"])
     return json.dumps({"ok": True, "id": r["id"], "name": name}, ensure_ascii=False)
 
 
@@ -103,13 +103,13 @@ def _character_update_by_id(character_id: int, name=_UNSET, role=_UNSET, faction
     if catchphrase is not _UNSET: fields["catchphrase"] = catchphrase
     if arc_notes is not _UNSET: fields["arc_notes"] = arc_notes
     if is_active is not _UNSET: fields["is_active"] = is_active
-    if appearance_detail is not _UNSET: fields["appearance_detail"] = json.loads(appearance_detail)
-    if decision_engine is not _UNSET: fields["decision_engine"] = json.loads(decision_engine)
-    if voice_fingerprint is not _UNSET: fields["voice_fingerprint"] = json.loads(voice_fingerprint)
-    if ability_system is not _UNSET: fields["ability_system"] = json.loads(ability_system)
-    if behavior_pattern is not _UNSET: fields["behavior_pattern"] = json.loads(behavior_pattern)
-    if current_snapshot is not _UNSET: fields["current_snapshot"] = json.loads(current_snapshot)
-    if growth_trajectory is not _UNSET: fields["growth_trajectory"] = json.loads(growth_trajectory)
+    if appearance_detail is not _UNSET: fields["appearance_detail"] = safe_json_loads(appearance_detail, "appearance_detail")
+    if decision_engine is not _UNSET: fields["decision_engine"] = safe_json_loads(decision_engine, "decision_engine")
+    if voice_fingerprint is not _UNSET: fields["voice_fingerprint"] = safe_json_loads(voice_fingerprint, "voice_fingerprint")
+    if ability_system is not _UNSET: fields["ability_system"] = safe_json_loads(ability_system, "ability_system")
+    if behavior_pattern is not _UNSET: fields["behavior_pattern"] = safe_json_loads(behavior_pattern, "behavior_pattern")
+    if current_snapshot is not _UNSET: fields["current_snapshot"] = safe_json_loads(current_snapshot, "current_snapshot")
+    if growth_trajectory is not _UNSET: fields["growth_trajectory"] = safe_json_loads(growth_trajectory, "growth_trajectory")
     if distillation_tracked is not _UNSET: fields["distillation_tracked"] = distillation_tracked
     if not fields:
         return json.dumps({"ok": False, "error": "no valid fields"}, ensure_ascii=False)
@@ -119,8 +119,8 @@ def _character_update_by_id(character_id: int, name=_UNSET, role=_UNSET, faction
         char = query("SELECT novel_id, name FROM characters WHERE id = ?", (character_id,), fetch="one")
         if char:
             _record_db_hash(char["novel_id"], "character", char["name"], json.dumps(fields, ensure_ascii=False))
-            from .hooks import fire_post_save
-            fire_post_save(char["novel_id"], "character", character_id)
+            from .hooks import fire_and_report
+            fire_and_report(char["novel_id"], "character", character_id)
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
@@ -198,8 +198,8 @@ def _relation_create_by_id(novel_name: str, from_character_id: int, to_character
         (novel_id, from_character_id, to_character_id, relation_type,
          description, chapter_established, intensity), fetch="insert"
     )
-    from .hooks import fire_post_save
-    fire_post_save(novel_id, "character", from_character_id)
+    from .hooks import fire_and_report
+    fire_and_report(novel_id, "character", from_character_id)
     return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
 
 

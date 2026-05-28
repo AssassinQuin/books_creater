@@ -1,9 +1,9 @@
 """
-全局测试配置：所有测试使用临时数据库，避免污染生产 data/novel.db。
+全局测试配置：所有测试使用 data/novel_test.db，避免污染生产 data/novel.db。
 
 conftest 被 pytest 自动发现，作用于 tests/ 下所有测试文件。
-通过环境变量前置 + autouse session-scoped fixture + 安全守卫，
-任何测试（即使忘记自行隔离）也不会触及生产数据库。
+测试数据库固定使用 _test 后缀：data/novel_test.db。
+任何测试都不会触及 data/novel.db（生产库）。
 
 三层防护：
   1. 环境变量 LIBSQL_DB_PATH 在 import db.py 之前设置
@@ -13,12 +13,13 @@ conftest 被 pytest 自动发现，作用于 tests/ 下所有测试文件。
 
 import os
 import sys
-import tempfile
 
 import pytest
 
-_TEST_DB_DIR = tempfile.mkdtemp()
-_TEST_DB_PATH = os.path.join(_TEST_DB_DIR, "test_novel.db")
+_TEST_DB_PATH = os.path.abspath(os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "data", "novel_test.db"
+))
 
 os.environ["LIBSQL_DB_PATH"] = _TEST_DB_PATH
 
@@ -41,6 +42,16 @@ def _test_db_redirect():
         raise RuntimeError(
             f"测试检测到生产 DB 路径: {db_mod.LIBSQL_DB_PATH}，拒绝执行！"
         )
+
+    # 清理旧测试数据库，确保干净启动
+    if os.path.exists(_TEST_DB_PATH):
+        os.remove(_TEST_DB_PATH)
+    wal_path = _TEST_DB_PATH + "-wal"
+    if os.path.exists(wal_path):
+        os.remove(wal_path)
+    shm_path = _TEST_DB_PATH + "-shm"
+    if os.path.exists(shm_path):
+        os.remove(shm_path)
 
     db_mod.LIBSQL_DB_PATH = _TEST_DB_PATH
     db_mod._db_initialized = False

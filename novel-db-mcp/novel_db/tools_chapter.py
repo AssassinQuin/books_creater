@@ -242,12 +242,13 @@ def get_chapter_context(novel_name: str, chapter_number: int,
         "css.emotional_state, css.physical_state "
         "FROM character_state_snapshots css "
         "JOIN chapters ch2 ON css.chapter_id = ch2.id "
-        "WHERE css.id IN ("
+        "WHERE ch2.novel_id = ? AND css.id IN ("
         "  SELECT MAX(css2.id) FROM character_state_snapshots css2 "
         "  JOIN chapters ch3 ON css2.chapter_id = ch3.id "
+        "  WHERE ch3.novel_id = ? "
         "  GROUP BY css2.character_id"
         ")",
-        ()
+        (novel_id, novel_id)
     )
     snap_map = {s["snap_char_id"]: dict(s) for s in (latest_snaps or [])}
 
@@ -650,7 +651,7 @@ def timeline_add(novel_name: str, chapter_number: int, event_time: str,
         try:
             chapter_id = _resolve_chapter_id_by_number(novel_id, chapter_number)
         except NotFoundError:
-            pass
+            return json.dumps({"error": f"章节 {chapter_number} 不存在"}, ensure_ascii=False)
 
     r = query(
         "INSERT INTO timeline_events (novel_id, chapter_id, event_time, event_order, "
@@ -659,6 +660,8 @@ def timeline_add(novel_name: str, chapter_number: int, event_time: str,
         (novel_id, chapter_id, event_time, event_order, event_description,
          characters_involved or [], location_id, significance), fetch="insert"
     )
+    from .hooks import fire_and_report
+    fire_and_report(novel_id, "timeline", r["id"])
     return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
 
 
@@ -737,7 +740,7 @@ def timeline_update(novel_name: str, event_id: int,
       novel_name: 小说名称
       event_id: 时间线事件ID
     """
-    _resolve_novel_id(novel_name)
+    novel_id = _resolve_novel_id(novel_name)
     fields = {}
     if event_description is not _UNSET:
         fields["event_description"] = event_description
@@ -751,6 +754,8 @@ def timeline_update(novel_name: str, event_id: int,
         return json.dumps({"ok": False, "error": "no fields to update"}, ensure_ascii=False)
     sql, params = build_update_sql("timeline_events", fields, "id = ?", (event_id,))
     query(sql, params, fetch="none")
+    from .hooks import fire_and_report
+    fire_and_report(novel_id, "timeline", event_id)
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 

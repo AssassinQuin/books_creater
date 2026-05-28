@@ -6,6 +6,16 @@ from .resolvers import _resolve_novel_id
 from .errors import mcp_tool
 
 
+_EDITABLE_FIELDS = {
+    "world_setting": {"writing_guide", "region", "volume_range", "priority", "is_constant"},
+    "character": {"personality", "speech_style", "goals", "background", "appearance",
+                  "weaknesses", "catchphrase", "arc_notes", "role", "race",
+                  "ability_level", "status"},
+    "foreshadow": {"description", "importance", "tags", "status", "reveal_strategy"},
+    "volume": {"title", "core_emotion", "causal_chain", "notes"},
+}
+
+
 def _get_vector_store() -> VectorStore:
     return VectorStore(query)
 
@@ -186,6 +196,12 @@ def vector_search_and_update(novel_name: str, query_text: str,
       vector_search_and_update("这次不一样了", "灵能", "world_setting", "writing_guide", "注意灵能衰减", dry_run=False)
     """
     novel_id = _resolve_novel_id(novel_name)
+
+    allowed = _EDITABLE_FIELDS.get(entity_type, set())
+    if field_name not in allowed:
+        return json.dumps({
+            "error": f"field '{field_name}' is not editable for {entity_type}. Allowed: {sorted(allowed)}"
+        }, ensure_ascii=False)
 
     store = _get_vector_store()
     _ensure_vector_index(store, novel_id, entity_types=[entity_type])
