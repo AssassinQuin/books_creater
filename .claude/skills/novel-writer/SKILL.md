@@ -1,13 +1,21 @@
 ---
 name: novel-writer
-description: 百万字网文创作引擎总路由器。根据用户意图分发到对应子技能，处理上架/进度/素材查询。触发词：写小说/帮我写/上架/进度/加素材/规划/设计人物/写章/审阅/修复/卡文/头脑风暴
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, mcp__memory__*
-depends_on: novel-setup, novel-character, novel-planner, novel-planner-volume, novel-chapter-writer, novel-qa, novel-reviser, abilitycraft, lorecraft
-lifecycle: core
+description: "[DEPRECATED] 已废弃。总路由器功能不再需要，用户直接触发对应子技能即可。触发词已分散到 novel-setup/novel-character/novel-plan/novel-write/novel-review/novel-fix。"
+lifecycle: deprecated
 version: "1.3.0"
 ---
 
-# 百万字网文创作引擎
+# ⚠️ 已废弃
+
+> **废弃日期**: 2026-05-28
+> **原因**: 架构精简，取消总路由器。用户直接说触发词即可调用对应技能。
+> **替代方案**:
+> - 新建小说/建世界观/加设定 → `novel-setup`
+> - 设计人物/改人物 → `novel-character`
+> - 规划大纲/设计卷 → `novel-plan`
+> - 写第N章/继续写 → `novel-write`
+> - 审阅/检查/诊断 → `novel-review`
+> - 修复/润色/去重 → `novel-fix`
 
 > 总路由器：识别用户意图 → 分发到对应子技能。不直接执行创作。
 

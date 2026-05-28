@@ -4,13 +4,15 @@ description: 全书大纲设计 — 小说骨架+血管。触发词：规划全�
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*, mcp__memory__*
 depends_on: novel-setup, lorecraft, shared/engine-loading-protocol, shared/db-save-protocol, shared/checkpoint-protocol, shared/three-perspective-protocol
 lifecycle: core
-version: "2.0.0"
+version: "2.1.0"
 ---
 
 # 全书大纲设计
 
 > 小说骨架+血管。全局视角 → 每卷"做什么"。不设计具体事件。
 > 输出可被 novel-planner-volume 读取作为卷级设计输入。
+
+> 世界氛围 DNA 存 DB（`world_query(category='core_setting', name='世界氛围DNA')`），Step 0 数据采集时通过 `world_query` 获取。
 
 <what-to-do>
 

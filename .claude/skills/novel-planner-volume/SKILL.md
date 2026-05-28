@@ -1,16 +1,20 @@
 ---
 name: novel-planner-volume
-description: 卷级大纲设计。把握小说脉络——事件架构+因果链+人物弧光+伏笔节奏。不做细节注册，留给正文写作阶段。触发词：设计卷/卷大纲/章节规划/事件设计
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*
-depends_on: novel-planner, lorecraft, engines/causality, engines/relationship, engines/scene-type, engines/scene-composition, lorecraft/references/quickref
-lifecycle: core
-version: "1.5.0"
+description: "[DEPRECATED] 已废弃。功能已合并入 novel-plan（单卷大纲模式）。触发词：设计卷/卷大纲/章节规划/事件设计 → 使用 novel-plan。"
+lifecycle: deprecated
+version: "1.6.0"
 ---
 
-# 卷级大纲设计
+# ⚠️ 已废弃 — 请使用 novel-plan
+
+> **废弃日期**: 2026-05-28
+> **替代方案**: `novel-plan`（包含全书框架 + 单卷大纲两种模式）
+> **迁移**: 设计卷/卷大纲/章节规划/事件设计 → 触发 `novel-plan` 并选择"单卷大纲"模式
 
 > 设计"每章发生什么"——事件架构+因果链+人物弧光+伏笔节奏。**把握脉络，不追求细节**。世界元素注册、感官5要素、微事件多样性等留给正文写作阶段(novel-chapter-writer)。
 > 可选输入：novel-planner 输出的卷级目标卡（非必需）。如存在则作为卷设计约束，不存在则自主设计。
+
+> 世界氛围 DNA 存 DB（`world_query(category='core_setting', name='世界氛围DNA')`），Step 0 数据采集时通过 `world_query` 获取。
 
 <what-to-do>
 
@@ -79,10 +83,12 @@ world_query(novel_name="NOVEL_NAME", volume="V{N}")  # 按卷过滤，减少无�
 
 **分发原则**：编排器加载完的文件直接打包传 Agent，Agent 自主使用。但对 Step 3 审查 Agent 采用**精简分发**——编排器预提取关键信息（术语禁止列表+势力字根表），作为字符串直接注入 Agent 指令，Agent **不再自主加载任何引擎或 lorecraft 文件**。
 
-- **Step 0 额外加载（强制）**：`novels/{小说名}/设定/写作/tone-primer.md` — 项目专属基调词典，加载后传入 Step 2
-  - **fallback**：若文件不存在 → 告知用户「tone-primer.md 缺失，基调字段将使用缺省值」，chapter-designer 使用缺省基调向量枚举：[冷漠克制|突然暴力|短暂温暖|荒诞笑点|兄妹张力]；缺省世界秩序锚：「空置建筑上贴着旧告示，字迹已褪色」；不阻塞流程，但建议运行 lorecraft 生成 tone-primer.md
+- **Step 0 额外加载**：氛围 DNA 从 DB 获取（`world_query(category='core_setting', name='世界氛围DNA')`，已在 0.3 的 world_query 中包含），传入 Step 1/2 Agent
+  - **fallback**：若 DB 无氛围 DNA → 告知用户「建议运行 novel-setup 创建氛围 DNA」，使用 tone-primer.md 或用户描述作为参考
+- **Step 0 额外加载（推荐）**：`novels/{小说名}/设定/写作/tone-primer.md` — 项目专属基调词典（如有），加载后传入 Step 2
+  - **fallback**：若文件不存在 → 不阻塞，但提醒用户建议运行 lorecraft 生成
 - **Step 1** (事件架构师)：causality, relationship, shared-constraints, lorecraft四件套, world-element-registry, **spiral-structure, plot-density**
-- **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-patterns, shared-constraints, lorecraft四件套, world-element-registry, **tone-primer.md（Step 0 已加载，直接传入）**
+- **Step 2** (章节设计师)：scene-type, scene-composition, anti-ai-patterns, shared-constraints, lorecraft四件套, world-element-registry, **氛围DNA（Step 0 已从DB获取，直接传入）**, tone-primer.md（Step 0 已加载，直接传入）
   + 声音层：编排器不从引擎文件全量加载 author-voice×5（详见 §0.4.5 声音层头部提取），而是用 Read(limit=5) 提取每个变体的**头部摘要**（标题+加载时机行），编译为速查表注入 Agent
 - **Step 3** (三视角审查)：reader/author/character-perspective-agent + **精简分发**（只给 quickref 需替换术语+势力字根摘要，不给全量）
   - ❌已移除：world-element-registry, shared-constraints, lorecraft-core-principles, term-map
@@ -358,6 +364,7 @@ print(f"审计模式: {mode} | 范围: {scope}")
 
 ```
 Step 1 (事件架构师) 需要：
+  # 氛围DNA已在Step 0.3通过world_query获取，随数据包传入Agent
   skill_loader("novel-planner-volume", "engine", "causality")
   skill_loader("novel-planner-volume", "engine", "relationship")
   skill_loader("novel-planner-volume", "engine", "spiral-structure")
@@ -369,6 +376,7 @@ Step 1 (事件架构师) 需要：
   Read(".claude/skills/engines/world-element-registry.md")         # 已注册元素索引
 
 Step 2 (章节设计师) 需要：
+  # 氛围DNA已在Step 0.3通过world_query获取，随数据包传入Agent
   skill_loader("novel-planner-volume", "engine", "scene-type")
   skill_loader("novel-planner-volume", "engine", "scene-composition")
   skill_loader("novel-planner-volume", "engine", "anti-ai-patterns")
@@ -425,8 +433,10 @@ loaded_resources = {
     "Step2-术语映射(term-map)": term_map_loaded_s2,
     "Step2-术语速查(quickref)": quickref_loaded_s2,
     "Step2-世界元素索引(world-element-registry)": registry_loaded_s2,
-    # 🔒 基调词典（Step 0 强制，缺失时走 fallback 但必须标记）
-    "Step0-基调词典(tone-primer)": tone_primer_loaded,  # False 时使用缺省枚举，不阻塞
+    # 氛围 DNA（从 DB world_query 获取，已包含在 0.3 的加载中）
+    "Step0-世界氛围DNA(DB)": atmosphere_loaded,  # False 时提醒用户但不阻断
+    # 基调词典（推荐，缺失时不阻塞但提醒）
+    "Step0-基调词典(tone-primer)": tone_primer_loaded,  # False 时不阻塞，但提醒用户
     # Step 3 引擎（只加载视角引擎，术语约束为编排器预提取的精简摘要）
     "Step3-读者视角(reader-perspective)": reader_loaded,
     "Step3-作者视角(author-perspective)": author_loaded,
@@ -565,7 +575,7 @@ Ch{末}: {标题} | {场景数}个场景 | {章末钩子}
 - 🔒世界观基调: 每章含「基调向量」字段（来自tone-primer.md §一枚举）✅/❌
 - 🔒世界观基调: 每章含「世界秩序锚」字段（来自tone-primer.md §二锚点库）✅/❌
 - 🔒世界观基调: 每章含「特写配额」字段（全卷写透场面总数=章数，其余粗放）✅/❌
-- 🔒世界观基调: 若 tone-primer.md 缺失，已切换缺省枚举并告知用户 ✅/❌
+- 🔒世界观基调: 若 tone-primer.md 缺失，已提醒用户建议生成 ✅/❌
 
 输入"OK"进入验证，或提修改意见（可指定某章修改）。
 ```

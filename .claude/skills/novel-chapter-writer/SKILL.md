@@ -1,15 +1,19 @@
 ---
 name: novel-chapter-writer
-description: 逐章写作编排器，直接调 MCP + 模型完成章节。触发词：写第N章/继续写/写一章
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, mcp__novel-db__get_chapter_context, mcp__novel-db__validate_chapter, mcp__novel-db__writing_finish, mcp__novel-db__resolve_engines, mcp__novel-db__skill_loader, mcp__novel-db__character_update, mcp__novel-db__character_increment, mcp__novel-db__character_snapshot, mcp__novel-db__relation_snapshot, mcp__novel-db__foreshadow_plant, mcp__novel-db__foreshadow_recall, mcp__novel-db__world_upsert, mcp__novel-db__character_create, mcp__novel-db__relation_create, mcp__novel-db__consistency_guard, mcp__novel-db__distillation_evolve, mcp__novel-db__volume_get, mcp__memory__memory_store, mcp__memory__memory_search
-depends_on: novel-planner, engines/anti-ai-quickref, engines/author-voice
-lifecycle: core
-version: "2.0.0"
+description: "[DEPRECATED] 已废弃。功能已合并入 novel-write。触发词：写第N章/继续写/写一章 → 使用 novel-write。"
+lifecycle: deprecated
+version: "2.1.0"
 ---
 
-# 逐章写作编排器（v2 — 无子 Agent）
+# ⚠️ 已废弃 — 请使用 novel-write
+
+> **废弃日期**: 2026-05-28
+> **替代方案**: `novel-write`（精简版单章正文生成，~30行）
+> **迁移**: 写第N章/继续写/写一章 → 触发 `novel-write`
 
 > **v2 架构原则**：编排器直接调 MCP 获取精简上下文 + 做创意决策 + 生成正文。无子 Agent，无中间文件传递，无信息损耗。
+
+> 世界氛围 DNA 存 DB（`get_chapter_context` 返回的 `world_settings` 中自动包含 `core_setting` 类别），正文生成应参考氛围 DNA 的感官锚点和禁忌清单。
 
 <what-to-do>
 
@@ -75,9 +79,11 @@ ctx = get_chapter_context(novel_name="NOVEL_NAME", chapter_number={N}, load_mode
 
 ### 1.2 补充基调指令
 
+氛围 DNA 已包含在 `get_chapter_context` 返回的 `world_settings` 中（`category='core_setting', name='世界氛围DNA'`）。编排器从上下文包中提取氛围标签、感官锚点、禁忌清单，用于正文生成参考。
+
 如卷级大纲中本章条目包含基调字段（基调向量/世界秩序锚/特写配额），提取备用。如缺失，标注 ⚠️。
 
-加载基调词典（仅此一个文件需手动读取）：
+加载基调词典（如有）：
 ```
 Read("novels/{小说名}/设定/写作/tone-primer.md")
 ```

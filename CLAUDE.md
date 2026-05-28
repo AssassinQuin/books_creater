@@ -72,75 +72,69 @@ skill操作 → MCP工具 → DB（直接写入）→ sync_db_to_files() → 文
 
 ### Chapter Writing: Direct Pipeline (v2)
 
-章节写作采用 **编排器直调 MCP + 模型**（v2 去掉了 4 子 Agent）：
+章节写作采用 **编排器直调 MCP + 模型**（novel-write skill）：
 
 ```
-编排器 (novel-chapter-writer v2)
-  │  Step 1: get_chapter_context (MCP) → 精简上下文包（~36KB）
+novel-write
+  │  Step 1: get_chapter_context (MCP) → 精简上下文包
   ↓
-Step 2: 创意决策 → 创意蓝图（含新实体创建）+ 存档
-  ↓  🔒 检查点 A
+Step 2: 创意决策 → 用户确认蓝图
+  ↓
 Step 3: resolve_engines (MCP) → 引擎指令
   ↓
 Step 4: 逐场面生成正文 + 自检
-  ↓  🔒 检查点 B
+  ↓
 Step 5: validate_chapter → writing_finish → 存盘
 ```
 
-v2 变更：4 子 Agent → 0；27+ 文件加载 → MCP 聚合查询；上下文 ~80KB → ~36KB；零信息损耗。
+约束从 DB 加载（System < Genre < Novel < Volume < Chapter），氛围DNA自动包含在上下文包中。
 
 ### Skill System
 
 #### Project Skills (`.claude/skills/`)
 
-| Skill | 触发词 | 核心功能 | 强制检查点 |
-|-------|--------|----------|-----------|
-| **novel-writer** | 写小说/帮我写/上架/进度 | 总路由器，分发到子技能 | 冲突消歧按 C3>B2 |
-| **novel-setup** | 头脑风暴/灵感/建世界观/设定 | 项目初始化、世界观构建 | 🔒 世界观确认后才能进入人物 |
-| **novel-character** | 设计人物/加人物/人物卡 | 角色蒸馏7步、外观模板、关系差异化 | 🔒 蒸馏7步+外观+对话完整 |
-| **novel-planner** | 规划卷/大纲 | 全书总纲、逐卷环境先行设计 | 🔒 每卷确认后才能进入场景 |
-| **novel-planner-volume** | 卷大纲/章节规划/事件设计 | 卷级章节设计（场景+事件+支线） | 🔒 场景清单确认后才能进入正文 |
-| **novel-chapter-writer** | 写第N章/继续写/写一章 | 编排器直调 MCP+模型（v2，无子Agent） | 🔒 writing_finish 不可跳过 |
-| **novel-qa** | 审阅/检查/诊断/OOC | 三视角审查+AI指纹检测 | 🔒 P0/P1问题必须修复 |
-| **novel-reviser** | 修复/去重/修文/润色 | 文本修订、润色 | - |
+6 个核心 skill（v2 精简版，每个 <80 行）。用户直接说触发词即可调用，无需总路由器。
 
-#### External Skills (`/home/z/my-project/skills/`)
+| Skill | 触发词 | 核心功能 | 约束来源 |
+|-------|--------|----------|---------|
+| **novel-setup** | 新建小说/建世界观/加设定/加物品 | 项目创建、世界观构建、氛围DNA | DB约束层级 |
+| **novel-character** | 设计人物/加人物/改人物/人物卡 | 角色蒸馏7步、外观、对话设计 | DB约束层级 |
+| **novel-plan** | 规划大纲/设计卷/全书框架/章节规划 | 全书框架 + 单卷大纲 | DB约束层级 |
+| **novel-write** | 写第N章/继续写/写一章 | 单章正文生成 | DB约束层级 |
+| **novel-review** | 审阅/检查/诊断/OOC/创意分析 | 5种审查模式（大纲/正文/设定/健康/创意） | DB约束层级 |
+| **novel-fix** | 修复/润色/改文/去重 | 3种修复模式（修复/润色/术语修复） | DB约束层级 |
+
+约束层级：System < Genre < Novel < Volume < Chapter，高层覆盖低层。氛围DNA通过 `world_upsert(category='core_setting')` 存DB，下游skill通过 `world_query` / `get_chapter_context` 自动获取。
+
+#### 已废弃 Skills（请勿使用）
+
+novel-writer（路由器，不再需要）/ novel-planner-volume（合并入 novel-plan）/ novel-chapter-writer（合并入 novel-write）/ novel-qa（合并入 novel-review）/ novel-creative-analyze（合并入 novel-review）/ novel-reviser（合并入 novel-fix）/ novel-ability-designer（合并入 abilitycraft）
+
+#### External Skills
 
 | Skill | 用途 | 何时使用 |
 |-------|------|----------|
-| **web-novel-writer** | 网文正文写作引擎 | B2章节写作 |
-| **novel-framework** | 百万字框架设计 | A2世界观/A3人物/B1大纲 |
-| **storytelling** | 故事创作方法论 | 对话设计、人物描写 |
-| **prose-craft** | 散文质量引擎 | 文风调整 |
+| **abilitycraft** | 能力设计+命名 | 觉醒者角色能力设计 |
+| **lorecraft** | 术语映射+命名 | 术语合规检查 |
 | **memory** | 持久化记忆管理（16个MCP工具） | 存储检索记忆时 |
-
-外部 skill 为**补充参考**，项目内 skill 是核心工作流。
 
 #### Skill Lifecycle
 
 | Bucket | Skills | Auto-routed |
 |--------|--------|-------------|
-| **core** | novel-writer, novel-setup, novel-character, novel-planner, novel-planner-volume, novel-chapter-writer | Yes |
-| **quality** | novel-qa, novel-reviser | Yes |
-| **experimental** | darwin-skill | No |
-| **meta** | novel-skill-creator | No |
+| **core** | novel-setup, novel-character, novel-plan, novel-write | Yes |
+| **quality** | novel-review, novel-fix | Yes |
+| **deprecated** | novel-writer, novel-planner-volume, novel-chapter-writer, novel-qa, novel-creative-analyze, novel-reviser, novel-ability-designer | No |
 
 ## Workflow Phases
 
-| Phase | Purpose | Trigger Keywords |
-|-------|---------|-----------------|
-| A1 | Project bootstrap | "头脑风暴"/"灵感" |
-| A2 | World-building | "建世界观"/"设定" |
-| A3 | Character design | "设计人物"/"人物卡" |
-| B1 | Volume planning | "规划卷"/"大纲"/"卷大纲"/"章节规划" |
-| B2 | Chapter writing | "写第N章"/"继续写" |
-| B3 | Review | "审阅"/"检查" |
-| C1 | Platform publishing | "上架"/"发布" |
-| C2 | Health diagnosis | "诊断"/"卡文" |
-| C3 | Cascade updates | "改设定"/"调整" |
-| D | Status/materials | "进度"/"加素材" |
+| Phase | Purpose | Trigger Keywords → Skill |
+|-------|---------|------------------------|
+| A | 项目创建+世界观+人物 | "新建小说"/"建世界观"/"设计人物" → novel-setup / novel-character |
+| B | 大纲+正文 | "规划大纲"/"设计卷"/"写第N章" → novel-plan / novel-write |
+| C | 审查+修复 | "审阅"/"检查"/"诊断"/"修复"/"润色" → novel-review / novel-fix |
 
-Priority on conflict: C3 > B2 > others. 阶段指令文件位于 `.claude/skills/phases/`。
+用户自己选择当前做什么，skill 不自动串联。每个 skill 完成后问用户下一步。
 
 ## Key Orchestration Tools
 

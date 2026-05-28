@@ -1,13 +1,15 @@
 ---
 name: novel-reviser
-description: 批量修订引擎。触发词：修复/去重/修文/润色
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, mcp__novel-db__*, skill_loader
-depends_on: novel-qa, novel-planner, novel-chapter-writer, lorecraft, engines/author-voice, engines/writing-style, engines/anti-ai-quickref, engines/causality
-lifecycle: quality
+description: "[DEPRECATED] 已废弃。功能已合并入 novel-fix。触发词：修复/去重/修文/润色 → 使用 novel-fix。"
+lifecycle: deprecated
 version: "1.2.0"
 ---
 
-# 批量修订引擎
+# ⚠️ 已废弃 — 请使用 novel-fix
+
+> **废弃日期**: 2026-05-28
+> **替代方案**: `novel-fix`（含修复/润色/术语修复3种模式）
+> **迁移**: 修复/去重/修文/润色 → 触发 `novel-fix`
 
 > 修订不等于改错——每一刀都要服务于叙事目标，而非追求"标准答案"。
 

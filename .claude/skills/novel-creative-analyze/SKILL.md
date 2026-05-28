@@ -1,13 +1,15 @@
 ---
 name: novel-creative-analyze
-description: 创意质量分析 — 评估惊喜度/独特性/情感冲击/信息投放节奏，找"不够好"而非"有错误"。与novel-qa互补：qa找错，creative-analyze评好。触发词：创意分析/评好/惊喜度/创意评估/好不好看
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, Task, mcp__novel-db__*
-depends_on: novel-writer, shared/checkpoint-protocol, shared/three-perspective-protocol
-lifecycle: core
+description: "[DEPRECATED] 已废弃。功能已合并入 novel-review（创意评估模式）。触发词：创意分析/评好/惊喜度 → 使用 novel-review。"
+lifecycle: deprecated
 version: "1.0.0"
 ---
 
-# 创意质量分析
+# ⚠️ 已废弃 — 请使用 novel-review
+
+> **废弃日期**: 2026-05-28
+> **替代方案**: `novel-review`（选择"创意评估"模式）
+> **迁移**: 创意分析/评好/惊喜度/创意评估 → 触发 `novel-review` 并选择"创意评估"
 
 > 评估"好不好"而非"有没有错"。与 novel-qa 互补：qa 找硬伤，creative-analyze 找软肋。
 > qa 回答"这章OOC了吗？"，creative-analyze 回答"这章读者会惊喜吗？"
