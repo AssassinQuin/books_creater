@@ -150,7 +150,7 @@ def _build_writing_prompt(ch: dict, summaries: list, chars: list,
             lines.append(f"- {c.get('name','?')}（{role_label}）")
         if len(chars) > 10:
             lines.append(f"  …还有{len(chars)-10}人")
-        lines.append("\n**角色蒸馏详情**：`character_detail(novel_name, character_name)` 加载完整蒸馏卡（外观/性格/说话风格/能力/状态/关系/物品）")
+        lines.append("\n**角色蒸馏详情**：`character_get(novel_name, character_name)` 加载完整蒸馏卡（外观/性格/说话风格/能力/状态/关系/物品）")
 
     if foreshadows:
         lines.append(f"\n## 未回收伏笔（{len(foreshadows)}条）")
@@ -198,7 +198,7 @@ def _build_writing_prompt(ch: dict, summaries: list, chars: list,
     lines.append("（完整版: `author_voice(novel_id)`）")
 
     lines.append("\n---\n📎 **按需加载（写中需要再调，不占上下文）**")
-    lines.append("写人物→`character_detail(novel_name, character_name)`")
+    lines.append("写人物→`character_get(novel_name, character_name)`")
     lines.append("写场景→`engine_detail('action/dialogue/environment/item')`")
     lines.append("查世界观→`world_query(novel_id, category)`")
     lines.append("查创作原则→`rule_detail('{key}')`")

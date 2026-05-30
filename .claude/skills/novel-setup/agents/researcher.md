@@ -24,7 +24,7 @@
 
 | entity_type | DB 查询 | 文件读取 |
 |-------------|---------|---------|
-| `character` | `world_query(novel, category='race')` + `world_query(novel, category='faction')` + `character_list(novel)` + 如有参照角色 `character_detail_by_name(novel_name="这次不一样了", character_name={name})` + `relation_list(novel)` | 相关卷大纲/章节 → 了解出场剧情 |
+| `character` | `world_query(novel, category='race')` + `world_query(novel, category='faction')` + `character_list(novel)` + 如有参照角色 `character_detail_by_name(novel_name="{小说名}", character_name={name})` + `relation_list(novel)` | 相关卷大纲/章节 → 了解出场剧情 |
 | `world` | `world_query(novel)` → 已有维度查重 + `db_search(novel, keyword=相关词)` 扫描影响范围 | 相关卷大纲 + 角色总览 → 了解关联 |
 | `ability` | `world_query(novel, category='ability')` + `character_list(novel)` + `world_query(novel, category='race')` | 卷大纲 → 了解剧情阶段决定能力阶段 |
 | `item` | `world_query(novel, name='{物品名}')` + `world_query(novel, category='ability')` | 相关场景/章节 |

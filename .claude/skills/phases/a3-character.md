@@ -28,7 +28,7 @@
 
 强制外观模板：
 - appearance: 具体描写≥30字（体型/面部/发/服饰/标志特征/肤色体态）
-- race: `world_query(novel_name="这次不一样了", category="race")`
+- race: `world_query(novel_name="{小说名}", category="race")`
 - 禁止形容词堆砌，必须具体视觉细节
 - 标志特征1-2个贯穿全文
 
@@ -53,9 +53,9 @@
 ### Step 6: 写入DB
 
 ```python
-character_create(novel_name="这次不一样了", name, role, appearance, speech_style, ...)
-character_update_by_name(novel_name="这次不一样了", character_name={name}, ability_level=..., status=...)
-relation_create_by_name(novel_name="这次不一样了", from_name={from_name}, to_name={to_name}, relation_type={relation_type}, ...)
+character_create(novel_name="{小说名}", name, role, appearance, speech_style, ...)
+character_update_by_name(novel_name="{小说名}", character_name={name}, ability_level=..., status=...)
+relation_create_by_name(novel_name="{小说名}", from_name={from_name}, to_name={to_name}, relation_type={relation_type}, ...)
 ```
 
 ## 输出

@@ -34,9 +34,9 @@ def _init_db_schema(conn: sqlite3.Connection):
         if _db_initialized:
             return
 
-        schema_path = os.path.join(PROJECT_ROOT, "novel-db-mcp", "003_libsql_schema.sql")
+        schema_path = os.path.join(PROJECT_ROOT, "novel-db-mcp", "schema", "003_libsql_schema.sql")
         if not os.path.exists(schema_path):
-            schema_path = os.path.join(os.path.dirname(__file__), "..", "003_libsql_schema.sql")
+            schema_path = os.path.join(os.path.dirname(__file__), "..", "schema", "003_libsql_schema.sql")
 
         if os.path.exists(schema_path):
             with open(schema_path, "r", encoding="utf-8") as f:

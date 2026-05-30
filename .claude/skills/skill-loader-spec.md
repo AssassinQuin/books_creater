@@ -9,7 +9,7 @@ def skill_loader(
     skill: str,           # skill 名称，如 "novel-planner"
     level: str,           # 加载层级: "phase" | "engine" | "example" | "agent"
     resource: str,        # 资源名，如 "b1-volume" | "environment" | "dialogue"
-    project: str = None,  # 项目专属覆盖，如 "这次不一样了"
+    project: str = None,  # 项目专属覆盖，如 "{小说名}"
 ) -> str:
     """
     按 skill + level + resource 加载对应的 .md 文件内容。
@@ -33,7 +33,7 @@ skill_loader("novel-planner", "phase", "b1-volume")
 ```
 
 解析路径：
-1. `skills/novel-planner/overrides/这次不一样了/phases/b1-volume.md` — 存在则返回
+1. `skills/novel-planner/overrides/{小说名}/phases/b1-volume.md` — 存在则返回
 2. `skills/novel-planner/phases/b1-volume.md` — 存在则返回
 3. `skills/phases/b1-volume.md` — 存在则返回
 4. 未找到 → 返回错误
@@ -45,7 +45,7 @@ skill_loader("novel-chapter-writer", "engine", "environment")
 ```
 
 解析路径：
-1. `skills/novel-chapter-writer/overrides/这次不一样了/engines/environment.md`
+1. `skills/novel-chapter-writer/overrides/{小说名}/engines/environment.md`
 2. `skills/novel-chapter-writer/engines/environment.md`
 3. `skills/engines/environment.md` ← 命中（全局共享）
 
@@ -56,7 +56,7 @@ skill_loader("novel-chapter-writer", "example", "dialogue")
 ```
 
 解析路径：
-1. `skills/novel-chapter-writer/overrides/这次不一样了/examples/dialogue.md`
+1. `skills/novel-chapter-writer/overrides/{小说名}/examples/dialogue.md`
 2. `skills/novel-chapter-writer/examples/dialogue.md`
 3. `skills/examples/dialogue.md` ← 命中（全局共享）
 
@@ -66,11 +66,11 @@ skill_loader("novel-chapter-writer", "example", "dialogue")
 
 ```
 skills/engines/environment.md              # 全局默认
-skills/novel-planner/overrides/这次不一样了/engines/environment.md  # 项目专属覆盖
+skills/novel-planner/overrides/{小说名}/engines/environment.md  # 项目专属覆盖
 ```
 
 使用场景：
-- 《这次不一样了》的灵能环境与普通玄幻不同
+- 《{小说名}》的灵能环境与普通玄幻不同
 - 某项目需要特殊的对话风格
 - 某项目有独特的战斗规则
 

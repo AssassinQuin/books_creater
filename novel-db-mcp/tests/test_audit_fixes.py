@@ -24,7 +24,7 @@ def _make_db():
     conn.execute("PRAGMA foreign_keys = ON")
     schema_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "003_libsql_schema.sql"
+        "schema", "003_libsql_schema.sql"
     )
     with open(schema_path, encoding="utf-8") as f:
         conn.executescript(f.read())
@@ -643,31 +643,6 @@ class TestP21SqlBuilder:
         assert "ON CONFLICT" in sql
         assert "DO UPDATE SET" in sql
 
-
-# ============================================================================
-# P2-2: 删除废弃的 dimension 工具
-# ============================================================================
-
-class TestP22DeprecatedDimensionTools:
-    """验证废弃的 dimension 工具已被禁用。"""
-
-    def test_dimension_log_returns_error(self):
-        """dimension_log 应返回废弃错误。"""
-        import novel_db.tools_chapter as tc
-
-        result_json = tc.dimension_log("测试小说", 1, "ability", "change", "test")
-        result = json.loads(result_json)
-        assert "error" in result
-        assert "废弃" in result["error"]
-
-    def test_dimension_query_returns_error(self):
-        """dimension_query 应返回废弃错误。"""
-        import novel_db.tools_chapter as tc
-
-        result_json = tc.dimension_query("测试小说")
-        result = json.loads(result_json)
-        assert "error" in result
-        assert "废弃" in result["error"]
 
 
 # ============================================================================

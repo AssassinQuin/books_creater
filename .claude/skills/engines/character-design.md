@@ -154,7 +154,7 @@
 ```
 
 示例：
-- "灵衰症被灵枢人为制造" → "被信任的系统伤害"
+- "{世界特有疾病}被灵枢人为制造" → "被信任的系统伤害"
 - "血脉诅咒只能活到四十" → "知道时间不多了要怎么活"
 - "实验室出生以为痛苦是正常的" → "不知道自己值得更好的"
 
@@ -250,7 +250,7 @@
 
 ### 动态状态（Dynamic State）
 
-用 `character_update_by_name(novel_name="这次不一样了", character_name={character_name}, _status_json=...)` 维护 JSON 状态，结构如下：
+用 `character_update_by_name(novel_name="{小说名}", character_name={character_name}, _status_json=...)` 维护 JSON 状态，结构如下：
 
 ```json
 {
@@ -474,9 +474,9 @@ A3 人物设计
 │   └── 锻造：语音画像 + 示例对话
 │
 ├── 3. 写入 novel-db
-│   ├── character_create(novel_name="这次不一样了", name, role, personality, speech_style, ...)
-│   ├── character_update_by_name(novel_name="这次不一样了", character_name={character_name}, _status_json={动态状态JSON})
-│   └── relation_create_by_name(novel_name="这次不一样了", from_name={from}, to_name={to}, relation_type={type}, intensity={intensity}, description={description})
+│   ├── character_create(novel_name="{小说名}", name, role, personality, speech_style, ...)
+│   ├── character_update_by_name(novel_name="{小说名}", character_name={character_name}, _status_json={动态状态JSON})
+│   └── relation_create_by_name(novel_name="{小说名}", from_name={from}, to_name={to}, relation_type={type}, intensity={intensity}, description={description})
 │
 ├── 4. 质量验证
 │   ├── 质量检查清单（8条）

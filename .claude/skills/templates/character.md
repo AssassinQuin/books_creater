@@ -10,7 +10,7 @@
 | MD字段 | DB列 | 类型 | 必填 | 说明 |
 |--------|------|------|------|------|
 | role | role | TEXT | ✅ | protagonist/ally/antagonist/mentor/rival/love_interest/npc |
-| race | race | TEXT | ✅ | 种族，来自 world_query(novel_name="这次不一样了", category='race') |
+| race | race | TEXT | ✅ | 种族，来自 world_query(novel_name="{小说名}", category='race') |
 | ability_level | ability_level | TEXT | 觉醒者必填 | 能力等级描述 |
 | faction_id | faction_id | INT | 有归属时 | 所属势力ID |
 | distillation_tracked | distillation_tracked | INT | 默认1 | 是否开启蒸馏追踪（1=是，0=否）。主角/重要角色开启，临时NPC可关闭 |

@@ -229,17 +229,47 @@ def skill_loader(skill: str, level: str, resource: str, project: str = "") -> st
 
 @mcp.tool
 @mcp_tool
-def db_search(novel_name: str, keyword: str, top_k: int = 20) -> str:
+def db_search(novel_name: str, keyword: str, top_k: int = 20,
+              mode: str = "keyword", entity_types: str = "", min_score: float = 0.1) -> str:
     """搜索小说数据（世界观/人物/章节/伏笔），返回排序摘要结果。
 
-    搜索策略：用索引列（name/keys/tags）匹配，不扫 data blob。
+    搜索模式(mode):
+      - "keyword"(默认): 关键词精确匹配，快，不需要 embedding
+      - "vector": 语义向量匹配，能找到意思相近但不完全一致的结果（需要 embedding 模型）
+
+    keyword 模式：用索引列（name/keys/tags）匹配，不扫 data blob。
     评分：name 匹配=10分，keys 匹配=5分，tags 匹配=3分。
     返回格式：每个结果只包含 name/category/summary(150字)/score，不返回完整 data。
 
+    vector 模式：用自然语言语义匹配，例如搜"战斗方式"可以找到"铸造能力"。
+      entity_types: 逗号分隔的实体类型过滤(空=全部)
+      min_score: 最低相似度阈值(默认0.1)
+
       novel_name: 小说名称
-      keyword: 搜索关键词
+      keyword: 搜索关键词或自然语言查询
       top_k: 返回最多结果数(默认20)
+      mode: "keyword" 或 "vector"
+      entity_types: 仅 vector 模式，逗号分隔实体类型过滤
+      min_score: 仅 vector 模式，最低相似度阈值
     """
+    # Vector mode: delegate to vector_search
+    if mode == "vector":
+        from .tools_vector import _get_vector_store, _ensure_vector_index
+        novel_id = _resolve_novel_id(novel_name)
+        type_list = [t.strip() for t in entity_types.split(",") if t.strip()] if entity_types else None
+        store = _get_vector_store()
+        _ensure_vector_index(store, novel_id, entity_types=type_list)
+        from .tools_vector import _resolve_entity_name
+        results = store.search(novel_id, keyword, top_k=top_k,
+                               entity_types=type_list, min_score=min_score)
+        for r in results:
+            r["name"] = _resolve_entity_name(r["type"], r["id"], novel_id)
+        return json.dumps({
+            "query": keyword,
+            "mode": "vector",
+            "total": len(results),
+            "results": results,
+        }, ensure_ascii=False, default=str)
     novel_id = _resolve_novel_id(novel_name)
     kw = f"%{keyword}%"
     results = []
@@ -534,72 +564,3 @@ def sync_files_to_db(novel_name: str, data_type: str = "") -> str:
     }
     return json.dumps(summary, ensure_ascii=False, default=str)
 
-
-@mcp.tool
-@mcp_tool
-def sync_roundtrip(novel_name: str, data_type: str = "") -> str:
-    """双向无损验证：File→DB→File round-trip 测试。
-
-    流程: 读取文件 → 解析写入DB → DB渲染回文件 → 对比两次文件内容
-    用于验证同步引擎的格式转换保真度。
-
-    参数:
-      novel_name: 小说名称
-      data_type: 测试范围，空=全部，可选: character/volume/foreshadow/world/echo
-    用法:
-      sync_roundtrip(novel_name="这次不一样了")                      # 全部测试
-      sync_roundtrip(novel_name="这次不一样了", data_type="volume")  # 只测试卷级大纲
-    """
-    results = {}
-    types_to_test = [data_type] if data_type else _sync_engine.available_types
-
-    for etype in types_to_test:
-        if etype not in _sync_engine.available_types:
-            results[etype] = {"error": f"未注册的同步类型: {etype}"}
-            continue
-        try:
-            r = _sync_engine.roundtrip(novel_name, etype)
-            results[etype] = r
-        except Exception as e:
-            results[etype] = {"error": str(e)}
-
-    all_lossless = all(
-        r.get("lossless", False) for r in results.values() if "error" not in r
-    ) if results else True
-
-    summary = {
-        "novel_name": novel_name,
-        "all_lossless": all_lossless,
-        "details": results,
-    }
-    return json.dumps(summary, ensure_ascii=False, default=str)
-
-
-@mcp.tool
-@mcp_tool
-def semantic_search(novel_name: str, query_text: str, top_k: int = 10) -> str:
-    """语义搜索：用自然语言查询找到相关实体（sentence-transformers 向量匹配）。
-
-    与 db_search 的区别：db_search 做关键词精确匹配，semantic_search 做语义相似度匹配。
-    例如搜"战斗方式"可以找到"铸造能力"，搜"生病"可以找到"灵衰症"。
-
-    参数:
-      novel_name: 小说名称
-      query_text: 自然语言查询文本
-      top_k: 返回最多结果数(默认10)
-    """
-    from .embedding import get_engine_for_novel
-
-    novel_id = _resolve_novel_id(novel_name)
-    engine = get_engine_for_novel(novel_id, query)
-    results = engine.search(query_text, top_k=top_k)
-
-    for r in results:
-        text = r.pop("text", "")
-        r["summary"] = text[:200]
-
-    return json.dumps({
-        "query": query_text,
-        "total": len(results),
-        "results": results,
-    }, ensure_ascii=False, default=str)

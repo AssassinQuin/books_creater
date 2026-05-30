@@ -190,6 +190,8 @@ def world_upsert(novel_name: str, category: str, name: str, data: dict,
         try:
             ws_id = _resolve_world_setting_id(novel_id, category, name)
             fire_and_report(novel_id, "world_setting", ws_id)
+            from .embedding import mark_dirty
+            mark_dirty(novel_id, "world_setting", ws_id)
         except NotFoundError:
             pass
     return json.dumps({"ok": True, "category": category, "name": name}, ensure_ascii=False)

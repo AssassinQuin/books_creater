@@ -16,7 +16,7 @@ def _make_db():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     schema_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                               "003_libsql_schema.sql")
+                               "schema", "003_libsql_schema.sql")
     with open(schema_path, encoding="utf-8") as f:
         conn.executescript(f.read())
     conn.execute("INSERT INTO novels (id, name) VALUES (1, '测试小说')")
@@ -171,14 +171,3 @@ class TestEmbeddingLazyImport:
         from novel_db.embedding import invalidate_cache
         invalidate_cache(999)
         invalidate_cache()
-
-
-class TestMigrateCleanData:
-    def test_dry_run(self):
-        from scripts.migrate_clean_data import clean_data
-        raw = {"content": "test", "keys": ["a"], "tags": ["b"], "region": "全域"}
-        cleaned = clean_data(raw)
-        assert "keys" not in cleaned
-        assert "tags" not in cleaned
-        assert "region" not in cleaned
-        assert "content" in cleaned

@@ -89,7 +89,7 @@ def fresh_db():
 
     schema_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "003_libsql_schema.sql",
+        "schema", "003_libsql_schema.sql",
     )
     with open(schema_path, "r", encoding="utf-8") as f:
         conn.executescript(f.read())

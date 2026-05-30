@@ -70,7 +70,8 @@ def character_create(novel_name: str, name: str, role: str = "npc",
         _record_db_hash(novel_id, "character", name, json.dumps({"name": name, "role": role, "race": race, "appearance": appearance}, ensure_ascii=False))
         from .hooks import fire_and_report
         fire_and_report(novel_id, "character", r["id"])
-    return json.dumps({"ok": True, "id": r["id"], "name": name}, ensure_ascii=False)
+        from .embedding import mark_dirty
+        mark_dirty(novel_id, "character", r["id"])
 
 
 def _character_update_by_id(character_id: int, name=_UNSET, role=_UNSET, faction_id=_UNSET,
@@ -121,6 +122,8 @@ def _character_update_by_id(character_id: int, name=_UNSET, role=_UNSET, faction
             _record_db_hash(char["novel_id"], "character", char["name"], json.dumps(fields, ensure_ascii=False))
             from .hooks import fire_and_report
             fire_and_report(char["novel_id"], "character", character_id)
+            from .embedding import mark_dirty
+            mark_dirty(char["novel_id"], "character", character_id)
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
@@ -224,32 +227,21 @@ def relation_list(novel_name: str) -> str:
 
 @mcp.tool
 @mcp_tool
-def character_get(novel_name: str, character_name: str) -> str:
+def character_get(novel_name: str, character_name: str, detail_level: str = "full",
+                  chapter_number: int = None) -> str:
     """按角色名获取人物详情（无需ID）。
       novel_name: 小说名称
       character_name: 角色名
+      detail_level: "basic"=基础字段(快) | "full"=含关系+快照(默认)
+      chapter_number: 章节序号(可选，detail_level=full时获取该章状态快照)
     """
     novel_id = _resolve_novel_id(novel_name)
     try:
         char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
     except NotFoundError as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
-    return _character_get_by_id(char_id)
-
-
-@mcp.tool
-@mcp_tool
-def character_detail(novel_name: str, character_name: str, chapter_number: int = None) -> str:
-    """按角色名获取角色蒸馏卡片（无需ID）。
-      novel_name: 小说名称
-      character_name: 角色名
-      chapter_number: 章节序号（可选，用于获取该章状态快照）
-    """
-    novel_id = _resolve_novel_id(novel_name)
-    try:
-        char_id = _resolve_entity(novel_id, "characters", character_name, "角色")
-    except NotFoundError as e:
-        return json.dumps({"error": str(e)}, ensure_ascii=False)
+    if detail_level == "basic":
+        return _character_get_by_id(char_id)
     return _character_detail_by_id(char_id, chapter_number)
 
 

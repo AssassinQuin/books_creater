@@ -160,7 +160,11 @@ def get_chapter_context(novel_name: str, chapter_number: int,
     vol_num = 0
     volume_str = ""
     if ch.get("volume_id"):
-        vol = query("SELECT * FROM volumes WHERE id = ?", (ch["volume_id"],), fetch="one")
+        vol = query(
+            "SELECT number, title, main_plotlines, notes, core_emotion, pov_anchor, "
+            "causal_chain, writing_priorities, world_state FROM volumes WHERE id = ?",
+            (ch["volume_id"],), fetch="one"
+        )
         if vol:
             vol_num = vol["number"]
             volume_str = f"V{vol_num}"
@@ -169,7 +173,6 @@ def get_chapter_context(novel_name: str, chapter_number: int,
                                 "core_emotion": vol.get("core_emotion", ""),
                                 "pov_anchor": vol.get("pov_anchor", ""),
                                 "causal_chain": vol.get("causal_chain", ""),
-                                "character_arcs": vol.get("character_arcs", "[]"),
                                 "writing_priorities": vol.get("writing_priorities", "{}"),
                                 "world_state": vol.get("world_state", "")}
 
@@ -181,25 +184,34 @@ def get_chapter_context(novel_name: str, chapter_number: int,
     )
     result["prev_summaries"] = [dict(r) for r in prev_summaries]
 
-    # ── Foreshadows: filter by volume relevance ──
-    foreshadows = query(
-        "SELECT * FROM foreshadows WHERE novel_id = ? AND status = 'planted' ORDER BY importance, id",
-        (novel_id,)
-    )
-    if vol_num > 0 and foreshadows:
-        vol_foreshadows = []
-        for f in foreshadows:
-            prc = f.get("planned_recall_chapter")
-            if f.get("importance") == "high":
-                vol_foreshadows.append(f)
-            elif prc and isinstance(prc, (int, float)):
-                if abs(prc - chapter_number) <= 30:
-                    vol_foreshadows.append(f)
-            else:
-                vol_foreshadows.append(f)
-        result["unresolved_foreshadows"] = vol_foreshadows
+    # ── Foreshadows: SQL pre-filter by volume relevance ──
+    if vol_num > 0 and ch.get("volume_id"):
+        vol_chapter_ids = query(
+            "SELECT id FROM chapters WHERE novel_id = ? AND volume_id = ?",
+            (novel_id, ch["volume_id"])
+        )
+        vol_cids = [r["id"] for r in (vol_chapter_ids or [])]
+        if vol_cids:
+            cid_placeholders = ",".join("?" * len(vol_cids))
+            foreshadows = query(
+                f"SELECT id, description, importance, planted_chapter_id, related_characters, tags, "
+                f"planned_recall_chapter "
+                f"FROM foreshadows WHERE novel_id = ? AND status = 'planted' "
+                f"AND (importance = 'high' OR planted_chapter_id IN ({cid_placeholders})) "
+                f"ORDER BY importance DESC, id",
+                (novel_id, *vol_cids)
+            )
+        else:
+            foreshadows = []
     else:
-        result["unresolved_foreshadows"] = [dict(r) for r in foreshadows]
+        foreshadows = query(
+            "SELECT id, description, importance, planted_chapter_id, related_characters, tags, "
+            "planned_recall_chapter "
+            "FROM foreshadows WHERE novel_id = ? AND status = 'planted' "
+            "ORDER BY importance DESC, id",
+            (novel_id,)
+        )
+    result["unresolved_foreshadows"] = [dict(r) for r in (foreshadows or [])]
 
     try:
         threads = query("SELECT * FROM plot_threads WHERE novel_id = ? AND status = 'active'", (novel_id,))
@@ -218,9 +230,29 @@ def get_chapter_context(novel_name: str, chapter_number: int,
         "ORDER BY e.id", (novel_id, ch["id"]))
     result["active_echoes"] = [dict(r) for r in echoes] if echoes else []
 
-    # ── Characters: distillation cards instead of full profiles ──
-    all_chars = query("SELECT id, name, role, personality, speech_style, ability_level, status, goals, arc_notes "
-                      "FROM characters WHERE novel_id = ? AND is_active = 1", (novel_id,))
+    # ── Characters: distillation cards — only characters from recent chapters ──
+    recent_names = set()
+    if prev_summaries:
+        for ps in prev_summaries:
+            ci = ps.get("characters_involved")
+            if ci:
+                try:
+                    names = json.loads(ci) if isinstance(ci, str) else ci
+                    recent_names.update(str(n) for n in names if n)
+                except (ValueError, TypeError):
+                    pass
+
+    if recent_names:
+        placeholders = ",".join("?" * len(recent_names))
+        all_chars = query(
+            f"SELECT id, name, role, personality, speech_style, ability_level, status, goals, arc_notes "
+            f"FROM characters WHERE novel_id = ? AND is_active = 1 AND name IN ({placeholders})",
+            (novel_id, *recent_names)
+        )
+    else:
+        # Fallback for chapter 1 (no prior summaries): load all active
+        all_chars = query("SELECT id, name, role, personality, speech_style, ability_level, status, goals, arc_notes "
+                          "FROM characters WHERE novel_id = ? AND is_active = 1", (novel_id,))
 
     all_rels = query(
         "SELECT cr.relation_type, cr.description, cr.intensity, cr.status, "
@@ -273,6 +305,18 @@ def get_chapter_context(novel_name: str, chapter_number: int,
         if snap:
             snap.pop("snap_char_id", None)
             card["snapshot"] = snap
+        # Recent distillation evolution for character decision guidance
+        recent_distill = query(
+            "SELECT cde.key_decision, cde.decision_delta, cde.changed_beliefs, "
+            "cde.arc_transition, cde.notes "
+            "FROM character_distillation_evolution cde "
+            "JOIN chapters ch ON cde.chapter_id = ch.id "
+            "WHERE ch.novel_id = ? AND cde.character_id = ? "
+            "ORDER BY ch.number DESC LIMIT 3",
+            (novel_id, c["id"])
+        )
+        if recent_distill:
+            card["recent_evolution"] = [dict(r) for r in recent_distill]
         char_cards.append(card)
     result["character_cards"] = char_cards
 
@@ -612,24 +656,6 @@ def scene_list(novel_name: str, chapter_number: int) -> str:
     rows = query("SELECT * FROM scene_outlines WHERE chapter_id = ? ORDER BY scene_number",
                  (chapter_id,))
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
-
-
-@mcp.tool
-@mcp_tool
-def dimension_log(novel_name: str, chapter_id: int, dimension: str,
-                  change_type: str, entity_name: str,
-                  before_value: dict = None, after_value: dict = None,
-                  description: str = "") -> str:
-    """[DEPRECATED] 此工具已废弃，维度变更已由 character_state_snapshots 追踪。请使用 character_state_snapshots 替代。"""
-    return json.dumps({"error": "dimension_log 已废弃，请使用 character_state_snapshots 替代"}, ensure_ascii=False)
-
-
-@mcp.tool
-@mcp_tool
-def dimension_query(novel_name: str, dimension: str = "", from_chapter: int = 0,
-                    to_chapter: int = 99999) -> str:
-    """[DEPRECATED] 此工具已废弃，维度变更已由 character_state_snapshots 追踪。请使用 character_state_snapshots 替代。"""
-    return json.dumps({"error": "dimension_query 已废弃，请使用 character_state_snapshots 替代"}, ensure_ascii=False)
 
 
 @mcp.tool

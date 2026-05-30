@@ -439,8 +439,9 @@ def writing_finish(novel_name: str, chapter_number: int, summary: str, chapter_t
             "新NPC": "本章是否出现了新NPC？→ record_new_content(novel_name, 'npc', '人名', json_data)",
             "新物品": "本章是否出现了新物品？→ record_new_content(novel_name, 'item', '物品名', json_data)",
             "新设定": "本章是否有新增世界观设定？→ record_new_content(novel_name, 'setting', '设定名', json_data)",
-            "新伏笔": "本章是否埋了新伏笔？→ foreshadow_plant(novel_name=\"这次不一样了\", '描述', importance, tags)",
+            "新伏笔": "本章是否埋了新伏笔？→ foreshadow_plant(novel_name, '描述', importance, tags)",
             "角色变化": "本章是否有角色状态变化？→ character_update(novel_name, character_name, status=...)",
+            "角色蒸馏": "主要角色本章是否有决策/信念/关系变化？→ distillation_evolve(novel_name, character_name, chapter_number, key_decision='{\"situation\":\"...\",\"choice\":\"...\"}', decision_delta='[{\"trigger\":\"...\",\"rule_name\":\"...\",\"after\":\"...\"}]')",
             "线索追踪": "本章是否有新线索出现？→ 记录到设定/大纲/线索追踪.md"
         }
     }, ensure_ascii=False)
@@ -617,11 +618,13 @@ def echo_create(novel_name: str, source_chapter_id: int, echo_chapter_id: int,
 
 @mcp.tool
 @mcp_tool
-def echo_list(novel_name: str, volume_id: int = 0, echo_chapter_id: int = 0) -> str:
+def echo_list(novel_name: str, volume_id: int = 0, echo_chapter_id: int = 0,
+              include_density: bool = False) -> str:
     """列出回响记录。可按卷或章节过滤，用于检查密度是否超标（普通回响≤2次/卷）。
       novel_name: 小说名称
       volume_id: 按卷过滤（0=全部）
       echo_chapter_id: 按回响出现章节过滤（0=全部）
+      include_density: True时返回详细密度分析（普通/强相关/跨卷分类统计）
     """
     novel_id = _resolve_novel_id(novel_name)
 
@@ -661,61 +664,19 @@ def echo_list(novel_name: str, volume_id: int = 0, echo_chapter_id: int = 0) -> 
         "echoes": [dict(r) for r in rows],
         "density_warnings": density_warn
     }
+
+    # Detailed density analysis when requested and volume specified
+    if include_density and volume_id:
+        normal = [r for r in (rows or []) if not r.get("strong_related")]
+        strong = [r for r in (rows or []) if r.get("strong_related")]
+        result["density_detail"] = {
+            "normal_echoes": {"count": len(normal), "limit": 2,
+                              "exceeded": len(normal) > 2},
+            "strong_echoes": {"count": len(strong), "limit": "unlimited"},
+            "status": "exceeded" if len(normal) > 2 else "ok"
+        }
+
     return json.dumps(result, ensure_ascii=False, default=str)
-
-
-@mcp.tool
-@mcp_tool
-def echo_density_check(novel_name: str, volume_id: int) -> str:
-    """检查某卷的回响密度。返回普通回响/强相关回响/跨卷回响的数量和具体列表。
-      novel_name: 小说名称
-      volume_id: 要检查的卷ID
-    """
-    novel_id = _resolve_novel_id(novel_name)
-
-    normal = query(
-        "SELECT e.*, c1.number as source_ch, c2.number as echo_ch "
-        "FROM echoes e "
-        "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
-        "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
-        "WHERE e.novel_id = ? AND e.volume_id = ? AND e.strong_related = 0 "
-        "ORDER BY e.id",
-        (novel_id, volume_id))
-
-    strong = query(
-        "SELECT e.*, c1.number as source_ch, c2.number as echo_ch "
-        "FROM echoes e "
-        "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
-        "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
-        "WHERE e.novel_id = ? AND e.volume_id = ? AND e.strong_related = 1 "
-        "ORDER BY e.id",
-        (novel_id, volume_id))
-
-    # Cross-volume echoes: source from different volume
-    cross_vol = query(
-        "SELECT e.*, c1.number as source_ch, c2.number as echo_ch, "
-        "cv.number as source_vol "
-        "FROM echoes e "
-        "LEFT JOIN chapters c1 ON e.source_chapter_id = c1.id "
-        "LEFT JOIN chapters c2 ON e.echo_chapter_id = c2.id "
-        "LEFT JOIN chapters cv ON e.source_chapter_id = cv.id "
-        "LEFT JOIN volumes v ON cv.volume_id = v.id "
-        "WHERE e.novel_id = ? AND e.volume_id = ? "
-        "AND cv.volume_id != ? "
-        "ORDER BY e.id",
-        (novel_id, volume_id, volume_id))
-
-    exceeded = len(normal) > 2
-    return json.dumps({
-        "volume_id": volume_id,
-        "normal_echoes": {"count": len(normal), "limit": 2, "exceeded": exceeded,
-                         "items": [dict(r) for r in normal]},
-        "strong_echoes": {"count": len(strong), "limit": "unlimited",
-                          "items": [dict(r) for r in strong]},
-        "cross_volume_echoes": {"count": len(cross_vol), "limit": 1,
-                                "items": [dict(r) for r in cross_vol]},
-        "status": "exceeded" if exceeded else "ok"
-    }, ensure_ascii=False, default=str)
 
 
 # ──────────────────────────────────────────

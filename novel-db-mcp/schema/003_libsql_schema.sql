@@ -409,3 +409,7 @@ CREATE TABLE IF NOT EXISTS embedding_vectors (
 CREATE INDEX IF NOT EXISTS idx_embedding_novel ON embedding_vectors(novel_id);
 CREATE INDEX IF NOT EXISTS idx_embedding_entity ON embedding_vectors(novel_id, entity_type);
 CREATE INDEX IF NOT EXISTS idx_embedding_type_id ON embedding_vectors(entity_type, entity_id);
+
+-- Performance indexes (2026-05)
+CREATE INDEX IF NOT EXISTS idx_characters_novel_name ON characters(novel_id, name);
+CREATE INDEX IF NOT EXISTS idx_foreshadows_novel_status ON foreshadows(novel_id, status);
