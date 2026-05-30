@@ -130,6 +130,169 @@ def _find_title_key(obj: dict) -> tuple:
     return None, None
 
 
+def _jsonb_to_md_narrative(data: dict, level: int = 3) -> list:
+    """将 dict 渲染为人可读的叙事格式：顶层 key → ### 标题，字符串→段落，列表→bullet，嵌套 dict→子标题。"""
+
+    # key → 中文标题映射
+    _KEY_LABELS = {
+        "description": "概述",
+        "origin": "起源",
+        "name_meaning": "名字含义",
+        "scale": "规模",
+        "structure": "组织结构",
+        "what_they_did": "四百年历程",
+        "the_cost": "代价",
+        "recent_tension": "当前危机",
+        "created_or_guided": "暗中布局",
+        "meeting_place": "据点",
+        "core_asset": "核心资产",
+        "internal_tension": "内部暗流",
+        "economy": "经济",
+        "blind_spot": "认知盲区",
+        "conflict_with_ming_tang": "与明堂的冲突",
+        "character": "群体气质",
+        "three_missions": "三大使命",
+        "belief": "信仰",
+        "practices": "行事方式",
+        "threat": "威胁等级",
+        "power_structure": "权力结构",
+        "military": "军事",
+        "stance": "立场",
+        "conflict_with_ming_tang": "与明堂的冲突",
+        "awakener_tradition": "觉醒者传统",
+        "composition": "人员构成",
+        "methods": "手段",
+        "relation_to_others": "与其他势力的关系",
+        "form": "形态",
+        "natural_behavior": "自然行为",
+        "crystallization": "灵晶凝结",
+        "effects_on_life": "对生命的影响",
+        "灵潮": "灵潮",
+        "awakening": "觉醒机制",
+        "mechanism": "运作机制",
+        "灵晶用途": "灵晶用途",
+        "side_effect": "副作用",
+        "economic_chain": "经济链",
+        "geography": "地理分布",
+        "moral_dilemma": "道德困境",
+        "tiers": "境界划分",
+        "灵晶与修炼": "灵晶与修炼",
+        "beast_tide_connection": "与兽潮的关系",
+        "manifestations": "表现形式",
+        "rules": "规则",
+        "phase_1": "第一阶段",
+        "phase_2": "第二阶段",
+        "phase_3": "第三阶段",
+        "phase_4": "当前阶段",
+        "high_concentration": "高浓度",
+        "moderate_concentration": "中等浓度",
+        "low_concentration": "低浓度",
+        "灵衰_explanation": "灵衰的本质",
+        # 核心设定 — 基调锚
+        "moral_baseline": "道德底色",
+        "violence_density": "暴力密度",
+        "safety": "安全感",
+        "cost_scale": "代价尺度",
+        "redemption": "救赎弧线",
+        "era_anchor": "时代锚点",
+        "story_structure": "故事结构",
+        # 核心设定 — 氛围DNA
+        "keywords": "关键词",
+        "sensory_tags": "感官标签",
+        "contrast_principle": "反差原则",
+        "anchors": "感官锚点",
+        "references": "参考作品",
+        # 核心设定 — 禁忌与词汇
+        "taboos": "禁忌",
+        "vocabulary": "词汇色彩",
+        "prefer": "推荐",
+        "avoid": "避免",
+        "reason": "原因",
+        "alternative": "替代方案",
+        # 通用 — 行为映射
+        "condition": "条件",
+        "forbidden": "禁止",
+        "example": "示例",
+        "violation": "违反示例",
+        # 势力 — 补充
+        "internal_conflict": "内部冲突",
+        "factions": "派系",
+        "tension": "紧张关系",
+        "writing_guide": "写作指导",
+        "type": "类型",
+    }
+
+    # 内部字段，渲染时跳过
+    _SKIP_KEYS = {"id"}
+
+    def _label(key: str) -> str:
+        return _KEY_LABELS.get(key, key)
+
+    lines = []
+    heading = "#" * level
+
+    for k, v in data.items():
+        if k in _SKIP_KEYS:
+            continue
+        if _is_empty(v):
+            continue
+
+        label = _label(k)
+
+        if isinstance(v, str):
+            lines.append(f"{heading} {label}")
+            lines.append("")
+            lines.append(v)
+            lines.append("")
+
+        elif isinstance(v, list):
+            lines.append(f"{heading} {label}")
+            lines.append("")
+            for item in v:
+                if isinstance(item, str):
+                    lines.append(f"- {item}")
+                elif isinstance(item, dict):
+                    title_key = None
+                    for candidate in ("name", "level", "phase", "tier", "title"):
+                        if candidate in item:
+                            title_key = candidate
+                            break
+                    if title_key and title_key in item:
+                        lines.append(f"- **{item[title_key]}**")
+                        for sk, sv in item.items():
+                            if sk == title_key or sk in _SKIP_KEYS:
+                                continue
+                            if _is_empty(sv):
+                                continue
+                            if isinstance(sv, str):
+                                lines.append(f"  - **{_label(sk)}**: {sv}")
+                            elif isinstance(sv, list):
+                                sv_strs = [str(x) for x in sv if x]
+                                if sv_strs:
+                                    lines.append(f"  - **{_label(sk)}**: {', '.join(sv_strs)}")
+                            else:
+                                lines.append(f"  - **{_label(sk)}**: {sv}")
+                    else:
+                        lines.extend(_jsonb_to_md(item, 1))
+                elif item is not None:
+                    lines.append(f"- {item}")
+            lines.append("")
+
+        elif isinstance(v, dict):
+            lines.append(f"{heading} {label}")
+            lines.append("")
+            lines.extend(_jsonb_to_md_narrative(v, level + 1))
+            lines.append("")
+
+        else:
+            lines.append(f"{heading} {label}")
+            lines.append("")
+            lines.append(str(v))
+            lines.append("")
+
+    return lines
+
+
 def _jsonb_to_md(data, indent=0, title_key: str | None = None) -> list:
     prefix = "    " * indent
     lines = []

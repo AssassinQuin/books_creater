@@ -71,7 +71,7 @@ def clean_data_for_storage(raw_data):
 
 from .db import query, PROJECT_ROOT
 from .sync import (
-    _is_empty, _jsonb_to_md, _parse_json_field,
+    _is_empty, _jsonb_to_md, _jsonb_to_md_narrative, _parse_json_field,
     _render_md_table, _md_bullet,
     _record_db_hash, _record_file_hash,
     _NOVELS_BASE,
@@ -170,6 +170,7 @@ class SectionDef:
     jsonb_key: str | None = None   # 用作bullet key（默认同jsonb_column）
     title_key: str | None = None   # list[dict] 标注键名（如 "name", "stage"），用于 MD 往返还原
     fallback_columns: list[str] | None = None  # jsonb为空时的备选列
+    jsonb_mode: str = "bullet"     # bullet=嵌套列表 | narrative=标题+段落（人可读）
 
     # type=static
     static_content: str | None = None
@@ -245,6 +246,7 @@ class SyncTemplate:
     category_file_map: dict[str, str] | None = None  # 世界观：category → 中文文件名
     manifest_path: str | None = None  # 来源 YAML 路径（调试用）
     composite_id_fields: list[str] | None = None  # 复合主键（如 world 的 [category, name]）
+    group_by: str | None = None      # 按列分组写入同一文件（如 "category"）
 
 
 # ============================================================================
@@ -410,6 +412,7 @@ class SyncEngine:
             file_dir=data.get("file_dir", ""),
             authority=data.get("authority", "db"),
             merge_mode=data.get("merge_mode", "overwrite"),
+            group_by=data.get("group_by"),
             sections=sections,
             relations=relations,
             transforms=transforms,
@@ -477,6 +480,7 @@ class SyncEngine:
             jsonb_key=data.get("jsonb_key"),
             title_key=data.get("title_key"),
             fallback_columns=data.get("fallback_columns"),
+            jsonb_mode=data.get("jsonb_mode", "bullet"),
             static_content=data.get("static_content"),
             raw_column=data.get("raw_column"),
             table_column=data.get("table_column"),
@@ -507,6 +511,33 @@ class SyncEngine:
         rows = self._query_entities(tpl, novel_id, entity_key)
 
         result = {"synced": 0, "skipped": 0, "errors": []}
+
+        # 分组模式：按 group_by 列分组，同一组写入一个文件
+        if tpl.group_by:
+            groups: dict[str, list[dict]] = {}
+            for row in rows:
+                entity_name = row.get("name", "")
+                if entity_name in self._SKIP_ENTITY_NAMES:
+                    result["skipped"] += 1
+                    continue
+                group_key = str(row.get(tpl.group_by, "_default"))
+                groups.setdefault(group_key, []).append(row)
+
+            for group_key, group_rows in groups.items():
+                try:
+                    did_write = self._sync_group_to_file(
+                        tpl, novel_id, novel_name, group_key, group_rows, overwrite)
+                    result["synced"] += did_write
+                    result["skipped"] += (len(group_rows) - did_write)
+                except Exception as e:
+                    result["errors"].append({"key": group_key, "error": str(e)})
+
+            # 清理旧的单独文件
+            self._cleanup_stale_files(tpl, novel_name, groups)
+
+            return result
+
+        # 原始模式：每个条目一个文件
         for row in rows:
             entity_name = row.get("name", "")
             if entity_name in self._SKIP_ENTITY_NAMES:
@@ -584,6 +615,99 @@ class SyncEngine:
         full_dir = os.path.join(base, os.path.dirname(fname))
         os.makedirs(full_dir, exist_ok=True)
         return os.path.join(base, fname)
+
+    def _cleanup_stale_files(self, tpl: SyncTemplate, novel_name: str,
+                              groups: dict[str, list[dict]]) -> None:
+        """group_by 模式下，删除旧的单独文件（已合并到分组文件中的）。"""
+        base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
+
+        for group_key, group_rows in groups.items():
+            cat_file = ""
+            if tpl.category_file_map and group_rows:
+                cat_file = tpl.category_file_map.get(group_key, group_key + "/")
+
+            group_dir = os.path.join(base, cat_file)
+            if not os.path.isdir(group_dir):
+                continue
+
+            # 分组文件的文件名（不删除它）
+            _CATEGORY_LABELS = {
+                "core_setting": "核心设定", "ability": "能力体系",
+                "faction": "势力", "location": "地理", "economy": "经济",
+                "daily_life": "日常生活", "history": "历史", "item": "物品",
+                "race": "种族", "culture": "文化", "plant": "植物",
+                "bestiary": "异兽图鉴", "building": "建筑",
+            }
+            keep_name = _CATEGORY_LABELS.get(group_key, group_key) + ".md"
+
+            # 收集本组所有实体名对应的旧文件名
+            entity_names = {row.get("name", "") for row in group_rows}
+
+            for f in os.listdir(group_dir):
+                if not f.endswith(".md"):
+                    continue
+                if f == keep_name:
+                    continue
+                stem = f[:-3]  # 去掉 .md
+                if stem in entity_names:
+                    os.remove(os.path.join(group_dir, f))
+
+    def _sync_group_to_file(self, tpl: SyncTemplate, novel_id: int,
+                             novel_name: str, group_key: str,
+                             rows: list[dict], overwrite: bool) -> int:
+        """将同一分组的所有条目合并写入一个文件。返回写入的条目数。"""
+        # 确定文件路径：用第一个 row 解析 category_file 目录，文件名用分组标签
+        sample_row = rows[0]
+        cat_file = ""
+        if tpl.category_file_map and "category" in sample_row:
+            cat_file = tpl.category_file_map.get(
+                sample_row["category"],
+                sample_row["category"] + "/")
+
+        # 中文标签映射
+        _CATEGORY_LABELS = {
+            "core_setting": "核心设定",
+            "ability": "能力体系",
+            "faction": "势力",
+            "location": "地理",
+            "economy": "经济",
+            "daily_life": "日常生活",
+            "history": "历史",
+            "item": "物品",
+            "race": "种族",
+            "culture": "文化",
+            "plant": "植物",
+            "bestiary": "异兽图鉴",
+            "building": "建筑",
+        }
+        label = _CATEGORY_LABELS.get(group_key, group_key)
+
+        base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
+        fpath = os.path.join(base, cat_file, f"{label}.md")
+        os.makedirs(os.path.dirname(fpath), exist_ok=True)
+
+        # 渲染所有条目
+        all_lines = [f"# {label}\n"]
+        for i, row in enumerate(rows):
+            if i > 0:
+                all_lines.append("\n---\n")
+            # 每个条目用一级标题
+            entry_name = row.get("name", "")
+            all_lines.append(f"# {entry_name}\n")
+
+            # 渲染 blockquote + fields + jsonb（跳过 header_template，因为已用自己的标题）
+            for sec in tpl.sections:
+                rendered = self._render_section(tpl, sec, row, novel_id)
+                if rendered:
+                    all_lines.extend(rendered)
+
+        full_content = "\n".join(all_lines) + "\n"
+
+        with open(fpath, "w", encoding="utf-8") as f:
+            f.write(full_content)
+
+        _record_file_hash(novel_id, tpl.name, group_key, full_content)
+        return len(rows)
 
     def _sync_one_to_file(self, tpl: SyncTemplate, novel_id: int,
                           novel_name: str, row: dict, overwrite: bool) -> bool:
@@ -687,7 +811,10 @@ class SyncEngine:
         if not lines:
             return None
 
-        return [f"\n## {heading}\n"] + lines
+        if heading:
+            return [f"\n## {heading}\n"] + lines
+        else:
+            return ["\n"] + lines
 
     def _render_fields(self, tpl: SyncTemplate, sec: SectionDef, row: dict) -> list[str]:
         """type=fields: 从行字段渲染 bullet 列表。"""
@@ -713,7 +840,7 @@ class SyncEngine:
         return lines
 
     def _render_jsonb(self, tpl: SyncTemplate, sec: SectionDef, row: dict) -> list[str]:
-        """type=jsonb: 从JSONB列渲染嵌套bullet。"""
+        """type=jsonb: 从JSONB列渲染。支持 bullet(嵌套列表) 和 narrative(标题+段落) 模式。"""
         col = sec.jsonb_column or sec.jsonb_key
         val = row.get(col)
         if _is_empty(val):
@@ -736,6 +863,9 @@ class SyncEngine:
 
         if tpl.name == "world" and isinstance(parsed, dict):
             parsed = clean_data_for_storage(parsed)
+
+        if sec.jsonb_mode == "narrative" and isinstance(parsed, dict):
+            return _jsonb_to_md_narrative(parsed)
 
         key = sec.jsonb_key or col
         return [f"- **{key}**:"] + _jsonb_to_md(parsed, sec.indent, title_key=sec.title_key)

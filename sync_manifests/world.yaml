@@ -5,6 +5,7 @@ id_field: name
 file_dir: "设定/世界观"
 authority: db
 merge_mode: overwrite
+group_by: category
 section_marker: "## {category}: {name}"
 file_pattern: "{category_file}/{name}.md"
 file_title: "{name}"
@@ -31,42 +32,24 @@ category_file_map:
   plant: "植物/"
 
 sections:
-  - heading: "{category}: {name}"
+  - heading: ""
     type: blockquote
     blockquotes:
       - column: name
         label: 条目名
 
-  - heading: 元数据
+  - heading: 概览
     type: fields
     fields:
-      - column: keys
-        type: list
-      - column: secondary_keys
-        type: list
-      - column: tags
-        type: list
-      - column: related_ids
-        md_key: related
-        type: list
       - column: volume_range
       - column: region
-      - column: faction_id
-        md_key: faction
-        transform: resolve_faction
       - column: writing_guide
-      - column: priority
-        type: int
-      - column: is_constant
-        type: bool
-      - column: first_appearance_chapter
-        transform: resolve_chapter_number
-      - column: status
 
-  - heading: 详细内容
+  - heading: 详细设定
     type: jsonb
     jsonb_column: data
     jsonb_key: data
+    jsonb_mode: narrative
 
 file_to_db:
   enabled: true
