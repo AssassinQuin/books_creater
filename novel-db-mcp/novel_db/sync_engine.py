@@ -972,8 +972,8 @@ class SyncEngine:
         if not os.path.isdir(base):
             return {"error": f"目录不存在: {base}"}
 
-        # section_replace 模式：需要处理聚合文件（多行→1文件）
-        if tpl.merge_mode == "section_replace":
+        # section_replace 模式或 group_by 聚合模式：需要处理聚合文件（多行→1文件）
+        if tpl.merge_mode == "section_replace" or tpl.group_by:
             return self._files_to_db_aggregate(tpl, novel_id, novel_name)
 
         # overwrite 模式：一个文件对应一行DB记录

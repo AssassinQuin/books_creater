@@ -38,7 +38,24 @@ L5 写作执行规范             ← 受L0-L4约束
 2. 逐问深挖（画面/主角/情绪/对立面/独特规则，每次只问一个）
 3. 用户确认决策卡 → `novel_update(status="worldbuilding")`
 
-### Step 2: 世界基调锚定（强制，氛围 DNA 的前置条件）
+### Step 2: 创作宪法（可选但推荐）
+
+在基调锚之前，明确 3-5 条**不可违反的创作铁律**。这些是比基调锚更高层的创作约束。
+
+逐问用户（每次只问一条）：
+- "这部小说绝对不能出现什么？"（如：主角无理由的英雄行为）
+- "读者读完必须记住什么？"（如：代价永远是不可逆的）
+- "什么类型的情节在这部小说中是禁忌？"（如：机械降神式解围）
+
+用户确认后写入：
+```
+world_upsert(category='writing_spec', name='创作宪法', priority=100, is_constant=1,
+  data={"rules": [...铁律列表...]})
+```
+
+`get_chapter_context` 自动加载 writing_spec 类别的 world_settings，下游 skill 无需额外修改。
+
+### Step 3: 世界基调锚定（强制，氛围 DNA 的前置条件）
 
 #### 2.1 逐轴确认（5 个道德维度）
 
@@ -103,7 +120,7 @@ writing_rule_upsert(rule_type='absence_check', name='基调一致-行为映射',
   message='行为与基调矛盾：在利己世界中，正面行为需要合理动机')
 ```
 
-### Step 3: 氛围 DNA（基于基调锚构建）
+### Step 4: 氛围 DNA（基于基调锚构建）
 
 基调锚确认后，分三层构建氛围：
 
@@ -124,7 +141,7 @@ writing_rule_upsert(rule_type='absence_check', name='基调一致-行为映射',
 
 氛围DNA全部存DB（`world_upsert(category='core_setting')`），含道德层和感官层分离存储。
 
-### Step 4: 世界观维度
+### Step 5: 世界观维度
 
 逐维度展开，每维度用户确认后才继续：
 种族 → 势力 → 地理 → 能力 → 经济 → 日常 → 历史 → 物品
@@ -137,7 +154,7 @@ writing_rule_upsert(rule_type='absence_check', name='基调一致-行为映射',
 
 每维度：`world_upsert` → 用户确认 → 下一维度。
 
-### Step 5: 交叉验证
+### Step 6: 交叉验证
 
 全部维度完成后跑 7 项验证：
 1. **锚点稳固** — 核心锚点是否被后续设定动摇？
@@ -150,7 +167,7 @@ writing_rule_upsert(rule_type='absence_check', name='基调一致-行为映射',
 
 验证不通过 → 逐项列出问题 → 用户确认修复方向 → 修改 → 重新验证。
 
-### Step 6: 品类规则注入
+### Step 7: 品类规则注入
 
 根据小说品类，`writing_rule_upsert` 注入品类默认约束。这些规则可被小说级规则覆盖。
 
