@@ -1,12 +1,16 @@
 {
   "total_rounds": 3,
-  "avg_score_delta": 29,
-  "avg_T_val_pass_rate": 0.75,
-  "avg_token_efficiency": 0.69,
+  "avg_score_delta": 28,
+  "avg_T_val_pass_rate": 0.72,
+  "avg_token_efficiency": 0.87,
   "fallback_count": 0,
   "trace_source_distribution": {"none": 1, "empirical": 2},
   "best_score": 86,
   "worst_score": 33,
   "last_round": 3,
-  "v5_baseline": 86
+  "rounds": {
+    "R1": {"before": 33, "after": 78, "delta": 45, "T_val": 0.75},
+    "R2": {"before": 38, "after": 81, "delta": 43, "T_val": 0.75},
+    "R3": {"before": 86, "after": 83, "delta": -3, "T_val": 0.70}
+  }
 }
