@@ -10,9 +10,16 @@
 | 阶段 | 文件 | 说明 |
 |------|------|------|
 | A1 头脑风暴 | `a1-brainstorm.md` | 灵感收集→决策卡 |
+| A1 全书框架 | `a1-framework-architect.md` | 全书起承转合+每卷功能定位+卷间关系 |
+| A1 脉络设计 | `a1-vein-designer.md` | 主线脉络+暗线递进+人物弧光总图+情绪曲线 |
+| A1 支线规划 | `a1-subplot-planner.md` | 支线识别→分类→主线交织→弧光→角色管理 |
+| A1 目标卡 | `a1-target-card.md` | 逐卷目标卡+一致性校验 |
+| A1 框架验证 | `a1-framework-validator.md` | 12项全书检查+三视角审查 |
 | A2 世界观 | `a2-worldbuilding.md` | 6维度建模→交叉验证 |
 | A3 人物 | `a3-character.md` | 蒸馏7步→外观→对话→关系 |
 | B1 卷规划 | `b1-volume.md` | 环境先行→事件架构→章节设计→验证 |
+| B1 事件架构 | `b1-event-architect.md` | 因果逻辑网+输出契约（7层结构+传递摘要） |
+| B1 章节设计 | `b1-chapter-designer.md` | 每章微型故事+基调注入+场景设计+弹性储备 |
 | B2 章节写作 | `b2-chapter.md` | 4Agent流水线→正文→存盘 |
 | B3 审阅 | `b3-review.md` | 大纲审计+正文审计 |
 | C2 诊断 | `c2-diagnose.md` | 健康检查→破局策略 |

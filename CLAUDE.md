@@ -46,7 +46,9 @@ skill操作 → MCP工具 → DB → sync_db_to_files() → 文件（人可读�
 | `SENTENCE-PATTERNS.md` | 反AI句式系统（标点/信息投放/场景结构/意象梯度） |
 | `.claude/skills/lorecraft/references/term-map.md` | 灵能玄幻术语映射（数据→讯息/系统→阵法） |
 | `.claude/skills/engines/` | 写作引擎（场景/描写/战斗/叙事/反AI/声音） |
-| `.claude/skills/templates/` | 实体模板（人物/世界观/关系/伏笔/卷大纲） |
+| `.claude/skills/templates/` | 实体模板（人物/世界观/关系/伏笔/卷大纲/审计报告） |
+| `.claude/skills/phases/` | 阶段执行指令（A1-C3，含全书框架/卷级规划 Agent） |
+| `.claude/skills/shared/` | 共享协议（DB保存/引擎加载/三视角/管线验证/P0修复/增量审计/卷级约束） |
 | `skills/memory/references/mcp-tools.md` | Memory MCP 16个工具完整参数 |
 
 ## Skill Map
@@ -64,7 +66,8 @@ skill操作 → MCP工具 → DB → sync_db_to_files() → 文件（人可读�
 | abilitycraft | A | 能力设计 | 觉醒者能力设计+命名 |
 | lorecraft | A | 术语映射 | 术语合规检查 |
 
-已废弃：novel-writer / novel-planner-volume / novel-chapter-writer / novel-qa / novel-creative-analyze / novel-reviser / novel-ability-designer。
+辅助参考（model-invocable: false）：prose-critique（对抗性审查方法论）、story-architecture（多尺度叙事结构）、novel-skill-creator（新建skill模板）。
+元工具：abilitycraft / lorecraft 不在 Skill Map 主流程中，按需调用。
 
 ## Creative DNA
 
