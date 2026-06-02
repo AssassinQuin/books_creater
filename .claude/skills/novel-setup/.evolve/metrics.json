@@ -1,11 +1,11 @@
 {
-  "total_rounds": 1,
-  "avg_score_delta": 45,
+  "total_rounds": 2,
+  "avg_score_delta": 44,
   "avg_T_val_pass_rate": 0.75,
   "avg_token_efficiency": 0.86,
   "fallback_count": 0,
-  "trace_source_distribution": {"none": 1},
-  "best_score": 78,
+  "trace_source_distribution": {"none": 1, "empirical": 1},
+  "best_score": 81,
   "worst_score": 33,
-  "last_round": 1
+  "last_round": 2
 }
