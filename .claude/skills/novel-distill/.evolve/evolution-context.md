@@ -34,3 +34,16 @@
 - **痛点解决**：PP-14→resolved, PP-15→resolved, PP-16→resolved
 - **结果**：评分 79→84（audit），0 FAIL 3 WARN，0 FM-PP 回归
 - **遗留**：WARN-2/3/4 为非阻塞性改进，下一轮顺手处理
+
+## R4 — 2026-06-04
+- **策略**：S0+S3+S4 合成（trace-driven + 边界增强 + 上下文优化）
+- **为什么改**：用户反馈 borrowable 检索后仍需人工判断适配性——缺 source_context（原文设定基底）、elements（可替换组件）、adaptation_map（keep→replace 映射）。要求蒸馏数据跨项目通用，不做特定作品预适配。
+- **改了什么**：
+  1. Phase 2b: borrowable JSON schema 扩展 3 字段 + 6维度差异化 elements/adaptation_map 结构映射表（S3）
+  2. Step 2c: 输出校验链（complete/partial_quality 质量标记 + 占位降级 + 用户报告）（S3）
+  3. Phase 3: 蒸馏报告"适配判断"列 + L1.5 adaptation_map 检索 + adaptation_map 缺失降级指引（S4）
+  4. 核心概念: 跨项目通用设计原则 + adaptation_map 使用原则（S0）
+  5. 质量规则 14-16 + 禁止 2 条（禁止具名替换 + 禁止预适配）
+- **痛点解决**：PP-17→resolved
+- **结果**：v3.3.0→v3.4.0，84→91（+7），审计 0 FAIL 2 WARN 1 INFO，0 FM-PP 回归
+- **遗留**：Step 3.2 空段落（继承债务）、top_k=50 与规则 ≤10 需例外说明

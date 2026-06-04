@@ -1,0 +1,16 @@
+{
+  "skill": "novel-distill",
+  "total_rounds": 4,
+  "latest_score": 91,
+  "scores": [49, 77, 79, 84, 91],
+  "deltas": [28, 2, 5, 7],
+  "avg_score_delta": 10.5,
+  "strategies_used": ["S2-workflow-reorg", "S2+S3-output-contract", "S4-context-optimization", "S0+S3+S4-synthesis"],
+  "last_evolved": "2026-06-04",
+  "T_train_pass_rates": [1.0, null, null, 0.85],
+  "T_val_pass_rates": [null, null, null, "estimated-0.70"],
+  "pain_points_resolved": 11,
+  "pain_points_open": 6,
+  "regression_count": 0,
+  "audit_pass_rate": 1.0
+}
