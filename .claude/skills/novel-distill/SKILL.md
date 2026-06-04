@@ -1,11 +1,14 @@
 ---
 name: novel-distill
 description: >
-  参考作品蒸馏引擎。输入小说文件路径，先粗提取作品画像并推荐维度优先级，
-  子agent并行蒸馏所选维度，borrowable模式独立存储，向量索引+ctx_index双通道检索。
+  参考作品蒸馏引擎。批露式架构：编排器调度6个维度子agent模块，
+  每个模块引用对应元skill方法论指导蒸馏。borrowable独立存储+向量+ctx_index三通道检索。
   触发词：蒸馏XX/分析小说/拆解小说/蒸馏参考
 allowed-tools:
   - mcp__novel-db__*
+  - mcp__novel-db__skill_loader
+  - mcp__plugin_context-mode_context-mode__ctx_index
+  - mcp__plugin_context-mode_context-mode__ctx_search
   - Read
   - Write
   - Edit
@@ -13,7 +16,7 @@ allowed-tools:
   - Grep
   - Bash
   - Agent
-version: "2.0.0"
+version: "3.0.0"
 ---
 
 # 参考作品蒸馏引擎
@@ -28,12 +31,19 @@ version: "2.0.0"
 
 **三阶段流程**：
 - Phase 1 粗提取 + 作品画像（快速扫描 -> 类型识别 -> 推荐维度优先级）
-- Phase 2 精准蒸馏（定位 -> 子agent并行蒸馏 -> borrowable独立存储 -> 向量索引）
+- Phase 2 精准蒸馏（定位 -> skill_loader加载维度模块 -> 子agent并行蒸馏 -> borrowable独立存储 -> 向量索引）
 - Phase 3 蒸馏报告 + 下游消费指引
 
-**双通道检索**：
-- DB 向量检索：`vector_search` / `db_search` 精准查找
-- ctx_index 知识库：蒸馏完成后自动索引，下游 skill 用 `ctx_search` 快速检索，节省 token
+**批露式架构**：
+- 6个维度各有独立 agent 模块（`agents/dim-{维度}.md`）
+- 每个模块引用对应元 skill 方法论（通过 skill_loader）
+- 编排器（本文件）负责调度，子agent执行具体维度蒸馏
+- 维度模块可独立更新，不影响其他维度
+
+**三通道检索**：
+- ctx_index 知识库：蒸馏完成后自动索引，下游 skill 用 `ctx_search` 快速检索（最快，省 token）
+- DB 向量检索：`vector_search` / `db_search` 语义精准查找
+- borrowable 独立存储：每个可借鉴模式单独可查
 
 ## 执行流程
 
@@ -43,13 +53,16 @@ version: "2.0.0"
 1. 获取文件路径（用户直接给，或追问）
 2. 验证文件存在：ls {path}
 3. IF 文件不存在 → 追问正确路径
-4. 文件信息统计：
+4. 文件内容校验：
+   - head -20 {path} | grep -c "[\x80-\xff]" → IF = 0 → 可能非文本文件或乱码 → 报错终止
+   - wc -c {path} → IF = 0 → 空文件 → 报错终止
+5. 文件信息统计：
    - wc -l {path}（行数）
    - grep -c "^第.*章\|^Chapter\|^\*\*\*" {path}（章节数估计）
-5. 输出概要："文件 {name}，{lines} 行，约 {chapters} 章，预计 Phase 1 耗时 {est}"
-6. IF 文件 > 2000 行 → 提示将分段读取
-7. 类型识别：读取前 200 行，按关键词匹配作品类型（见类型信号表）
-8. 向量辅助识别（可选）：
+6. 输出概要："文件 {name}，{lines} 行，约 {chapters} 章，预计 Phase 1 耗时 {est}"
+7. IF 文件 > 2000 行 → 提示将分段读取
+8. 类型识别：读取前 200 行，按关键词匹配作品类型（见类型信号表）
+9. 向量辅助识别（可选）：
    - 读取前 500 行内容摘要
    - vector_search(novel_name="_参考库", query_text="{摘要前100字}")
    - IF 命中已有蒸馏作品 → 对比类型标签辅助确认
@@ -201,68 +214,74 @@ world_upsert(
 3. 输出蒸馏计划，用户确认后进入 2b
 ```
 
-#### Step 2b：子agent并行蒸馏
+#### Step 2b：子agent并行蒸馏（批露式调度）
+
+**编排器职责**：为每个维度加载对应模块 + 元 skill 方法论，组装子 agent prompt。
+
+```
+FOR dim IN 用户选择的维度列表:
+    # 1. 加载维度模块
+    dim_module = skill_loader("novel-distill", "agent", "dim-{dim}")
+
+    # 2. 加载对应元 skill 方法论（可选，按维度映射）
+    meta_skill = META_SKILL_MAP[dim]
+    IF meta_skill != null:
+        methodology = skill_loader(meta_skill.skill, meta_skill.level, meta_skill.resource)
+    ELSE:
+        methodology = ""
+
+    # 3. 组装子 agent prompt
+    agent_prompt = assemble_prompt(
+        module=dim_module,
+        methodology=methodology,
+        path=文件路径,
+        genre=作品类型,
+        priority=维度优先级,
+        location=定位章节,
+        summaries=卷摘要
+    )
+END FOR
+```
+
+**元 skill 方法论映射**：
+
+| 维度 | 元 skill | skill_loader 调用 |
+|------|---------|-----------------|
+| world | novel-setup | `skill_loader("novel-setup", "engine", "worldbuilding")` |
+| ability | abilitycraft | `skill_loader("abilitycraft", "engine", "ability-design")` |
+| characters | novel-character | `skill_loader("novel-character", "engine", "character-design")` |
+| narrative | story-architecture | `skill_loader("story-architecture", "engine", "narrative")` |
+| rhythm | novel-plan | `skill_loader("novel-plan", "engine", "rhythm")` |
+| highlight | — | 无对应元 skill |
 
 **维度数量决定调度策略**：
 
-| 维度数 | 模式 | model | 说明 |
-|-------|------|-------|------|
-| 1 | 主agent直接执行 | - | 无并行开销 |
-| 2-3 | 并行子agent | sonnet | 每维度一个子agent，主agent汇总 |
-| 4-6 | 分批并行 | sonnet | 每批 3 个子agent，避免资源竞争 |
+| 维度数 | 模式 | subagent_type | model | 说明 |
+|-------|------|--------------|-------|------|
+| 1 | 主agent直接执行 | - | - | 无并行开销 |
+| 2-3 | 并行子agent | general-purpose | sonnet | 每维度一个子agent，主agent汇总 |
+| 4-6 | 分批并行 | general-purpose | sonnet | 每批 3 个子agent，避免资源竞争 |
 
-**子agent指令模板**：
+**子agent prompt 组装模板**：
 
 ```
-你是参考作品蒸馏子agent，负责蒸馏 {作品名} 的 {维度名} 维度。
+{dim_module 内容}
 
-## 输入
+## 本次任务参数
 - 文件路径：{path}
 - 作品类型：{type}
-- 维度优先级：★★★/★★/★（影响提取深度）
-- 定位章节：卷{X}到卷{Y}
-- 卷摘要：{phase1_volume_summaries}
+- 维度优先级：★★★/★★/★
+- 定位章节：{location}
+- 卷摘要：{summaries}
 
-## 执行步骤
-1. Read 定位章节（分段读取，每段 800 行重叠 50 行）
-2. 按维度 schema 提取结构化数据
-3. ★★★ 深蒸馏：全部字段 + borrowable ≥ 3 条
-   ★★ 标准蒸馏：全部字段 + borrowable ≥ 2 条
-   ★ 快速扫描：核心字段 top 3 + borrowable ≥ 1 条
-4. 每条 borrowable 标注：
-   - name: 模式名（简短）
-   - applicability: direct（直接可用）/ adapt（需改编）/ inspire（仅灵感）
-   - applicable_genres: 适用作品类型列表
-5. 输出 JSON 格式提取结果
-
-## 质量规则
-- 只提取文本中明确存在的内容
-- borrowable 用动词开头（如"用X展示Y"）
-- 每条数据标注来源章节范围
+## 参考方法论（辅助分析，不照搬）
+{methodology 内容}
 ```
 
 **并行约束**：
 - 每个子agent限读 3000 行
 - 子agent输出 JSON，主agent校验后写入 DB
 - 任一子agent失败 → 主agent降级串行重试该维度
-
-**维度 Schema（6维度统一存储到 ref_ category）**：
-
-维度 schema 保持原设计（ref_world/ref_ability/ref_characters/ref_narrative/ref_rhythm/ref_highlight），
-每个维度的 borrowable 字段改为结构化对象数组（不再是字符串列表）：
-
-```json
-"borrowable": [
-  {
-    "name": "模式名",
-    "description": "模式描述",
-    "applicability": "direct|adapt|inspire",
-    "applicable_genres": ["西幻", "异世界"],
-    "example": "原文中的具体实现方式",
-    "source_chapters": "卷X第Y-Z章"
-  }
-]
-```
 
 #### Step 2c：borrowable 独立存储 + 向量索引
 
@@ -308,14 +327,18 @@ FOR pattern IN 本次新增的 borrowable 模式:
 
 蒸馏完成后，将蒸馏报告和 borrowable 模式摘要索引到 ctx_index：
 
-```bash
+```
 # 索引蒸馏报告（下游 skill 用 ctx_search 快速检索，不浪费 token）
-report = generate_report(蒸馏结果)
-ctx_index(content=report, source="ref-distill-{作品名}")
+mcp__plugin_context-mode_context-mode__ctx_index(
+  content=蒸馏报告markdown全文,
+  source="ref-distill-{作品名}"
+)
 
 # 索引 borrowable 模式清单（结构化表格，下游精准命中）
-pattern_list = format_borrowable_table(本次新增的 borrowable 模式)
-ctx_index(content=pattern_list, source="ref-patterns-{作品名}")
+mcp__plugin_context-mode_context-mode__ctx_index(
+  content=模式清单表格markdown,
+  source="ref-patterns-{作品名}"
+)
 ```
 
 ### Phase 3：蒸馏报告 + 下游消费指引
