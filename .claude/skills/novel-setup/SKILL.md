@@ -1,6 +1,6 @@
 ---
 name: novel-setup
-description: 项目创建与世界观构建引擎。通过开放式探索从用户愿景推导世界原则、氛围DNA与维度网络，非填表式选择。触发词：新建小说/建世界观/加设定/加物品
+description: 项目创建与世界观构建引擎。通过开放式探索从用户愿景推导世界原则、氛围DNA与维度网络，非填表式选择。触发词：新建小说/建世界观/加设定/加物品/继续/恢复/接着来/设定/世界观/新项目
 allowed-tools: mcp__novel-db__*, Read, Write, Edit, Glob, Grep, Bash, mcp__searxng__searxng_web_search, mcp__searxng__web_url_read, mcp__plugin_context-mode_context-mode__ctx_fetch_and_index, mcp__plugin_context-mode_context-mode__ctx_index, mcp__plugin_context-mode_context-mode__ctx_search
 version: "5.3.0"
 ---
@@ -124,11 +124,12 @@ ELIF 用户说"参考{概念/体系}"（如"参考元素体系""类似升级体�
   → 知识蒸馏模式：基于已有知识提取概念的结构模式
 ELSE 无法判断
   → 追问："你说的参考是指——A.一部具体作品 B.你自己写的设定文档 C.某个概念框架？"
+  → 追问一次后用户仍未明确 → 默认走"知识蒸馏模式"并标注 verified: false
 ```
 
 ### R1: 信息获取（仅搜索模式触发）
 
-优先 URL 模板（按顺序尝试，首个成功即停）：
+优先 URL 模板（按顺序尝试，首个返回非空可解析内容即停）：
 1. `ctx_fetch_and_index(url="https://zh.wikipedia.org/wiki/{作品名}")`
 2. `searxng_web_search(query="{作品名} 设定 世界观 结构")` → `web_url_read` 前三个结果
 3. `searxng_web_search(query="{作品名} novel setting analysis")` → 取最详细结果
@@ -515,6 +516,8 @@ world_upsert(category='core_setting', name='行为映射规则', priority=99, is
 | 6 | 参考独立 | R4 的 IV-1/IV-2/IV-3 是否全部通过？ | 返回 R3 重新变形 |
 | 7 | 参考冲突 | 所有参考研究的冲突是否已解决？变形适配是否与所有维度一致？ | 重新执行冲突检测 |
 | 8 | 参考完整性 | 所有提到的参考作品是否都完成了蒸馏+适配？ | 补充研究 |
+| 9 | 宪法一致 | 是否违反创作宪法？ | 修正 |
+| 10 | 稀缺真实 | 核心稀缺是否被合理维持？ | 补充稀缺机制 |
 | 7 | 宪法一致 | 是否违反创作宪法？ | 修正 |
 | 8 | 稀缺真实 | 核心稀缺是否被合理维持？ | 补充稀缺机制 |
 
