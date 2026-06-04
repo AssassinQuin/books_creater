@@ -455,7 +455,7 @@ mcp__plugin_context-mode_context-mode__ctx_index(
 
 ```
 ctx_index(
-  content="# {作品名} 蒸馏摘要\n\n## 检索入口\n- db_search('_参考库', keyword='{作品名}', category='ref_borrowable')\n- ctx_search(queries=['{需求}'], source='ref-patterns-{作品名}')\n- 文件：参考/{作品名}/蒸馏报告.md\n\n## 可借鉴模式 TOP 5\n{从 Phase 3 报告中提取 TOP 5 模式的名称+一句话描述}",
+  content="# {作品名} 蒸馏摘要\n\n## 检索入口\n- db_search('_参考库', keyword='{作品名}', category='ref_borrowable', top_k=5)\n- ctx_search(queries=['{需求}'], source='ref-patterns-{作品名}')\n- 文件：参考/{作品名}/蒸馏报告.md\n\n## 可借鉴模式 TOP 5\n{从 Phase 3 报告中提取 TOP 5 模式的名称+一句话描述}",
   source="ref-summary-{作品名}"
 )
 ```
