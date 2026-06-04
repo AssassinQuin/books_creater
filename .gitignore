@@ -52,3 +52,4 @@ novel-db-mcp/data/
 
 # 本地嵌入模型（大文件，不入库）
 novel-db-mcp/models/
+*.db
