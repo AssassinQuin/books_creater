@@ -1,8 +1,11 @@
 ---
 name: novel-distill
 description: >
-  参考作品蒸馏引擎 v3.3.0。批露式架构：编排器调度6个维度子agent模块，
+  参考作品蒸馏引擎 v3.4.0。批露式架构：编排器调度6个维度子agent模块，
   每个模块引用对应元skill方法论指导蒸馏。borrowable独立存储+向量+ctx_index三通道检索。
+  v3.4.0: source_context/elements/adaptation_map 三字段实现跨项目通用适配映射，
+  维度差异化 schema（6维度各有专属 elements/adaptation_map 结构），
+  输出校验链（complete/partial_quality 质量标记）。
   文件输出：sync_db_to_files 统一 DB→文件，模板驱动保证一致性。
   触发词：蒸馏XX/分析小说/拆解小说/蒸馏参考
 allowed-tools:
@@ -17,7 +20,7 @@ allowed-tools:
   - Grep
   - Bash
   - Agent
-version: "3.3.0"
+version: "3.4.0"
 ---
 
 # 参考作品蒸馏引擎
@@ -44,7 +47,14 @@ version: "3.3.0"
 **三通道检索**：
 - ctx_index 知识库：蒸馏完成后自动索引，下游 skill 用 `ctx_search` 快速检索（最快，省 token）
 - DB 向量检索：`vector_search` / `db_search` 语义精准查找
-- borrowable 独立存储：每个可借鉴模式单独可查
+- borrowable 独立存储：每个可借鉴模式单独可查，含 source_context/elements/adaptation_map 跨项目通用适配字段
+
+**borrowable 跨项目通用设计原则**：
+- 蒸馏数据跨项目通用，不为特定作品预适配
+- adaptation_map 使用抽象类别和属性要求——不说"替换为佣兵团"而说"需要一个定期聚会、成员各自独立行动的组织"
+- source_context 中性描述原文设定基底，不绑定任何目标项目
+- elements 以抽象类别描述可替换组件，不做具名替换
+- 6个维度的 elements/adaptation_map 结构随维度变化（叙事手法的 elements 是技巧组件，能力体系的 elements 是数值等级）
 
 ## 执行流程
 
@@ -296,10 +306,54 @@ END FOR
 
 ## 输出格式（强制）
 1. 将蒸馏结果 JSON 写入 /tmp/distill-{作品名}-{维度}.json
-2. JSON schema: {"dimension": "{维度}", "data": {...维度数据...}, "borrowable": [{...},...], "metadata": {...}}
-3. 写入完成后，用 Bash 打印 "DISTILL_COMPLETE: {维度}" 作为结束标记
-4. 不要在响应中返回完整 JSON——只返回摘要（≤500字）：维度名 + 关键发现 + borrowable 数量
+2. JSON schema（v3.4.0 维度差异化）：
+   {
+     "dimension": "{维度}",
+     "data": {...维度数据...},
+     "borrowable": [
+       {
+         "name": "模式名称",
+         "description": "一句话概括该模式在原文中如何运作",
+         "example": "原文具体示例（结构化摘取）",
+         "source_chapters": "来源章节范围",
+         "applicability": "direct|adapt|inspire",
+         "applicable_genres": ["适用类型标签"],
+         // === v3.4.0 新增：跨项目通用适配字段（必填） ===
+         "source_context": "原文设定基底的中性描述（≥20字）。描述作者在什么设定条件下使用了该模式，不绑定任何目标项目。例：'蒸汽朋克工业社会+克苏鲁非凡世界并存的双层世界'而非'类似维多利亚时代'",
+         "elements": [...],        // 按维度-diff 结构，见下方维度-elements 映射表
+         "adaptation_map": [...]   // 按维度-diff 结构，见下方维度-adaptation_map 映射表
+       }
+     ],
+     "metadata": {"distilled_at": "...", "chapters_covered": "..."}
+   }
+3. 每个 borrowable 的 source_context/elements/adaptation_map 为必填字段，不可省略
+4. 写入完成后，用 Bash 打印 "DISTILL_COMPLETE: {维度}" 作为结束标记
+5. 不要在响应中返回完整 JSON——只返回摘要（≤500字）：维度名 + 关键发现 + borrowable 数量
 ```
+
+**维度-elements 结构映射**（子 agent 按此表填写 borrowable[].elements）：
+
+| 维度 | elements 含义 | 数组元素结构 |
+|------|-------------|------------|
+| 叙事手法 (narrative) | 叙事技巧组件 | `{"technique": "视角切换/信息差层级/伏笔类型/时间线操作", "trigger_chapter": "第X章", "effect": "产生的叙事效果", "frequency": "单次/重复/渐进"}` |
+| 能力体系 (ability) | 升级机制组件 | `{"component": "境界/资源/代价/突破条件/衰减机制", "value_range": "数值区间或等级范围", "constraint": "使用限制或副作用", "progression": "线性/指数/阶梯"}` |
+| 人物 (characters) | 角色原型要素 | `{"archetype": "角色原型标签", "driver": "核心驱动力（欲望/恐惧/责任）", "relation_web": "关系网位置（中心/边缘/桥梁）", "growth_arc": "成长弧类型（上升/坠落/平弧/螺旋）"}` |
+| 世界观 (world) | 设定组件 | `{"component": "空间/历史/规则/种族/文化/经济", "detail": "组件关键特征", "interaction": "与其他组件的联动关系", "reveal_method": "揭示方式（日常闲谈/战斗揭示/卷末揭秘）"}` |
+| 节奏结构 (rhythm) | 节奏单元 | `{"unit_type": "弧段类型（暖色/冷色/过渡）", "beat_pattern": "节拍器（高潮间隔/日常篇幅）", "transition_trigger": "弧段切换触发条件", "chapter_span": "持续章节数"}` |
+| 核心亮点 (highlight) | 创新点 | `{"innovation": "独特设定/叙事实验/结构创新", "impact": "对读者体验的影响", "replicability": "可复用性（高/中/低）", "risk": "复用风险（读者预期/类型约束）"}` |
+
+**维度-adaptation_map 结构映射**（子 agent 按此表填写 borrowable[].adaptation_map）：
+
+| 维度 | 数组元素结构 |
+|------|------------|
+| 叙事手法 | `{"aspect": "层面（如'信息差结构'）", "original": "原文技法", "abstract_role": "该技法承担的叙事功能（抽象描述）", "replacement_guide": "替换时需满足的属性要求（非具体替代品）"}` |
+| 能力体系 | `{"aspect": "层面（如'升级触发机制'）", "original": "原文机制", "abstract_role": "该机制承担的结构功能（抽象描述）", "replacement_guide": "替换时需满足的属性要求"}` |
+| 人物 | `{"aspect": "层面（如'角色驱动力'）", "original": "原文形态", "abstract_role": "该要素承担的角色功能（抽象描述）", "replacement_guide": "替换时需满足的属性要求"}` |
+| 世界观 | `{"aspect": "层面（如'世界规则'）", "original": "原文设定", "abstract_role": "该设定承担的世界功能（抽象描述）", "replacement_guide": "替换时需满足的属性要求"}` |
+| 节奏结构 | `{"aspect": "层面（如'暖色弧功能'）", "original": "原文节奏模式", "abstract_role": "该节奏单元承担的结构功能（抽象描述）", "replacement_guide": "替换时需满足的属性要求"}` |
+| 核心亮点 | `{"aspect": "层面（如'新颖度来源'）", "original": "原文创新", "abstract_role": "该创新承担的体验功能（抽象描述）", "replacement_guide": "替换时需满足的属性要求"}` |
+
+**关键约束**：adaptation_map 必须跨项目通用。replacement_guide 使用抽象属性要求（如"需要一个定期聚会、成员各自独立行动的组织"），禁止使用具名替换（如"替换为佣兵团"）。
 
 **并行约束**：
 - 每个子agent限读 3000 行
@@ -308,6 +362,34 @@ END FOR
 - 主agent读取 agent 输出文件后，用 `ctx_execute_file` 提取 JSON（不直接读取可能很大的 JSONL transcript）
 
 #### Step 2c：borrowable 独立存储 + 向量索引
+
+**输出校验链（写入前强制）**：主 agent 读取每个 borrowable 后逐条验证：
+
+```
+FOR each borrowable IN 蒸馏结果.borrowable:
+    checklist = {
+        "source_context": borrowable.source_context 非空（长度 ≥ 20 字）,
+        "elements": borrowable.elements 是数组且 length ≥ 1,
+        "adaptation_map": borrowable.adaptation_map 是数组且 length ≥ 1
+    }
+
+    IF 三项全部通过:
+        quality_flag = "complete"
+    ELSE:
+        quality_flag = "partial_quality"
+        记录缺失项到 missing_fields 列表
+        # 填入占位值，确保存储不中断
+        IF source_context 为空: borrowable.source_context = "（数据缺失：子 agent 未返回原文上下文，请手动补充）"
+        IF elements 为空: borrowable.elements = [{"note": "（数据缺失：子 agent 未返回元素分解，需手动分析）"}]
+        IF adaptation_map 为空: borrowable.adaptation_map = [{"note": "（数据缺失：未包含适配映射，需手动判断是否可借鉴）"}]
+```
+
+**校验后报告**：汇总 partial_quality 记录输出给用户：
+
+```
+borrowable 写入完成：{total} 条（complete: {N} / partial_quality: {M}）
+{for each partial: "  ⚠ {pattern_name} ({dimension}): 缺失 {missing_fields}"}
+```
 
 **独立存储**：每个 borrowable 模式存为一条独立记录。
 
@@ -319,17 +401,26 @@ FOR dim IN 已蒸馏维度列表:
           category="ref_borrowable",
           name="{作品名}-{dim}-{pattern.name}",
           data={
+            # 通用描述
             "source_work": "{作品名}",
             "source_dimension": "{维度名}",
             "pattern_name": pattern.name,
             "pattern_detail": pattern.description,
+            # 适配映射（v3.4.0）
+            "source_context": pattern.source_context,
+            "elements": pattern.elements,
+            "adaptation_map": pattern.adaptation_map,
+            # 使用指引
             "applicability": pattern.applicability,
             "applicable_genres": pattern.applicable_genres,
             "adaptation_notes": "改编建议",
             "example": pattern.example,
-            "source_chapters": pattern.source_chapters
+            "source_chapters": pattern.source_chapters,
+            # 质量标记（v3.4.0）
+            "quality": quality_flag,
+            "missing_fields": missing_fields
           },
-          tags=["{作品名}", "borrowable", "{dim}", pattern.applicability]
+          tags=["{作品名}", "borrowable", "{dim}", pattern.applicability, quality_flag]
         )
 ```
 
@@ -362,7 +453,7 @@ world_upsert 是纯机械 MCP 调用，无需推理能力，不使用子 agent�
     "patterns": ["模式1名", "模式2名", ...]
   }
 
-完整 borrowable（description/example/source_chapters 等）只存在 ref_borrowable 独立记录中。
+完整 borrowable（含 source_context/elements/adaptation_map 等）只存在 ref_borrowable 独立记录中。
 检索时先用 summary 定位方向，再按 pattern_name 精准查 ref_borrowable 获取详情。
 禁止在维度记录中嵌入完整 borrowable 数组。
 
@@ -397,7 +488,7 @@ mcp__plugin_context-mode_context-mode__ctx_index(
   source="ref-distill-{作品名}"
 )
 
-# 索引 borrowable 模式清单（结构化表格，下游精准命中）
+# 索引 borrowable 模式清单（结构化表格，含 quality 标记，下游精准命中）
 mcp__plugin_context-mode_context-mode__ctx_index(
   content=模式清单表格markdown,
   source="ref-patterns-{作品名}"
@@ -423,10 +514,10 @@ mcp__plugin_context-mode_context-mode__ctx_index(
 - [x] 叙事手法 ★★★：{N} 钩子类型, {M} 伏笔
 
 ## 可借鉴模式（已独立存储 + 向量索引）
-| # | 模式 | 来源维度 | 适用性 | 适用类型 |
-|---|------|---------|--------|---------|
-| 1 | {模式1} | 叙事手法 | direct | 西幻,异世界 |
-| 2 | {模式2} | 节奏结构 | adapt | 公路文 |
+| # | 模式 | 来源维度 | 适用性 | 适用类型 | 适配判断 | 质量 |
+|---|------|---------|--------|---------|---------|------|
+| 1 | {模式1} | 叙事手法 | direct | 西幻,异世界 | {elements核心组件×1 + 关键替换要求} | complete |
+| 2 | {模式2} | 节奏结构 | adapt | 公路文 | {elements核心组件×1 + 关键替换要求} | partial_quality ⚠ |
 
 ## 检索验证
 - vector_search("{关键词}") → 命中 {N} 条 ✓
@@ -457,7 +548,7 @@ mcp__plugin_context-mode_context-mode__ctx_index(
 
 ```
 ctx_index(
-  content="# {作品名} 蒸馏摘要\n\n## 检索入口\n- db_search('_参考库', keyword='{作品名}', category='ref_borrowable', top_k=5)\n- ctx_search(queries=['{需求}'], source='ref-patterns-{作品名}')\n- 文件：novels/_参考库/{作品名}/蒸馏报告.md + novels/_参考库/{作品名}/borrowable-{维度}.md\n\n## 可借鉴模式 TOP 5\n{从 Phase 3 报告中提取 TOP 5 模式的名称+一句话描述}",
+  content="# {作品名} 蒸馏摘要\n\n## 检索入口\n- db_search('_参考库', keyword='{作品名}', category='ref_borrowable', top_k=5)\n- ctx_search(queries=['{需求}'], source='ref-patterns-{作品名}')\n- 文件：novels/_参考库/{作品名}/蒸馏报告.md + novels/_参考库/{作品名}/borrowable-{维度}.md\n\n## 快速适配速查\n| 模式 | 核心 elements | 关键 replacement_guide |\n|------|-------------|----------------------|\n{从 TOP 5 模式提取，一行一个}\n\n## 可借鉴模式 TOP 5\n{从 Phase 3 报告中提取 TOP 5 模式的名称+一句话描述}",
   source="ref-summary-{作品名}"
 )
 ```
@@ -481,13 +572,13 @@ FOR dim IN 已蒸馏维度:
       content=维度结构化数据（不含 borrowable 数组，只含 borrowable_summary）
     )
 
-# 2b. borrowable 模式（按维度分文件）
+# 2b. borrowable 模式（按维度分文件，含 quality 标记）
 FOR dim IN 已蒸馏维度:
     patterns = db_search(novel_name="_参考库", keyword="{作品名}", category="ref_borrowable", top_k=50)
     filtered = patterns 中 source_dimension="{dim}" 的条目
     Write(
       path="novels/_参考库/{作品名}/borrowable-{dim}.md",
-      content=该维度 borrowable 完整详情（name+description+applicability+example+source_chapters）
+      content=该维度 borrowable 完整详情（name+description+source_context+elements+adaptation_map+applicability+example+source_chapters+quality）
     )
 
 # 2c. 蒸馏总报告
@@ -505,14 +596,14 @@ novels/_参考库/
 │   ├── 蒸馏报告.md            ← 总报告 + 检索入口
 │   ├── world.md               ← 世界观维度（仅 summary）
 │   ├── narrative.md           ← 叙事手法维度
-│   ├── borrowable-叙事手法.md  ← 该维度 borrowable 完整详情
+│   ├── borrowable-叙事手法.md  ← 该维度 borrowable 完整详情（含 source_context/elements/adaptation_map）
 │   ├── borrowable-人物.md
 │   └── ...
 ```
 
 文件生成后验证：
 - `ls novels/_参考库/{作品名}/` 确认独立目录和文件存在
-- 每个 borrowable-{dim}.md 应有完整的 name/description/example/source_chapters
+- 每个 borrowable-{dim}.md 应有完整的 name/description/source_context/elements/adaptation_map/example/source_chapters
 - 数据来源均为 DB 查询结果，不手动编内容
 
 ## 检索接口（其他 skill 使用）
@@ -524,15 +615,42 @@ L1: ctx_search（最快，token 最省）
     → ctx_search(queries=["{作品名} {需求}"], source="ref-patterns-{作品名}")
     → 命中 → 直接使用，不消耗 DB 查询
 
+L1.5: adaptation_map 适配要素检索（v3.4.0 新增）
+    → ctx_search(queries=["adaptation_map {aspect关键词}"], source="ref-patterns-{作品名}")
+    → 按适配层面精准定位（如"组织形态""信息流通机制""权力结构"）
+    → 用于需要快速判断"哪些模式涉及X层面的设计"的场景
+
 L2: vector_search（语义精准）
     → vector_search(novel_name="_参考库", query_text="{需求描述}")
-    → 命中 ref_borrowable → 返回模式详情
+    → 命中 ref_borrowable → 检查 quality 字段：
+        quality = "complete"     → 直接使用 elements + adaptation_map
+        quality = "partial_quality" → ⚠ 降级处理（见下方降级指引）
 
 L3: db_search（兜底，始终带 top_k=10）
     → db_search(novel_name="_参考库", keyword="{关键词}", top_k=10)
-    → 命中 → 返回维度数据
+    → 命中 → 检查 quality 字段，同 L2 降级逻辑
 
 L4: 空结果 → 提示"该作品/模式尚未蒸馏，是否现在蒸馏？"
+```
+
+### adaptation_map 缺失降级指引
+
+下游 skill 检索到 `quality = "partial_quality"` 或 adaptation_map 为空时：
+
+```
+1. 提示用户：
+   "该模式（{pattern_name}，来源 {source_work}/{source_dimension}）的适配映射不完整。
+   缺失字段：{missing_fields}。
+   当前可用：pattern_detail + source_context + elements + example。
+
+   建议操作：
+   [A] 基于现有 elements 手动判断适配（你有元素分解可自行推导）
+   [B] 重新蒸馏该维度（触发'蒸馏{作品名} 的{维度}'）
+   [C] 仅作灵感参考（applicability=inspire 时适用）"
+
+2. 不阻塞当前操作，用户选择后继续。
+
+3. 如果用户选择 [A]，提供该维度的 adaptation_map 空模板（参见 Step 2b 维度-adaptation_map 映射表的结构）
 ```
 
 ### 部分下锅接口
@@ -547,9 +665,23 @@ db_search(novel_name="_参考库", keyword="direct", category="ref_borrowable", 
 # 按作品+维度组合
 db_search(novel_name="_参考库", keyword="{作品名}", category="ref_{维度}", top_k=5)
 
+# 按数据质量筛选（仅检索完整数据，v3.4.0）
+db_search(novel_name="_参考库", keyword="complete", category="ref_borrowable", top_k=10)
+
 # 跨作品找相似模式
 vector_search(novel_name="_参考库", query_text="日常蓄力 暴击释放 节奏模式")
+
+# 按 adaptation_map aspect 跨作品检索（v3.4.0）
+vector_search(novel_name="_参考库", query_text="组织形态 定期同步多线情报的枢纽组织")
 ```
+
+### adaptation_map 使用原则
+
+1. 下游 skill 拿到 borrowable 后，先读 `source_context` 判断设定基底兼容性
+2. 再看 `elements` 识别可替换组件
+3. 参照 `adaptation_map` 逐项 keep→replace，用 `replacement_guide` 的属性要求约束方案
+4. **禁止直接用 original 做具名替换**（如"塔罗会→佣兵团"），必须经过 abstract_role → replacement_guide 的抽象化过程
+5. 蒸馏数据跨项目通用，不为任何特定作品预适配
 
 ## 大文件处理策略
 
@@ -574,6 +706,9 @@ vector_search(novel_name="_参考库", query_text="日常蓄力 暴击释放 节
 11. **命名一致性**：Step 2b 前用 ls agents/dim-*.md 验证模块名，characters 用复数
 12. **db_search 结果控制**：所有 db_search 调用必须带 top_k 参数（≤10），避免一次性拉回全量数据
 13. **borrowable 去重存储**：维度记录只存 borrowable_summary（count+pattern names），完整数据只在 ref_borrowable 中
+14. **跨项目通用适配**（v3.4.0）：borrowable 必须含 source_context（中性设定基底）/ elements（抽象可替换组件）/ adaptation_map（逐项 keep→replace 抽象映射）。replacement_guide 使用抽象属性要求，禁止具名替换。不为特定作品预适配。
+15. **输出校验链**（v3.4.0）：Step 2c 写入前逐条验证 source_context 非空（≥20字）、elements 数组 ≥1、adaptation_map 数组 ≥1。不通过 → 标记 partial_quality + 填入占位值后仍写入，同时向用户报告缺失项清单
+16. **下游降级兼容**（v3.4.0）：检索到 partial_quality 或 adaptation_map 缺失的 borrowable 时，提供三选一降级路径（手动适配/重新蒸馏/仅灵感参考），并提供维度 adaptation_map 空模板供手动填写
 
 ## 禁止
 
@@ -587,3 +722,5 @@ vector_search(novel_name="_参考库", query_text="日常蓄力 暴击释放 节
 - 不使用子 agent 执行纯机械的 world_upsert 循环写入
 - 不在 db_search 中省略 top_k 参数
 - 不编造文件内容——Write 的数据来源必须是 DB 查询结果（db_search），不能凭空写
+- 不在 adaptation_map 的 replacement_guide 中使用具名替换——必须使用抽象属性要求（v3.4.0）
+- 不将蒸馏数据针对特定目标作品预适配——蒸馏数据必须跨项目通用（v3.4.0）
