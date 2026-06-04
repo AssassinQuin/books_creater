@@ -1,8 +1,9 @@
 ---
 name: novel-distill
 description: >
-  参考作品蒸馏引擎。批露式架构：编排器调度6个维度子agent模块，
+  参考作品蒸馏引擎 v3.3.0。批露式架构：编排器调度6个维度子agent模块，
   每个模块引用对应元skill方法论指导蒸馏。borrowable独立存储+向量+ctx_index三通道检索。
+  文件输出：sync_db_to_files 统一 DB→文件，模板驱动保证一致性。
   触发词：蒸馏XX/分析小说/拆解小说/蒸馏参考
 allowed-tools:
   - mcp__novel-db__*
@@ -16,7 +17,7 @@ allowed-tools:
   - Grep
   - Bash
   - Agent
-version: "3.2.0"
+version: "3.3.0"
 ---
 
 # 参考作品蒸馏引擎
@@ -365,23 +366,24 @@ world_upsert 是纯机械 MCP 调用，无需推理能力，不使用子 agent�
 检索时先用 summary 定位方向，再按 pattern_name 精准查 ref_borrowable 获取详情。
 禁止在维度记录中嵌入完整 borrowable 数组。
 
-**文件输出（人可读持久化）**：
+**文件输出（DB→文件同步，统一出口）**：
 
-蒸馏完成后，在文件系统生成人可读报告：
+蒸馏完成后的文件持久化使用 sync_db_to_files，不手动 Write：
 
-```bash
-# 1. 蒸馏总报告
-Write(
-  path="参考/{作品名}/蒸馏报告.md",
-  content=Phase 3 完整蒸馏报告 markdown
-)
+```
+# DB→文件同步（模板驱动，保证一致性）
+sync_db_to_files(novel_name="_参考库", data_type="world")
 
-# 2. 每个维度的 borrowable 详情
-FOR dim IN 已蒸馏维度:
-    Write(
-      path="参考/{作品名}/borrowable-{dim}.md",
-      content=该维度 borrowable 模式的完整详情（含 example + source_chapters）
-    )
+# 输出结构：
+#   novels/_参考库/设定/世界观/
+#   ├── ref_meta/ref_meta.md          # 作品画像
+#   ├── ref_world/ref_world.md        # 世界观维度
+#   ├── ref_ability/ref_ability.md    # 能力体系维度
+#   ├── ref_characters/ref_characters.md  # 人物维度
+#   ├── ref_narrative/ref_narrative.md    # 叙事手法维度
+#   ├── ref_rhythm/ref_rhythm.md      # 节奏结构维度
+#   ├── ref_highlight/ref_highlight.md    # 核心亮点维度
+#   └── ref_borrowable/ref_borrowable.md  # 所有 borrowable 模式
 ```
 
 **ctx_index 知识库索引（codemap 化）**：
@@ -448,19 +450,31 @@ mcp__plugin_context-mode_context-mode__ctx_index(
   - 精准检索模式："参考{作品名}的{维度}" → db_search("_参考库", keyword="{作品名}", category="ref_borrowable", top_k=5)
   - 语义检索模式："找类似XX的模式" → vector_search("_参考库", query_text="XX")
   - 快速查看：ctx_search(queries=["{作品名}"], source="ref-patterns-{作品名}")
-  - 文件查阅：参考/{作品名}/蒸馏报告.md
+  - 文件查阅：novels/_参考库/设定/世界观/ref_borrowable/ref_borrowable.md（所有模式）
 ```
 
 **2. 蒸馏摘要注入 ctx_index**（下游 skill 触发时自动可用）：
 
 ```
 ctx_index(
-  content="# {作品名} 蒸馏摘要\n\n## 检索入口\n- db_search('_参考库', keyword='{作品名}', category='ref_borrowable', top_k=5)\n- ctx_search(queries=['{需求}'], source='ref-patterns-{作品名}')\n- 文件：参考/{作品名}/蒸馏报告.md\n\n## 可借鉴模式 TOP 5\n{从 Phase 3 报告中提取 TOP 5 模式的名称+一句话描述}",
+  content="# {作品名} 蒸馏摘要\n\n## 检索入口\n- db_search('_参考库', keyword='{作品名}', category='ref_borrowable', top_k=5)\n- ctx_search(queries=['{需求}'], source='ref-patterns-{作品名}')\n- 文件：novels/_参考库/设定/世界观/ → 所有维度的结构化文件\n\n## 可借鉴模式 TOP 5\n{从 Phase 3 报告中提取 TOP 5 模式的名称+一句话描述}",
   source="ref-summary-{作品名}"
 )
 ```
 
 这样下游 skill 触发时，模型通过 ctx_search 就能发现已蒸馏数据和检索方法。
+
+#### Step 3.4：DB→文件同步（强制）
+
+```bash
+# 蒸馏数据文本化——SyncEngine 模板驱动，DB 为权威源
+sync_db_to_files(novel_name="_参考库", data_type="world")
+```
+
+文件生成后验证：
+- `ls novels/_参考库/设定/世界观/ref_borrowable/` 以确认可读
+- 新增的 borrowable 应出现在 ref_borrowable.md 中
+- 此步骤替代手动 Write，保证文件与 DB 一致
 
 ## 检索接口（其他 skill 使用）
 
@@ -515,7 +529,7 @@ vector_search(novel_name="_参考库", query_text="日常蓄力 暴击释放 节
 5. **子agent输出校验**：主agent从 /tmp/distill-{作品名}-{维度}.json 读取，校验 JSON 完整性（dimension/data/borrowable 三字段必须存在），缺失字段回填
 6. **向量索引验证**：蒸馏完成后验证 vector_search 可命中 borrowable 模式，失败时降级用 db_search
 7. **ctx_index 索引**：蒸馏报告+模式清单+检索摘要自动索引，下游 skill 快速检索
-8. **文件持久化**：蒸馏报告+每个维度 borrowable 详情写入 参考/{作品名}/ 目录，人可读
+8. **文件持久化**：蒸馏完成后调 sync_db_to_files(novel_name="_参考库", data_type="world")，SyncEngine 模板驱动输出到 novels/_参考库/设定/世界观/。不手动 Write
 9. **下游知识注入**：更新 CLAUDE.md 参考作品区（标记已蒸馏+检索入口），ctx_index 注入检索摘要
 10. **文学分析语境**：子agent prompt 必须包含文学分析任务声明，防止中文原文触发 API 内容安全过滤
 11. **命名一致性**：Step 2b 前用 ls agents/dim-*.md 验证模块名，characters 用复数
@@ -533,3 +547,4 @@ vector_search(novel_name="_参考库", query_text="日常蓄力 暴击释放 节
 - 不在维度记录中嵌入完整 borrowable 数组（只存 summary）
 - 不使用子 agent 执行纯机械的 world_upsert 循环写入
 - 不在 db_search 中省略 top_k 参数
+- 不手动 Write 蒸馏文件（统一用 sync_db_to_files 模板驱动输出）
