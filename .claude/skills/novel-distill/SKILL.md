@@ -450,30 +450,43 @@ mcp__plugin_context-mode_context-mode__ctx_index(
   - 精准检索模式："参考{作品名}的{维度}" → db_search("_参考库", keyword="{作品名}", category="ref_borrowable", top_k=5)
   - 语义检索模式："找类似XX的模式" → vector_search("_参考库", query_text="XX")
   - 快速查看：ctx_search(queries=["{作品名}"], source="ref-patterns-{作品名}")
-  - 文件查阅：novels/_参考库/设定/世界观/ref_borrowable/ref_borrowable.md（所有模式）
+  - 文件查阅：novels/_参考库/作品索引.md（按作品导航）→ novels/_参考库/设定/世界观/ref_borrowable/ref_borrowable.md（所有模式）
 ```
 
 **2. 蒸馏摘要注入 ctx_index**（下游 skill 触发时自动可用）：
 
 ```
 ctx_index(
-  content="# {作品名} 蒸馏摘要\n\n## 检索入口\n- db_search('_参考库', keyword='{作品名}', category='ref_borrowable', top_k=5)\n- ctx_search(queries=['{需求}'], source='ref-patterns-{作品名}')\n- 文件：novels/_参考库/设定/世界观/ → 所有维度的结构化文件\n\n## 可借鉴模式 TOP 5\n{从 Phase 3 报告中提取 TOP 5 模式的名称+一句话描述}",
+  content="# {作品名} 蒸馏摘要\n\n## 检索入口\n- db_search('_参考库', keyword='{作品名}', category='ref_borrowable', top_k=5)\n- ctx_search(queries=['{需求}'], source='ref-patterns-{作品名}')\n- 文件：novels/_参考库/作品索引.md → novels/_参考库/设定/世界观/ 各 category 结构化文件\n\n## 可借鉴模式 TOP 5\n{从 Phase 3 报告中提取 TOP 5 模式的名称+一句话描述}",
   source="ref-summary-{作品名}"
 )
 ```
 
 这样下游 skill 触发时，模型通过 ctx_search 就能发现已蒸馏数据和检索方法。
 
-#### Step 3.4：DB→文件同步（强制）
+#### Step 3.4：DB→文件同步 + 作品索引（强制）
 
 ```bash
-# 蒸馏数据文本化——SyncEngine 模板驱动，DB 为权威源
+# 1. 蒸馏数据文本化——SyncEngine 模板驱动，DB 为权威源
 sync_db_to_files(novel_name="_参考库", data_type="world")
+
+# 2. 生成/更新作品索引（按作品维度导航）
+# sync 输出按 category 聚合，索引文件按 source_work 列出入口
+Write(
+  path="novels/_参考库/作品索引.md",
+  content=按作品名列出现有蒸馏数据：
+    ## {作品名}（{类型}）
+    - 维度：世界观/能力/人物/叙事/节奏/亮点
+    - 模式数：{N} 条 borrowable
+    - 检索：grep "{作品名}" novels/_参考库/设定/世界观/ref_borrowable/ref_borrowable.md
+    - ctx_search source="ref-patterns-{作品名}"
+)
 ```
 
 文件生成后验证：
 - `ls novels/_参考库/设定/世界观/ref_borrowable/` 以确认可读
-- 新增的 borrowable 应出现在 ref_borrowable.md 中
+- 新增 borrowable 应出现在 ref_borrowable.md 中
+- `head novels/_参考库/作品索引.md` 确认索引包含本次蒸馏作品
 - 此步骤替代手动 Write，保证文件与 DB 一致
 
 ## 检索接口（其他 skill 使用）
