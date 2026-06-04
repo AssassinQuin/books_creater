@@ -21,5 +21,5 @@
   4. Phase 3 加入下游知识注入：更新CLAUDE.md参考作品区 + ctx_index注入检索摘要
   5. 质量保障从7条增至11条（新增：文件持久化/下游注入/文学语境/命名一致性/输出校验改路径）
 - **痛点解决**：PP-6→addressed, PP-7→addressed, PP-8→addressed, PP-9→addressed, PP-10→addressed, PP-11→addressed, PP-12→addressed, PP-13→addressed
-- **结果**：v3.0.0→v3.1.0，8痛点全部 addressed 待 deployment 验证
-- **遗留**：PP-10（vector_search MCP bug）为外部依赖，降级处理但不根治
+- **结果**：v3.0.0→v3.1.0，评分 77→79（audit），8痛点全部 addressed，0 FAIL 7 WARN
+- **遗留**：PP-10（vector_search MCP bug）为外部依赖，降级处理但不根治；D5 输出契约和文学语境声明需下次蒸馏实战验证
