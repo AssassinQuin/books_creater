@@ -22,4 +22,15 @@
   5. 质量保障从7条增至11条（新增：文件持久化/下游注入/文学语境/命名一致性/输出校验改路径）
 - **痛点解决**：PP-6→addressed, PP-7→addressed, PP-8→addressed, PP-9→addressed, PP-10→addressed, PP-11→addressed, PP-12→addressed, PP-13→addressed
 - **结果**：v3.0.0→v3.1.0，评分 77→79（audit），8痛点全部 addressed，0 FAIL 7 WARN
-- **遗留**：PP-10（vector_search MCP bug）为外部依赖，降级处理但不根治；D5 输出契约和文学语境声明需下次蒸馏实战验证
+- **遗留**：PP-10（vector_search MCP bug）为外部依赖，降级处理但不根治
+
+## R3 — 2026-06-04
+- **策略**：S4 context-optimization（上下文优化）+ S2 workflow-reorg（borrowable 写入去子agent化）
+- **为什么改**：将夜蒸馏实战 token 分析发现 3 大浪费源：(1) 45 条 borrowable 用 4 个 haiku agent 写入（17.6KB prompts 浪费）(2) db_search 无 top_k 拉回 49 条全量结果（~15KB）(3) 维度记录内嵌完整 borrowable 与 ref_borrowable 双重存储
+- **改了什么**：
+  1. Phase 2c borrowable 批量写入改为"主 agent 直接 FOR 循环"（去掉子 agent 条件分支）
+  2. 所有 db_search 调用加 top_k 参数（5/10），质量规则#12 强制
+  3. 新增维度记录去重规则：data 只存 borrowable_summary（count+patterns），完整数据唯一存 ref_borrowable
+- **痛点解决**：PP-14→resolved, PP-15→resolved, PP-16→resolved
+- **结果**：评分 79→84（audit），0 FAIL 3 WARN，0 FM-PP 回归
+- **遗留**：WARN-2/3/4 为非阻塞性改进，下一轮顺手处理
