@@ -16,7 +16,7 @@ allowed-tools:
   - Grep
   - Bash
   - Agent
-version: "3.1.0"
+version: "3.2.0"
 ---
 
 # 参考作品蒸馏引擎
@@ -340,21 +340,30 @@ result = vector_search(novel_name="_参考库", query_text="{作品名}", top_k=
 IF result 成功:
     验证 borrowable 可被语义检索命中 ✓
 ELSE (MCP bug / NameError):
-    降级用 db_search 验证：db_search(novel_name="_参考库", keyword="borrowable")
+    降级用 db_search 验证：db_search(novel_name="_参考库", keyword="borrowable", top_k=10)
     标注 "向量验证降级" —— 不阻塞蒸馏完成
 ```
 
 **borrowable 批量写入策略**：
 
 ```
-count = borrowable 总数
-IF count <= 20:
-    主agent 直接 FOR 循环写入
-ELSE:
-    按维度分批，每批 ≤15 条
-    用并行 haiku agent 写入（每批一个 agent）
-    主agent 汇总确认
+所有 borrowable 由主 agent 直接 FOR 循环调用 world_upsert 写入。
+world_upsert 是纯机械 MCP 调用，无需推理能力，不使用子 agent。
+按维度分组，每组 ≤15 条串行写入后输出进度。
 ```
+
+**维度记录去重规则**：
+
+```
+维度记录（ref_world/ref_narrative 等）的 data 字段只存 borrowable_summary：
+  "borrowable_summary": {
+    "count": 10,
+    "patterns": ["模式1名", "模式2名", ...]
+  }
+
+完整 borrowable（description/example/source_chapters 等）只存在 ref_borrowable 独立记录中。
+检索时先用 summary 定位方向，再按 pattern_name 精准查 ref_borrowable 获取详情。
+禁止在维度记录中嵌入完整 borrowable 数组。
 
 **文件输出（人可读持久化）**：
 
@@ -436,7 +445,7 @@ mcp__plugin_context-mode_context-mode__ctx_index(
 
 在参考作品下方追加检索入口：
   ### 参考作品检索方式
-  - 精准检索模式："参考{作品名}的{维度}" → db_search("_参考库", keyword="{作品名}", category="ref_borrowable")
+  - 精准检索模式："参考{作品名}的{维度}" → db_search("_参考库", keyword="{作品名}", category="ref_borrowable", top_k=5)
   - 语义检索模式："找类似XX的模式" → vector_search("_参考库", query_text="XX")
   - 快速查看：ctx_search(queries=["{作品名}"], source="ref-patterns-{作品名}")
   - 文件查阅：参考/{作品名}/蒸馏报告.md
@@ -466,8 +475,8 @@ L2: vector_search（语义精准）
     → vector_search(novel_name="_参考库", query_text="{需求描述}")
     → 命中 ref_borrowable → 返回模式详情
 
-L3: db_search（兜底）
-    → db_search(novel_name="_参考库", keyword="{关键词}")
+L3: db_search（兜底，始终带 top_k=10）
+    → db_search(novel_name="_参考库", keyword="{关键词}", top_k=10)
     → 命中 → 返回维度数据
 
 L4: 空结果 → 提示"该作品/模式尚未蒸馏，是否现在蒸馏？"
@@ -480,10 +489,10 @@ L4: 空结果 → 提示"该作品/模式尚未蒸馏，是否现在蒸馏？"
 vector_search(novel_name="_参考库", query_text="{目标需求}")
 
 # 按适用性筛选
-db_search(novel_name="_参考库", keyword="direct", category="ref_borrowable")
+db_search(novel_name="_参考库", keyword="direct", category="ref_borrowable", top_k=10)
 
 # 按作品+维度组合
-db_search(novel_name="_参考库", keyword="{作品名}", category="ref_{维度}")
+db_search(novel_name="_参考库", keyword="{作品名}", category="ref_{维度}", top_k=5)
 
 # 跨作品找相似模式
 vector_search(novel_name="_参考库", query_text="日常蓄力 暴击释放 节奏模式")
@@ -510,6 +519,8 @@ vector_search(novel_name="_参考库", query_text="日常蓄力 暴击释放 节
 9. **下游知识注入**：更新 CLAUDE.md 参考作品区（标记已蒸馏+检索入口），ctx_index 注入检索摘要
 10. **文学分析语境**：子agent prompt 必须包含文学分析任务声明，防止中文原文触发 API 内容安全过滤
 11. **命名一致性**：Step 2b 前用 ls agents/dim-*.md 验证模块名，characters 用复数
+12. **db_search 结果控制**：所有 db_search 调用必须带 top_k 参数（≤10），避免一次性拉回全量数据
+13. **borrowable 去重存储**：维度记录只存 borrowable_summary（count+pattern names），完整数据只在 ref_borrowable 中
 
 ## 禁止
 
@@ -519,3 +530,6 @@ vector_search(novel_name="_参考库", query_text="日常蓄力 暴击释放 节
 - 不跳过 Phase 1 直接进入 Phase 2
 - 不在子agent并行时共享未校验的中间结果
 - 不将 borrowable 模式只嵌在维度 JSON 内而不独立存储
+- 不在维度记录中嵌入完整 borrowable 数组（只存 summary）
+- 不使用子 agent 执行纯机械的 world_upsert 循环写入
+- 不在 db_search 中省略 top_k 参数
