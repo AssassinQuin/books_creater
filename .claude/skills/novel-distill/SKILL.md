@@ -81,7 +81,7 @@ version: "5.0.0"
 | rhythm | dim-rhythm | novel-plan/rhythm |
 | highlight | dim-highlight | — |
 
-**调度**：1维度→主agent直执 / 2-3→并行sonnet / 4-6→分批(每批3)sonnet。
+**调度**：1维度→主agent直执（仍 Write 到 `{work_dir}/`） / 2-3→并行sonnet / 4-6→分批(每批3)sonnet。
 
 **并行约束**：每agent限读3000行，必须用 **Write 工具**写文件到 `{work_dir}/{dim}.json`，失败→主agent串行重试。
 
@@ -101,6 +101,7 @@ python3 scripts/validate-distill.py {work_dir}
 FOR dim IN 已调度维度:
     IF NOT exists("{work_dir}/{dim}.json"):
         → 串行重试该维度（最多1次）
+        → 仍失败 → 标记该维度 partial，继续其他维度
     ELSE:
         → 校验通过，继续
 ```
@@ -162,8 +163,8 @@ adaptation_map 使用：先读 source_context → 再看 elements → 逐项 kee
 ## 约束（12条）
 
 1. **不编造**：只提取文本明确内容；Write 数据来源必须是 DB 查询
-2. **中性化**：source_context/replacement_guide 禁止原作术语
-3. **去重存储**：维度 data 只存 summary，borrowable 在 ref_borrowable
+2. **中性化**：source_context/elements/adaptation_map 禁止原作术语和具名替换
+3. **去重存储**：dim 模块 schema 完整字段保留在 `.distill-tmp/{dim}.json`，DB ref_* 的 data 字段只存 summary
 4. **文件输出用 Write**：子agent 输出 JSON 用 Write 工具；ctx_execute 仅用于分析处理（stdout 会被索引），其 sandbox 内文件写入不持久化到 host
 5. **top_k 必带**：keyword search 必须 top_k ≤ 10
 6. **项目感知**：borrowable 含 project_relevance（检索标签，不改通用性）
@@ -172,4 +173,4 @@ adaptation_map 使用：先读 source_context → 再看 elements → 逐项 kee
 9. **命名一致**：characters 复数，其余单数，启动前 ls 验证
 10. **不存原文**：example 限 ≤200 字
 11. **并行隔离**：子agent 不共享未校验中间结果
-12. **校验必过**：validate-distill.py 错误→修复→重跑，不可跳过
+12. **校验必过**：validate-distill.py 错误→返回子agent修复→重跑（最多3次），仍失败标记 partial

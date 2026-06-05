@@ -65,6 +65,8 @@ def validate_file(path):
             score = info.get("score", 0)
             if not (1 <= score <= 5):
                 errors.append(f"[{dim}][{i}] {name}: score={score} 超范围[1-5]")
+            if not info.get("reason"):
+                warnings.append(f"[{dim}][{i}] {name}: project_relevance.{proj} 缺 reason")
 
     return errors, warnings
 
