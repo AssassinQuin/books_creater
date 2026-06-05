@@ -98,42 +98,11 @@ write_to_storage(novel_name, category, name, data, tags):
 
 **日志**：每条降级日志含 `{步骤}|{调用}|{结果}|{降级级别}|{路径}`，Phase 3 报告中汇总。
 
-## JSON Import 校验协议（v3.5.0）
+## JSON Import 校验（已迁移到 MCP 工具）
 
-导入外部 JSON 时（Phase 1.5 或手动"导入{文件}"）必须经过此协议：
+导入外部 JSON 时使用 `distill_validate_json(json_content)` 或 `distill_import_file(work_name, file_path)`。
 
-```
-import_distill_json(file_path):
-    raw = Read(file_path)
-    json_data = JSON.parse(raw)
-
-    # 必填三字段校验
-    required = ["dimension", "data", "borrowable"]
-    missing = [f FOR f IN required IF f NOT IN json_data]
-    IF missing 非空: 报错终止 "缺失字段: {missing}"
-
-    # borrowable 子结构校验
-    IF json_data.borrowable 不是数组 OR length == 0:
-        报错终止 "borrowable 为空"
-
-    # 质量统计
-    quality_stats = {"complete": 0, "partial_quality": 0}
-    FOR b IN json_data.borrowable:
-        has_sc = b.source_context 存在且 len >= 20
-        has_el = b.elements 是数组且 len >= 1
-        has_am = b.adaptation_map 是数组且 len >= 1
-        IF has_sc AND has_el AND has_am: quality_stats.complete += 1
-        ELSE: quality_stats.partial_quality += 1
-
-    # 缺失字段补全
-    FOR b IN json_data.borrowable:
-        IF NOT b.source_context: b.source_context = "（未提取，需手动补充）"
-        IF NOT b.elements: b.elements = []
-        IF NOT b.adaptation_map: b.adaptation_map = []
-
-    OUTPUT "校验通过: {file_path} — {len} borrowable (complete {stats.complete} / partial {stats.partial})"
-    RETURN json_data
-```
+校验规则：顶层三字段(dimension/data/borrowable) + 每条 borrowable 的 source_context(>=20字)/elements(非空数组)/adaptation_map(非空数组)。缺失字段自动补全占位值，标记 complete/partial_quality。
 
 ## 执行流程
 
@@ -262,42 +231,26 @@ FOR vol IN 卷列表:
 **触发条件**：Phase 1 完成后自动执行，或用户独立触发"导入{JSON文件}"。
 
 ```
-1. 扫描已有数据源（按优先级）：
+1. 扫描已有数据源（按优先级，使用 Glob）：
    a. novels/_参考库/{作品名}/distill/*.json   ← Phase 2c fallback 产物
    b. /tmp/distill-{作品名}-*.json              ← 子agent写入的临时文件（绝对路径）
-   c. 项目根目录/tmp_distill_*.txt                        ← 旧格式粗提取（需转换）
+   c. 项目根目录/tmp_distill_*.txt              ← 旧格式粗提取（需转换）
 
 2. IF 无任何文件 → 跳过 Phase 1.5，进入 Phase 2
 
 3. IF 检测到文件：
-   a. 逐文件调用 import_distill_json(path) 校验
-   b. 校验失败 → 报告错误，跳过该文件
-   c. 校验通过 → 进入 import 流程：
+   对每个文件调用 distill_import_file(work_name, file_path)
+   → 自动完成校验 + 批量写入 + 质量标记
+   → 输出导入统计（complete/partial 数量）
 
-4. Import 流程：
-   FOR each validated_json:
-       FOR pattern IN validated_json.borrowable:
-           write_to_storage(
-             novel_name="_参考库",
-             category="ref_borrowable",
-             name="{作品名}-{dim}-{pattern.name}",
-             data={...（同Phase 2c的borrowable schema）...},
-             tags=["{作品名}", "borrowable", "{dim}"]
-           )
-       ctx_index(content="导入: {dim} {N}条 borrowable", source="ref-distill-{作品名}")
-
-5. Import 后输出：
-   "已有蒸馏数据已导入 DB：
-   - 导入维度：{列表}
-   - borrowable 总计：{N} 条（complete {M} / partial {K}）
-   建议操作：
+4. Import 后输出菜单：
    [A] 深化已有维度（Phase 2.5）
    [B] 蒸馏新维度（Phase 2）
-   [C] 直接生成报告（Phase 3）"
+   [C] 直接生成报告（Phase 3）
 ```
 
 **独立触发**：用户说"导入 tmp_distill-女巫-world.json"时：
-- 跳过 Phase 0/1，直接执行 import_distill_json + write_to_storage
+- 跳过 Phase 0/1，直接执行 `distill_import_file(work_name, file_path)`
 - 从文件名提取作品名和维度（格式：distill-{作品名}-{维度}.json）
 
 ### Phase 2：精准蒸馏（用户选维度后）
@@ -445,14 +398,12 @@ END FOR
 **执行流程**：
 
 ```
-1. 薄弱维度评估（Phase 2b 完成后自动执行）：
-   FOR dim IN 已蒸馏维度:
-       IF borrowable_count < 5 OR partial_ratio > 0.5:
-           标记为 "薄弱维度"
+1. 薄弱维度评估：
+   result = distill_assess_quality(work_name, deepen_threshold=5)
+   → 返回各维度统计 + weak_dimensions 列表
+   → IF weak_dimensions 为空 AND 非用户触发 → 跳过
 
-2. IF 无薄弱维度 AND 非用户触发 → 跳过
-
-3. 输出薄弱报告，用户确认后执行深化
+2. 输出评估结果，用户确认后执行深化
 
 4. 深化执行：
    FOR dim IN 薄弱维度:
@@ -473,68 +424,21 @@ END FOR
 
 ### Phase 2c：borrowable 独立存储 + 向量索引
 
-**输入校验**：主 agent 读取子 agent 输出 JSON 时，必须经过 import_distill_json 校验。
-
-**输出校验链（写入前强制）**：
+**一步完成**：主 agent 从子 agent 的 /tmp JSON 文件读取蒸馏结果后，调用 `distill_batch_write`：
 
 ```
-FOR each borrowable IN 蒸馏结果.borrowable:
-    checklist = {
-        "source_context": borrowable.source_context 非空（长度 ≥ 20 字）,
-        "elements": borrowable.elements 是数组且 length ≥ 1,
-        "adaptation_map": borrowable.adaptation_map 是数组且 length ≥ 1
-    }
-    IF 三项全部通过: quality_flag = "complete"
-    ELSE:
-        quality_flag = "partial_quality"
-        记录缺失项 → 填入占位值
+distill_batch_write(work_name, borrowables_json)
+→ 自动完成：三字段校验 + quality标记 + 缺失补全 + 批量INSERT/UPDATE + 向量标记
+→ 返回：{ok, total, complete, partial, details[{name, quality, missing_fields}]}
 ```
 
-**校验后报告**：
-```
-borrowable 写入完成：{total} 条（complete: {N} / partial_quality: {M}）
-{for each partial: "  ⚠ {name} ({dim}): 缺失 {fields}"}
-```
+**MCP 不可用时**：降级到 write_to_storage 降级链逐条写入。
 
-**独立存储（使用 write_to_storage 降级链）**：
-
-```bash
-FOR dim IN 已蒸馏维度列表:
-    FOR pattern IN 蒸馏结果[dim].borrowable:
-        write_to_storage(
-          novel_name="_参考库",
-          category="ref_borrowable",
-          name="{作品名}-{dim}-{pattern.name}",
-          data={
-            "source_work": "{作品名}",
-            "source_dimension": "{维度名}",
-            "pattern_name": pattern.name,
-            "pattern_detail": pattern.description,
-            "source_context": pattern.source_context,
-            "elements": pattern.elements,
-            "adaptation_map": pattern.adaptation_map,
-            "applicability": pattern.applicability,
-            "applicable_genres": pattern.applicable_genres,
-            "example": pattern.example,
-            "source_chapters": pattern.source_chapters,
-            "quality": quality_flag,
-            "missing_fields": missing_fields
-          },
-          tags=["{作品名}", "borrowable", "{dim}", pattern.applicability, quality_flag]
-        )
-```
-
-**向量索引（容错验证）**：
-
+**向量索引验证**（写入后）：
 ```bash
 result = vector_search(novel_name="_参考库", query_text="{作品名}", top_k=3)
-IF result 成功: 验证命中
-ELSE: 降级 db_search(keyword="borrowable", top_k=10) + 标注 "向量验证降级"
+IF 失败: 降级 db_search(keyword="borrowable", top_k=10) + 标注 "向量验证降级"
 ```
-
-**borrowable 批量写入策略**：
-- 主 agent 直接 FOR 循环调用 write_to_storage
-- 按维度分组，每组 ≤15 条串行写入后输出进度
 
 **维度记录去重规则**：
 - 维度记录 data 只存 borrowable_summary（count + pattern names）
@@ -556,40 +460,19 @@ ctx_index(content=模式清单表格, source="ref-patterns-{作品名}")
 
 ### Phase 3：蒸馏报告 + 下游消费指引 + ctx 持久化
 
-#### Step 3.1：蒸馏报告
+#### Step 3.1：蒸馏报告（使用 MCP 工具）
 
-```markdown
-# {作品名} 蒸馏报告
-
-## 基础信息
-- 类型：{type_signature}
-- 卷数：{N} | 核心人物：{M} 人
-
-## 已蒸馏维度
-- [x] 世界观 ★★★：{N} 地区, {M} 历史事件
-- [x] 能力体系 ★★★：{体系名}，{N} 等级
-- [ ] 人物 ★★：未选择
-
-## 可借鉴模式
-| # | 模式 | 来源维度 | 适用性 | 适配判断 | 质量 |
-|---|------|---------|--------|---------|------|
-| 1 | {模式1} | 叙事手法 | direct | {elements核心组件} | complete |
-| 2 | {模式2} | 节奏结构 | adapt | {elements核心组件} | partial_quality ⚠ |
-
-## 降级日志（v3.5.0）
-| 步骤 | 调用 | 结果 | 降级级别 | 路径 |
-|------|------|------|---------|------|
-| {if any} | world_upsert ref_meta | 失败 | L2 文件 | novels/_参考库/.../ref_meta.json |
-
-## 深化记录（v3.5.0）
-| 维度 | 轮次 | borrowable 变化 | 状态 |
-|------|------|----------------|------|
-| {dim} | 1/2 | 8 → 12 (+4) | effective |
-
-## 检索验证
-- vector_search("{关键词}") → 命中 {N} 条
-- ctx_search("ref-patterns-{作品名}") → 已索引
 ```
+result = distill_generate_report(work_name)
+→ 返回: {report_markdown, ctx_files: {ref-distill-*, ref-patterns-*, ref-summary-*}, stats}
+→ report_markdown: 完整 Markdown 蒸馏报告（含基础信息/维度统计/模式表格/检索验证）
+→ ctx_files: 三个 ctx 持久化文件内容（供 Write + ctx_index 使用）
+```
+
+模型拿到返回值后：
+1. Write 报告到 `novels/_参考库/{作品名}/蒸馏报告.md`
+2. Write ctx_files 三个文件到对应路径
+3. ctx_index 索引三个 ctx 文件
 
 #### Step 3.2：下游消费指引
 
@@ -611,17 +494,10 @@ ctx_index(content=模式清单表格, source="ref-patterns-{作品名}")
 ctx_index(content="# {作品名} 蒸馏摘要\n\n## 检索入口\n...\n## TOP 5 模式\n...", source="ref-summary-{作品名}")
 ```
 
-#### Step 3.4：ctx 文件持久化（v3.5.0 强制）
+#### Step 3.4：ctx 文件持久化（已合并到 Step 3.1）
 
-蒸馏完成后，将 ctx_index 内容写入磁盘快照，解决跨 session 丢失：
-
-```
-snapshot = "# {作品名} ctx 索引快照\n> 自动生成，勿手动编辑\n\n"
-FOR source IN ["ref-distill-{作品名}", "ref-patterns-{作品名}", "ref-summary-{作品名}"]:
-    snapshot += "## source: {source}\n{对应ctx内容}\n\n"
-
-Write(path="novels/_参考库/{作品名}/.ctx-index.md", content=snapshot)
-```
+`distill_generate_report` 返回的 ctx_files 已包含三个持久化文件内容。
+Step 3.1 中已一次性 Write + ctx_index，无需额外步骤。
 
 #### Step 3.5：DB→文件同步 + 按作品输出（强制）
 
@@ -629,18 +505,10 @@ Write(path="novels/_参考库/{作品名}/.ctx-index.md", content=snapshot)
 # 1. 聚合备份
 sync_db_to_files(novel_name="_参考库", data_type="world")
 
-# 2. 按作品输出
+# 2. 按作品输出 borrowable 详情（按维度分文件）
 FOR dim IN 已蒸馏维度:
-    # 维度数据
-    db_search(novel_name="_参考库", keyword="{作品名}", category="ref_{dim}", top_k=1)
-    Write(path="novels/_参考库/{作品名}/{dim}.md", content=维度数据)
-
-    # borrowable 详情
     db_search(novel_name="_参考库", keyword="{作品名}", category="ref_borrowable", top_k=50)
     Write(path="novels/_参考库/{作品名}/borrowable-{dim}.md", content=筛选后详情)
-
-# 3. 蒸馏总报告
-Write(path="novels/_参考库/{作品名}/蒸馏报告.md", content=Step 3.1 报告)
 ```
 
 输出结构：

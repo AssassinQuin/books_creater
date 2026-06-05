@@ -44,6 +44,11 @@ from novel_db.tools_graph import (  # noqa: F401
 from novel_db.tools_vector import (  # noqa: F401
     vector_find_incomplete, vector_search, vector_search_and_update,
 )
+from novel_db.tools_distill import (  # noqa: F401
+    distill_batch_write, distill_validate_json,
+    distill_assess_quality, distill_generate_report,
+    distill_import_file,
+)
 
 if __name__ == "__main__":
     mcp.run()
