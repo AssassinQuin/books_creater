@@ -15,6 +15,7 @@ allowed-tools:
   - mcp__novel-db__skill_loader
   - mcp__plugin_context-mode_context-mode__ctx_index
   - mcp__plugin_context-mode_context-mode__ctx_search
+  - mcp__plugin_context-mode_context-mode__ctx_execute_file
   - Read
   - Write
   - Edit
@@ -73,30 +74,26 @@ version: "3.5.0"
 
 ```
 write_to_storage(novel_name, category, name, data, tags):
+    # 名称安全化：替换非字母数字/非中文字符为 _，截断超 50 字符
+    sanitized_name = name 替换 [^a-zA-Z0-9一-鿿_-] 为 _，截断至 50 字符
+
     # L1: MCP 写入
-    TRY:
-        world_upsert(novel_name, category, name, data, tags)
-        LOG("MCP_OK: {category}/{name}")
-        RETURN success
-    EXCEPT MCP error:
-        LOG("MCP_FAIL: {category}/{name} → 降级文件写入")
+    尝试 world_upsert(novel_name, category, name, data, tags)
+    IF 成功: 记录 "MCP_OK: {category}/{name}"，返回 success
+    IF 失败: 记录 "MCP_FAIL: {category}/{name}"，进入 L2
 
     # L2: 项目文件写入
     fallback_dir = "novels/_参考库/{作品名}/distill"
     file_path = "{fallback_dir}/{category}-{sanitized_name}.json"
-    TRY:
-        mkdir -p {fallback_dir}
-        Write(path=file_path, content=JSON({category, name, data, tags, _fallback: true}))
-        LOG("FILE_OK: {file_path}")
-        RETURN degraded
-    EXCEPT Write error:
-        LOG("FILE_FAIL → /tmp 应急")
+    尝试 mkdir -p {fallback_dir} + Write(path=file_path, content=JSON(..., _fallback: true))
+    IF 成功: 记录 "FILE_OK: {file_path}"，返回 degraded
+    IF 失败: 记录 "FILE_FAIL"，进入 L3
 
     # L3: /tmp 应急
     tmp_path = "/tmp/distill-{作品名}-{category}-{sanitized_name}.json"
-    Write(path=tmp_path, content=JSON({category, name, data, tags, _emergency: true}))
-    OUTPUT: "MCP 和项目文件均失败，数据已存 {tmp_path}，请手动恢复。"
-    RETURN emergency
+    Write(path=tmp_path, content=JSON(..., _emergency: true))
+    输出: "MCP 和项目文件均失败，数据已存 {tmp_path}，请手动恢复。"
+    返回 emergency
 ```
 
 **日志**：每条降级日志含 `{步骤}|{调用}|{结果}|{降级级别}|{路径}`，Phase 3 报告中汇总。
@@ -267,8 +264,8 @@ FOR vol IN 卷列表:
 ```
 1. 扫描已有数据源（按优先级）：
    a. novels/_参考库/{作品名}/distill/*.json   ← Phase 2c fallback 产物
-   b. tmp_distill-{作品名}-*.json              ← 子agent写入的临时文件
-   c. tmp_distill_*.txt                        ← 旧格式粗提取（需转换）
+   b. /tmp/distill-{作品名}-*.json              ← 子agent写入的临时文件（绝对路径）
+   c. 项目根目录/tmp_distill_*.txt                        ← 旧格式粗提取（需转换）
 
 2. IF 无任何文件 → 跳过 Phase 1.5，进入 Phase 2
 
@@ -320,6 +317,9 @@ FOR vol IN 卷列表:
 ```
 FOR dim IN 用户选择的维度列表:
     dim_module = skill_loader("novel-distill", "agent", "dim-{dim}")
+    IF dim_module 为空 OR 包含 "NOT_FOUND":
+        OUTPUT "⚠ 维度模块 {dim} 加载失败，跳过"
+        CONTINUE（下一个维度）
     meta_skill = META_SKILL_MAP[dim]
     IF meta_skill != null:
         methodology = skill_loader(meta_skill.skill, meta_skill.level, meta_skill.resource)
@@ -433,7 +433,7 @@ END FOR
 **目标**：对薄弱维度执行精准精读和二轮提取，提升 borrowable 数量和质量。
 
 **触发条件**（可配置，默认值）：
-- 该维度 borrowable 数量 < 5
+- 该维度 borrowable 数量 < 5（Phase 0 时可调：`--deepen-threshold=N`）
 - 该维度 partial_quality 占比 > 50%
 - 用户显式触发："深化{作品名}的{维度}"
 
@@ -456,8 +456,9 @@ END FOR
 
 4. 深化执行：
    FOR dim IN 薄弱维度:
-       a. 定位薄弱章节（已覆盖 vs 未覆盖）
-       b. 精准精读 1000-2000 行
+       a. 定位薄弱章节：基于 Phase 1 卷摘要中该维度的信号密度，
+          选取密度最低的 1-2 个卷段（已覆盖章节之外的区域）
+       b. 精准精读 1000-2000 行（仅读薄弱卷段，不重读全文）
        c. 二轮提取（传入已有 borrowable 避免重复）
        d. 结果合并去重（pattern_name 相同保留更完整者）
 
