@@ -13,7 +13,7 @@
 1. 执行 MCP 写入操作（按实体类型分批）
 2. 每个调用检查返回值
 3. 收集所有错误
-4. 有错误 → 中止，无错误 → sync_db_to_files + git commit
+4. 有错误 → 中止，无错误 → sync(action="db_to_files") + git commit
 
 ## 通用保存模板
 
@@ -35,13 +35,13 @@ for chapter in chapters:
 
 # 3. 伏笔
 for f in foreshadows:
-    result = foreshadow_plant(novel_name="NOVEL_NAME", ...)
-    check_result("foreshadow_plant", result)
+    result = foreshadow(action="plant", novel_name="NOVEL_NAME", ...)
+    check_result("foreshadow(action="plant")", result)
 
 # 4. 世界观
 for item in world_items:
-    result = world_upsert(novel_name="NOVEL_NAME", ...)
-    check_result(f"world_upsert-{item.name}", result)
+    result = world(action="upsert", novel_name="NOVEL_NAME", ...)
+    check_result(f"world(action="upsert")-{item.name}", result)
 
 # 5. 角色
 for char in characters:
@@ -51,7 +51,7 @@ for char in characters:
 # 6. 关系
 for rel in relations:
     result = relation_create_by_name(novel_name="NOVEL_NAME", ...)
-    check_result(f"relation_create-{rel.from_name}", result)
+    check_result(f"relation(action="create")-{rel.from_name}", result)
 
 # 🔒 结果校验
 if errors:
@@ -62,7 +62,7 @@ if errors:
     return
 else:
     print(f"✅ 全部 DB 操作成功")
-    sync_db_to_files(novel_name="NOVEL_NAME")
+    sync(action="db_to_files", novel_name="NOVEL_NAME")
 ```
 
 ## 失败处理
@@ -71,5 +71,5 @@ else:
 |------|------|
 | 单个 MCP 调用失败 | 记录错误，继续其余调用，最后汇总 |
 | 批量失败（>50%） | 中止，提示检查 DB 连接 |
-| sync_db_to_files 失败 | DB 数据已保存，文件同步可手动重试 |
+| sync(action="db_to_files") 失败 | DB 数据已保存，文件同步可手动重试 |
 | git commit 失败 | DB 已同步，手动 commit 即可 |

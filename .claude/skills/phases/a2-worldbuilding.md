@@ -6,7 +6,7 @@
 ## 输入
 
 - 决策卡（来自 A1）
-- 已有世界观数据（`world_query`）
+- 已有世界观数据（`world(action="query")`）
 
 ## 执行步骤
 
@@ -43,7 +43,7 @@
 5. 经济/货币
 6. 日常生活
 
-每维度完成 → `world_upsert` → 🔒确认
+每维度完成 → `world(action="upsert")` → 🔒确认
 
 ### Step 6: 交叉验证
 
@@ -58,4 +58,4 @@
 
 - 状态总线.setting.world 更新
 - 文件: `设定/世界观.md`
-- DB: `world_upsert` ×6
+- DB: `world(action="upsert")` ×6

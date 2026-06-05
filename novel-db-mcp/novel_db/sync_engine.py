@@ -512,8 +512,38 @@ class SyncEngine:
 
         result = {"synced": 0, "skipped": 0, "errors": []}
 
-        # 分组模式：按 group_by 列分组，同一组写入一个文件
+        # 分组模式：按 group_by 列分组
+        # 如果 file_pattern 含 {name}，说明每个实体需要独立文件（如世界观按分类子目录）
+        # 否则同一组写入一个聚合文件（如伏笔清单）
         if tpl.group_by:
+            if tpl.file_pattern and "{name}" in tpl.file_pattern:
+                # 逐实体模式 + 分组目录：每个实体独立文件，但仍按分组组织目录和清理
+                groups: dict[str, list[dict]] = {}
+                for row in rows:
+                    entity_name = row.get("name", "")
+                    if entity_name in self._SKIP_ENTITY_NAMES:
+                        result["skipped"] += 1
+                        continue
+                    group_key = str(row.get(tpl.group_by, "_default"))
+                    groups.setdefault(group_key, []).append(row)
+
+                for row in rows:
+                    if row.get("name", "") in self._SKIP_ENTITY_NAMES:
+                        continue
+                    try:
+                        did_write = self._sync_one_to_file(
+                            tpl, novel_id, novel_name, row, overwrite)
+                        if did_write:
+                            result["synced"] += 1
+                        else:
+                            result["skipped"] += 1
+                    except Exception as e:
+                        result["errors"].append({"key": row.get(tpl.id_field, "?"), "error": str(e)})
+
+                self._cleanup_stale_files(tpl, novel_name, groups)
+                return result
+
+            # 聚合模式：同一组所有实体写入一个文件
             groups: dict[str, list[dict]] = {}
             for row in rows:
                 entity_name = row.get("name", "")
@@ -532,9 +562,7 @@ class SyncEngine:
                 except Exception as e:
                     result["errors"].append({"key": group_key, "error": str(e)})
 
-            # 清理旧的单独文件
             self._cleanup_stale_files(tpl, novel_name, groups)
-
             return result
 
         # 原始模式：每个条目一个文件
@@ -618,8 +646,9 @@ class SyncEngine:
 
     def _cleanup_stale_files(self, tpl: SyncTemplate, novel_name: str,
                               groups: dict[str, list[dict]]) -> None:
-        """group_by 模式下，删除旧的单独文件（已合并到分组文件中的）。"""
+        """group_by 模式下，清理不再对应 DB 行的文件。"""
         base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
+        per_entity = tpl.file_pattern and "{name}" in tpl.file_pattern
 
         for group_key, group_rows in groups.items():
             cat_file = ""
@@ -630,27 +659,34 @@ class SyncEngine:
             if not os.path.isdir(group_dir):
                 continue
 
-            # 分组文件的文件名（不删除它）
-            _CATEGORY_LABELS = {
-                "core_setting": "核心设定", "ability": "能力体系",
-                "faction": "势力", "location": "地理", "economy": "经济",
-                "daily_life": "日常生活", "history": "历史", "item": "物品",
-                "race": "种族", "culture": "文化", "plant": "植物",
-                "bestiary": "异兽图鉴", "building": "建筑",
-            }
-            keep_name = _CATEGORY_LABELS.get(group_key, group_key) + ".md"
-
-            # 收集本组所有实体名对应的旧文件名
             entity_names = {row.get("name", "") for row in group_rows}
 
-            for f in os.listdir(group_dir):
-                if not f.endswith(".md"):
-                    continue
-                if f == keep_name:
-                    continue
-                stem = f[:-3]  # 去掉 .md
-                if stem in entity_names:
-                    os.remove(os.path.join(group_dir, f))
+            if per_entity:
+                # 逐实体模式：保留 {name}.md 对应的文件，删除不在 entity_names 中的
+                for f in os.listdir(group_dir):
+                    if not f.endswith(".md"):
+                        continue
+                    stem = f[:-3]
+                    if stem not in entity_names:
+                        os.remove(os.path.join(group_dir, f))
+            else:
+                # 聚合模式：保留分组标签文件，删除旧的单独实体文件
+                _CATEGORY_LABELS = {
+                    "core_setting": "核心设定", "ability": "能力体系",
+                    "faction": "势力", "location": "地理", "economy": "经济",
+                    "daily_life": "日常生活", "history": "历史", "item": "物品",
+                    "race": "种族", "culture": "文化", "plant": "植物",
+                    "bestiary": "异兽图鉴", "building": "建筑",
+                }
+                keep_name = _CATEGORY_LABELS.get(group_key, group_key) + ".md"
+                for f in os.listdir(group_dir):
+                    if not f.endswith(".md"):
+                        continue
+                    if f == keep_name:
+                        continue
+                    stem = f[:-3]
+                    if stem in entity_names:
+                        os.remove(os.path.join(group_dir, f))
 
     def _sync_group_to_file(self, tpl: SyncTemplate, novel_id: int,
                              novel_name: str, group_key: str,

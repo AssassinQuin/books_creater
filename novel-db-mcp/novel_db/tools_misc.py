@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .db import mcp, query, PROJECT_ROOT
 from .resolvers import _resolve_novel_id, _resolve_entity
-from .errors import NotFoundError, mcp_tool
+from .errors import NotFoundError, mcp_tool, get_call_stats, reset_call_stats
 from .sync import (
     _ensure_data_hashes_table, _compute_hash, _record_db_hash, _record_file_hash,
     _db_row_to_hashable, _NOVELS_BASE,
@@ -227,31 +227,8 @@ def skill_loader(skill: str, level: str, resource: str, project: str = "") -> st
     }, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def db_search(novel_name: str, keyword: str, top_k: int = 20,
-              mode: str = "keyword", entity_types: str = "", min_score: float = 0.1) -> str:
-    """搜索小说数据（世界观/人物/章节/伏笔），返回排序摘要结果。
-
-    搜索模式(mode):
-      - "keyword"(默认): 关键词精确匹配，快，不需要 embedding
-      - "vector": 语义向量匹配，能找到意思相近但不完全一致的结果（需要 embedding 模型）
-
-    keyword 模式：用索引列（name/keys/tags）匹配，不扫 data blob。
-    评分：name 匹配=10分，keys 匹配=5分，tags 匹配=3分。
-    返回格式：每个结果只包含 name/category/summary(150字)/score，不返回完整 data。
-
-    vector 模式：用自然语言语义匹配，例如搜"战斗方式"可以找到"铸造能力"。
-      entity_types: 逗号分隔的实体类型过滤(空=全部)
-      min_score: 最低相似度阈值(默认0.1)
-
-      novel_name: 小说名称
-      keyword: 搜索关键词或自然语言查询
-      top_k: 返回最多结果数(默认20)
-      mode: "keyword" 或 "vector"
-      entity_types: 仅 vector 模式，逗号分隔实体类型过滤
-      min_score: 仅 vector 模式，最低相似度阈值
-    """
+def _db_search(novel_name: str, keyword: str, top_k: int = 20,
+               mode: str = "keyword", entity_types: str = "", min_score: float = 0.1) -> str:
     # Vector mode: delegate to vector_search
     if mode == "vector":
         from .tools_vector import _get_vector_store, _ensure_vector_index
@@ -371,7 +348,53 @@ def _extract_world_summary(r: dict) -> str:
 
 @mcp.tool
 @mcp_tool
-def engine_list() -> str:
+def search(novel_name: str, keyword: str, action: str = "keyword",
+           top_k: int = 20, entity_types: str = "", min_score: float = 0.1,
+           rebuild: bool = False, min_missing: int = 1,
+           with_suggestions: bool = False, entity_type: str = "",
+           field_name: str = "", field_value: str = "",
+           dry_run: bool = True) -> str:
+    """统一搜索接口。关键词/向量/缺失检测/批量修改。
+
+    Actions:
+    - keyword: 关键词精确匹配(快)。用索引列 name/keys/tags。
+    - vector: 语义向量匹配。搜"战斗方式"可找到"铸造能力"。
+    - incomplete: 查找字段缺失实体。可选 with_suggestions=True 推荐补全。
+    - search_update: 向量搜索→批量修改。需 entity_type/field_name/field_value。默认 dry_run=True。
+
+    参数:
+      novel_name: 小说名称
+      keyword: 搜索关键词或自然语言查询
+      action: keyword|vector|incomplete|search_update (默认keyword)
+      top_k: 返回最多结果数(默认20)
+      entity_types: 逗号分隔实体类型过滤(空=全部)
+      min_score: 最低相似度阈值(默认0.1)
+      rebuild: 强制重建向量索引(默认False)
+      min_missing: 最少缺失字段数(仅incomplete，默认1)
+      with_suggestions: 推荐补全(仅incomplete，默认False)
+      entity_type: 目标实体类型(仅search_update)
+      field_name: 修改字段名(仅search_update)
+      field_value: 新字段值(仅search_update)
+      dry_run: 试运行(仅search_update，默认True)
+    """
+    if action == "keyword":
+        return _db_search(novel_name, keyword, top_k, mode="keyword")
+    elif action == "vector":
+        return _db_search(novel_name, keyword, top_k, mode="vector",
+                          entity_types=entity_types, min_score=min_score)
+    elif action == "incomplete":
+        from .tools_vector import _vector_find_incomplete
+        return _vector_find_incomplete(novel_name, entity_types, min_missing, with_suggestions)
+    elif action == "search_update":
+        from .tools_vector import _vector_search_and_update
+        return _vector_search_and_update(novel_name, keyword, entity_type,
+                                         field_name, field_value, top_k,
+                                         min_score or 0.2, dry_run)
+    else:
+        return json.dumps({"error": f"Unknown action: {action}. Use keyword/vector/incomplete/search_update."}, ensure_ascii=False)
+
+
+def _engine_list() -> str:
     """罗列可用写作引擎文件，自动解析 # Title + > Summary。
 
     引擎文件是权威源——新增引擎只需放入 engines/ 目录即被自动发现。
@@ -420,9 +443,7 @@ def engine_list() -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def sync_startup(novel_name: str, data_type: str = "") -> str:
+def _sync_startup(novel_name: str, data_type: str = "") -> str:
     """启动时双向对比DB与文件状态，检测冲突，返回差异报告供用户确认。
     新数据流：skill→DB直接操作，文件为可选副本。启动时对比两端，冲突默认以DB为准。
     参数:
@@ -472,9 +493,7 @@ def sync_startup(novel_name: str, data_type: str = "") -> str:
     return json.dumps(results, ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = False) -> str:
+def _sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = False) -> str:
     """将DB数据同步到文件（单向：DB→file）。skill操作只写DB，用户选择何时同步到文件。
     通过 SyncEngine 模板驱动，支持 YAML manifest 扩展的实体类型。
     参数:
@@ -518,9 +537,7 @@ def sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fal
     return json.dumps(summary, ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def sync_files_to_db(novel_name: str, data_type: str = "") -> str:
+def _sync_files_to_db(novel_name: str, data_type: str = "") -> str:
     """将文件数据结构化解析后同步回DB（单向：file→DB，无损转换）。
 
     通过 SyncEngine 模板驱动，按字段映射写入对应 DB 列（无截断）。
@@ -564,3 +581,97 @@ def sync_files_to_db(novel_name: str, data_type: str = "") -> str:
     }
     return json.dumps(summary, ensure_ascii=False, default=str)
 
+
+@mcp.tool
+@mcp_tool
+def engine(action: str = "list", engine_type: str = "", scene_types: list = None, novel_name: str = "") -> str:
+    """写作引擎管理工具。
+
+    Actions:
+    - list: 列出所有可用引擎文件。
+    - detail: 加载指定引擎类型的完整内容。需 engine_type + novel_name。
+    - resolve: 根据场面类型标签自动解析需加载的引擎。需 scene_types 列表。
+
+    参数:
+      action: list|detail|resolve (默认list)
+      engine_type: 引擎类型名(仅detail)
+      novel_name: 小说名称(仅detail)
+      scene_types: 场面类型列表(仅resolve)，如 ["atmosphere", "dialogue"]
+    """
+    if action == "list":
+        return _engine_list()
+    elif action == "detail":
+        from .tools_world import _engine_detail
+        return _engine_detail(engine_type, novel_name)
+    elif action == "resolve":
+        from .tools_writing import _resolve_engines
+        return _resolve_engines(scene_types or [])
+    else:
+        return json.dumps({"error": f"Unknown action: {action}. Use list/detail/resolve."}, ensure_ascii=False)
+
+
+@mcp.tool
+@mcp_tool
+def sync(novel_name: str, action: str = "startup", data_type: str = "", overwrite: bool = False) -> str:
+    """数据同步工具。DB↔文件双向同步。
+
+    Actions:
+    - startup: 启动时对比DB与文件状态，返回差异报告。
+    - db_to_files: DB→文件同步。可选 data_type 过滤(world/character/foreshadow/volume/echo)。
+    - files_to_db: 文件→DB同步。可选 data_type 过滤。
+    - lorebook: 从设定/世界观/目录同步MD文件到DB。
+
+    参数:
+      novel_name: 小说名称
+      action: startup|db_to_files|files_to_db|lorebook (默认startup)
+      data_type: 同步范围(空=全部)，可选 world/character/foreshadow/volume/echo
+      overwrite: 是否强制覆盖(仅db_to_files)
+    """
+    if action == "startup":
+        return _sync_startup(novel_name, data_type)
+    elif action == "db_to_files":
+        return _sync_db_to_files(novel_name, data_type, overwrite)
+    elif action == "files_to_db":
+        return _sync_files_to_db(novel_name, data_type)
+    elif action == "lorebook":
+        from .tools_world import _sync_lorebook
+        return _sync_lorebook(novel_name)
+    else:
+        return json.dumps({"error": f"Unknown action: {action}. Use startup/db_to_files/files_to_db/lorebook."}, ensure_ascii=False)
+
+
+@mcp.tool
+@mcp_tool
+def tool_stats(action: str = "get") -> str:
+    """MCP 工具调用统计。追踪每个工具的调用次数、错误数、平均耗时。
+
+    Actions:
+    - get: 获取当前统计快照。
+    - reset: 清零所有统计。
+
+    参数:
+      action: get|reset (默认 get)
+    """
+    if action == "reset":
+        reset_call_stats()
+        return json.dumps({"ok": True, "message": "统计已清零"}, ensure_ascii=False)
+
+    stats = get_call_stats()
+    tools = stats.pop("tools", {})
+    ranked = sorted(tools.items(), key=lambda x: x[1]["count"], reverse=True)
+    tool_details = []
+    for name, s in ranked:
+        avg_ms = round(s["total_ms"] / s["count"], 1) if s["count"] > 0 else 0
+        tool_details.append({
+            "tool": name,
+            "calls": s["count"],
+            "errors": s["errors"],
+            "avg_ms": avg_ms,
+            "total_ms": round(s["total_ms"], 1),
+        })
+    return json.dumps({
+        "ok": True,
+        "total_calls": stats["total_calls"],
+        "total_errors": stats["total_errors"],
+        "tools": tool_details,
+    }, ensure_ascii=False)

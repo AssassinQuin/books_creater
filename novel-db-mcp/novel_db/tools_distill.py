@@ -103,18 +103,7 @@ def _write_borrowable(novel_id: int, work_name: str, dim: str,
 # ── MCP Tools ───────────────────────────────────────────────
 
 
-@mcp.tool
-@mcp_tool
-def distill_batch_write(work_name: str, borrowables_json: str) -> str:
-    """批量写入蒸馏 borrowable 模式到 _参考库。
-
-    自动校验每条 borrowable 的 source_context/elements/adaptation_map 三字段，
-    标记 complete/partial_quality，缺失字段自动补全占位值。
-
-    参数:
-      work_name: 作品名（如"诡秘之主"）
-      borrowables_json: JSON数组，每项含 dimension + borrowable 字段(name/description/example/source_chapters/applicability/applicable_genres/source_context/elements/adaptation_map)
-    """
+def _distill_batch_write(work_name: str, borrowables_json: str) -> str:
     novel_id = _resolve_novel_id("_参考库")
     items = json.loads(borrowables_json)
 
@@ -157,18 +146,7 @@ def distill_batch_write(work_name: str, borrowables_json: str) -> str:
     }, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def distill_validate_json(json_content: str) -> str:
-    """校验蒸馏 JSON 数据的完整性和质量。
-
-    检查顶层必填字段(dimension/data/borrowable)和每条 borrowable 的
-    source_context(>=20字)/elements(非空数组)/adaptation_map(非空数组)，
-    自动补全缺失字段的占位值。
-
-    参数:
-      json_content: JSON 字符串
-    """
+def _distill_validate_json(json_content: str) -> str:
     try:
         data = json.loads(json_content)
     except json.JSONDecodeError as e:
@@ -214,21 +192,9 @@ def distill_validate_json(json_content: str) -> str:
     }, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def distill_assess_quality(work_name: str,
-                           deepen_threshold: int = 5,
-                           partial_ratio_threshold: float = 0.5) -> str:
-    """评估作品蒸馏质量，识别薄弱维度。
-
-    查询 _参考库中指定作品的所有 borrowable 数据，按维度分组统计
-    complete/partial 比例，标记需要深化的薄弱维度。
-
-    参数:
-      work_name: 作品名
-      deepen_threshold: borrowable数量阈值，低于此值标记为薄弱（默认5）
-      partial_ratio_threshold: partial占比阈值，高于此值标记为薄弱（默认0.5）
-    """
+def _distill_assess_quality(work_name: str,
+                            deepen_threshold: int = 5,
+                            partial_ratio_threshold: float = 0.5) -> str:
     novel_id = _resolve_novel_id("_参考库")
 
     rows = query(
@@ -307,19 +273,7 @@ def distill_assess_quality(work_name: str,
     }, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def distill_generate_report(work_name: str) -> str:
-    """生成作品蒸馏报告和ctx持久化文件内容。
-
-    查询 _参考库中指定作品的元数据、维度数据和所有 borrowable，
-    生成 Markdown 蒸馏报告 + patterns_table + adaptation_summary。
-
-    注意：只返回内容，不写文件。模型负责 Write + ctx_index。
-
-    参数:
-      work_name: 作品名
-    """
+def _distill_generate_report(work_name: str) -> str:
     novel_id = _resolve_novel_id("_参考库")
 
     # 查询 meta
@@ -453,18 +407,7 @@ def distill_generate_report(work_name: str) -> str:
     }, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def distill_import_file(work_name: str, file_path: str) -> str:
-    """导入蒸馏 JSON 文件到 _参考库（校验 + 批量写入）。
-
-    读取指定 JSON 文件，校验 schema，自动补全缺失字段，
-    批量写入 ref_borrowable 到 DB。
-
-    参数:
-      work_name: 作品名
-      file_path: JSON 文件绝对路径
-    """
+def _distill_import_file(work_name: str, file_path: str) -> str:
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             raw = f.read()
@@ -522,3 +465,74 @@ def distill_import_file(work_name: str, file_path: str) -> str:
         "partial": partial,
         "details": details
     }, ensure_ascii=False)
+
+
+@mcp.tool
+@mcp_tool
+def distill(action: str, work_name: str = "", borrowables_json: str = "",
+            json_content: str = "", deepen_threshold: int = 5,
+            partial_ratio_threshold: float = 0.5, file_path: str = "") -> str:
+    """参考作品蒸馏工具集。
+
+    Actions:
+    - batch_write: 批量写入 borrowable 模式。需 work_name + borrowables_json。
+    - validate: 校验蒸馏 JSON 数据完整性。需 json_content。
+    - assess: 评估作品蒸馏质量。需 work_name。可选 deepen_threshold/partial_ratio_threshold。
+    - report: 生成蒸馏报告 + ctx 文件。需 work_name。
+    - import: 从文件导入蒸馏数据。需 work_name + file_path。
+
+    参数:
+      action: batch_write|validate|assess|report|import
+      work_name: 作品名（batch_write/assess/report/import 必填）
+      borrowables_json: JSON 数组（仅 batch_write）
+      json_content: JSON 字符串（仅 validate）
+      deepen_threshold: 数量阈值（仅 assess，默认5）
+      partial_ratio_threshold: partial 占比阈值（仅 assess，默认0.5）
+      file_path: JSON 文件路径（仅 import）
+    """
+    if action == "batch_write":
+        return _distill_batch_write(work_name, borrowables_json)
+    elif action == "validate":
+        return _distill_validate_json(json_content)
+    elif action == "assess":
+        return _distill_assess_quality(work_name, deepen_threshold, partial_ratio_threshold)
+    elif action == "report":
+        return _distill_generate_report(work_name)
+    elif action == "import":
+        return _distill_import_file(work_name, file_path)
+    else:
+        return json.dumps({"error": f"Unknown action: {action}. Use batch_write/validate/assess/report/import."}, ensure_ascii=False)
+
+
+@mcp.tool
+@mcp_tool
+def distillation(novel_name: str, character_name: str, action: str = "get",
+                 chapter_number: int = 0, decision_delta: str = "[]",
+                 new_knowledge: str = "[]", changed_beliefs: str = "[]",
+                 relation_shifts: str = "[]", voice_changes: str = "{}",
+                 ability_changes: str = "{}", arc_transition: str = "{}",
+                 key_decision: str = "{}", notes: str = "",
+                 chapter_a: int = 0, chapter_b: int = 0,
+                 dimension: str = "decision_delta") -> str:
+    """人物蒸馏演化追踪。记录/查询/对比人物决策、认知、关系的演变。
+
+    Actions:
+    - evolve: 记录本章蒸馏增量。需 chapter_number。可选 decision_delta/new_knowledge/changed_beliefs/relation_shifts/voice_changes/ability_changes/arc_transition/key_decision/notes。
+    - get: 获取蒸馏记录。可选 chapter_number(0=全部)。
+    - timeline: 获取指定维度时间线。可选 dimension。
+    - compare: 对比两个章节间的蒸馏变化。需 chapter_a, chapter_b。
+    """
+    from .tools_character import _distillation_evolve, _distillation_get, _distillation_timeline, _distillation_compare
+    if action == "evolve":
+        return _distillation_evolve(novel_name, character_name, chapter_number,
+                                    decision_delta, new_knowledge, changed_beliefs,
+                                    relation_shifts, voice_changes, ability_changes,
+                                    arc_transition, key_decision, notes)
+    elif action == "get":
+        return _distillation_get(novel_name, character_name, chapter_number)
+    elif action == "timeline":
+        return _distillation_timeline(novel_name, character_name, dimension)
+    elif action == "compare":
+        return _distillation_compare(novel_name, character_name, chapter_a, chapter_b)
+    else:
+        return json.dumps({"error": f"Unknown action: {action}. Use evolve/get/timeline/compare."}, ensure_ascii=False)

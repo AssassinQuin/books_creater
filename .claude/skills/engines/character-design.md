@@ -437,7 +437,7 @@
 
 ### 关系动态追踪
 
-> 关系不是静态的。`relation_create` 的 `intensity` (1-10) 和 `description` 应随剧情更新。
+> 关系不是静态的。`relation(action="create")` 的 `intensity` (1-10) 和 `description` 应随剧情更新。
 
 关系演进路径（示例）：
 ```
@@ -462,7 +462,7 @@
 ```
 A3 人物设计
 │
-├── 1. 读 world_query 召回世界观设定
+├── 1. 读 world(action="query") 召回世界观设定
 │
 ├── 2. 角色蒸馏（每个角色走一遍）
 │   ├── 萃取：从灵感/参考素材提取原始信息

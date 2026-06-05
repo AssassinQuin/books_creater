@@ -7,7 +7,7 @@
 
 | 参数 | 类型 | 必需 | 说明 |
 |------|------|------|------|
-| engine_list | dict | ✅ | {step_name: [engine_name]} 每步需要的引擎清单 |
+| engine(action="list") | dict | ✅ | {step_name: [engine_name]} 每步需要的引擎清单 |
 | skill_name | str | ✅ | 当前 skill 名称，用于 skill_loader |
 | lorecraft_required | bool | ❌ | 是否需要术语规范（默认 True） |
 
@@ -23,7 +23,7 @@
 
 ```python
 loaded = {}
-for step, engines in engine_list.items():
+for step, engines in engine(action="list").items():
     for eng in engines:
         content = skill_loader(skill_name, "engine", eng)
         loaded[f"{step}-{eng}"] = bool(content and len(content) > 10)

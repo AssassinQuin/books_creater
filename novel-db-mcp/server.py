@@ -6,9 +6,7 @@ from novel_db.tools_novel import (  # noqa: F401
     novel_create, novel_list, novel_get, novel_update,
 )
 from novel_db.tools_world import (  # noqa: F401
-    world_upsert, world_query, world_load_context, world_batch_update_meta,
-    world_delete, world_deactivate,
-    sync_lorebook, engine_detail,
+    world,
     author_voice, writing_spec,
 )
 from novel_db.tools_volume import (  # noqa: F401
@@ -16,38 +14,31 @@ from novel_db.tools_volume import (  # noqa: F401
 )
 from novel_db.tools_character import (  # noqa: F401
     character_create, character_list, character_get, character_update,
-    character_snapshot, character_get_latest,
-    character_increment,
-    relation_create, relation_list, relation_update, relation_snapshot,
-    plot_thread_create, plot_thread_list, plot_thread_update,
+    character_state,
+    relation,
+    plot_thread,
     character_batch_detail,
-    distillation_evolve, distillation_get, distillation_timeline, distillation_compare,
 )
 from novel_db.tools_chapter import (  # noqa: F401
     chapter_plan, chapter_list, chapter_save_summary, get_chapter_context,
-    scene_create, scene_list, scene_update, scene_delete,
-    timeline_add, timeline_query, timeline_update, timeline_delete,
+    scene, timeline,
 )
 from novel_db.tools_writing import (  # noqa: F401
     writing_finish, validate_chapter,
     rule_detail, record_new_content, event_checklist,
-    foreshadow_plant, foreshadow_recall, foreshadow_list, foreshadow_update,
-    resolve_engines,
+    foreshadow, echo, writing_rule,
 )
 from novel_db.tools_misc import (  # noqa: F401
-    health_check, skill_loader, db_search, engine_list,
-    sync_startup, sync_db_to_files, sync_files_to_db,
+    health_check, skill_loader, search, engine,
+    sync, tool_stats,
 )
 from novel_db.tools_graph import (  # noqa: F401
-    graph_query, graph_neighbors, graph_cascade,
+    graph,
 )
-from novel_db.tools_vector import (  # noqa: F401
-    vector_find_incomplete, vector_search, vector_search_and_update,
-)
+# vector tools are private helpers, accessed via search() dispatch in tools_misc
 from novel_db.tools_distill import (  # noqa: F401
-    distill_batch_write, distill_validate_json,
-    distill_assess_quality, distill_generate_report,
-    distill_import_file,
+    distill,
+    distillation,
 )
 
 if __name__ == "__main__":

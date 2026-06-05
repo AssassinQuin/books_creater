@@ -74,15 +74,15 @@ skills/novel-planner/overrides/{小说名}/engines/environment.md  # 项目专�
 - 某项目需要特殊的对话风格
 - 某项目有独特的战斗规则
 
-## 与现有 engine_detail 的迁移
+## 与现有 engine(action="detail") 的迁移
 
 | 现有调用 | 新调用 |
 |---------|--------|
-| `engine_detail('environment')` | `skill_loader("novel-chapter-writer", "engine", "environment")` |
-| `engine_detail('dialogue')` | `skill_loader("novel-chapter-writer", "engine", "dialogue")` |
-| `engine_detail('action')` | `skill_loader("novel-chapter-writer", "engine", "action")` |
-| `engine_detail('item')` | `skill_loader("novel-chapter-writer", "engine", "item")` |
-| `engine_detail('causality')` | `skill_loader("novel-planner", "engine", "causality")` |
+| `engine(action="detail", 'environment')` | `skill_loader("novel-chapter-writer", "engine", "environment")` |
+| `engine(action="detail", 'dialogue')` | `skill_loader("novel-chapter-writer", "engine", "dialogue")` |
+| `engine(action="detail", 'action')` | `skill_loader("novel-chapter-writer", "engine", "action")` |
+| `engine(action="detail", 'item')` | `skill_loader("novel-chapter-writer", "engine", "item")` |
+| `engine(action="detail", 'causality')` | `skill_loader("novel-planner", "engine", "causality")` |
 | `rule_detail('{key}')` | `skill_loader("novel-chapter-writer", "engine", "anti-ai")` |
 
 ## 缓存策略
@@ -120,7 +120,7 @@ def skill_loader(skill, level, resource, project=None):
    - 注册到 MCP 工具列表
 
 2. **更新所有 SKILL.md**
-   - 将 `engine_detail('xxx')` 替换为 `skill_loader(..., "engine", "xxx")`
+   - 将 `engine(action="detail", 'xxx')` 替换为 `skill_loader(..., "engine", "xxx")`
    - 将 `references/xxx.md` 引用替换为 `skill_loader(..., "engine", "xxx")`
 
 3. **迁移 references/ 文件**

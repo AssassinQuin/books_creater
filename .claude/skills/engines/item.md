@@ -78,11 +78,11 @@ ch{N}: {怎么用的，状态变化}
 
 ### 首次使用新物品
 1. 按模板建立完整档案
-2. 存储到 `world_upsert(novel_name="{小说名}", category="ability"/"economy", name="{物品名}", data={档案}})`
+2. 存储到 `world(action="upsert", novel_name="{小说名}", category="ability"/"economy", name="{物品名}", data={档案}})`
 3. 正文中只展示与当前场景相关的属性（不全量罗列）
 
 ### 后续使用
-1. 从 `world_query(novel_name="{小说名}", name="{物品名}")` 加载档案
+1. 从 `world(action="query", novel_name="{小说名}", name="{物品名}")` 加载档案
 2. 正文描写必须与档案一致
 3. 如果本章有新的属性发现，更新档案
 

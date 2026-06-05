@@ -24,14 +24,14 @@
 
 | entity_type | DB 查询 | 文件读取 |
 |-------------|---------|---------|
-| `character` | `world_query(novel, category='race')` + `world_query(novel, category='faction')` + `character_list(novel)` + 如有参照角色 `character_detail_by_name(novel_name="{小说名}", character_name={name})` + `relation_list(novel)` | 相关卷大纲/章节 → 了解出场剧情 |
-| `world` | `world_query(novel)` → 已有维度查重 + `db_search(novel, keyword=相关词)` 扫描影响范围 | 相关卷大纲 + 角色总览 → 了解关联 |
-| `ability` | `world_query(novel, category='ability')` + `character_list(novel)` + `world_query(novel, category='race')` | 卷大纲 → 了解剧情阶段决定能力阶段 |
-| `item` | `world_query(novel, name='{物品名}')` + `world_query(novel, category='ability')` | 相关场景/章节 |
+| `character` | `world(action="query", novel, category='race')` + `world(action="query", novel, category='faction')` + `character_list(novel)` + 如有参照角色 `character_detail_by_name(novel_name="{小说名}", character_name={name})` + `relation(action="list", novel)` | 相关卷大纲/章节 → 了解出场剧情 |
+| `world` | `world(action="query", novel)` → 已有维度查重 + `search(action="keyword", novel, keyword=相关词)` 扫描影响范围 | 相关卷大纲 + 角色总览 → 了解关联 |
+| `ability` | `world(action="query", novel, category='ability')` + `character_list(novel)` + `world(action="query", novel, category='race')` | 卷大纲 → 了解剧情阶段决定能力阶段 |
+| `item` | `world(action="query", novel, name='{物品名}')` + `world(action="query", novel, category='ability')` | 相关场景/章节 |
 
 `modify` 模式额外加载：
 - 该实体当前完整数据（DB + 文件）
-- `db_search(novel, keyword=实体名)` → 扫描全部影响范围
+- `search(action="keyword", novel, keyword=实体名)` → 扫描全部影响范围
 - 关联的未回收伏笔（如在 foreshadow 中有引用）
 - 已写章节中涉及该实体的部分
 

@@ -101,7 +101,7 @@ class TestP01SyncLorebookErrorReporting:
         resolvers.query = mock_query
 
         try:
-            result_json = tw.sync_lorebook("测试小说")
+            result_json = tw._sync_lorebook("测试小说")
             result = json.loads(result_json)
 
             assert result.get("ok") is True, f"正常同步应 ok=True: {result}"
@@ -152,7 +152,7 @@ class TestP01SyncLorebookErrorReporting:
         resolvers.query = base_mock
 
         try:
-            result_json = tw.sync_lorebook("测试小说")
+            result_json = tw._sync_lorebook("测试小说")
             result = json.loads(result_json)
 
             assert result["ok"] is False, "有错误时 ok 应为 False"
@@ -215,7 +215,7 @@ class TestP01SyncLorebookErrorReporting:
         resolvers.query = base_mock
 
         try:
-            result_json = tw.sync_lorebook("测试小说")
+            result_json = tw._sync_lorebook("测试小说")
             result = json.loads(result_json)
 
             assert result["ok"] is False
@@ -311,7 +311,7 @@ class TestP03WorldDeactivateDataString:
             )
             conn.commit()
 
-            result_json = tw.world_deactivate("测试小说", "location", "铁谷镇", "被兽潮摧毁")
+            result_json = tw._world_deactivate("测试小说", "location", "铁谷镇", "被兽潮摧毁")
             result = json.loads(result_json)
 
             assert result["ok"] is True
@@ -354,7 +354,7 @@ class TestP03WorldDeactivateDataString:
             )
             conn.commit()
 
-            result_json = tw.world_deactivate("测试小说", "core_setting", "灵衰", "已被解决")
+            result_json = tw._world_deactivate("测试小说", "core_setting", "灵衰", "已被解决")
             result = json.loads(result_json)
 
             assert result["ok"] is True
@@ -385,7 +385,7 @@ class TestP03WorldDeactivateDataString:
         resolvers.query = mock_query
 
         try:
-            result_json = tw.world_deactivate("测试小说", "location", "不存在的地点")
+            result_json = tw._world_deactivate("测试小说", "location", "不存在的地点")
             result = json.loads(result_json)
 
             assert "error" in result
@@ -815,20 +815,20 @@ class TestP23StatusJsonPatchCleanup:
 # ============================================================================
 
 class TestP32TimelineAddChapterNumber:
-    """验证 timeline_add 接受 chapter_number 参数。"""
+    """验证 _timeline_add 接受 chapter_number 参数。"""
 
     def test_timeline_add_accepts_chapter_number(self):
-        """timeline_add 应接受 chapter_number 参数。"""
+        """_timeline_add 应接受 chapter_number 参数。"""
         import novel_db.tools_chapter as tc
         import novel_db.resolvers as resolvers
         import inspect
 
-        sig = inspect.signature(tc.timeline_add)
+        sig = inspect.signature(tc._timeline_add)
         param_names = list(sig.parameters.keys())
         assert "chapter_number" in param_names, "应接受 chapter_number 参数"
 
     def test_timeline_add_resolves_chapter_number_to_id(self):
-        """timeline_add 应将 chapter_number 解析为 chapter_id。"""
+        """_timeline_add 应将 chapter_number 解析为 chapter_id。"""
         import novel_db.tools_chapter as tc
         import novel_db.resolvers as resolvers
 
@@ -850,7 +850,7 @@ class TestP32TimelineAddChapterNumber:
         resolvers.query = mock_query
 
         try:
-            result_json = tc.timeline_add(
+            result_json = tc._timeline_add(
                 "测试小说", chapter_number=1,
                 event_time="第一日清晨", event_order=1,
                 event_description="沈野到达铁谷镇"

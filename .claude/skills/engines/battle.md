@@ -50,7 +50,7 @@ Step 1 战斗设计 → Step 2 分镜脚本 → Step 3 写正文 → Step 4 审�
 - 实时代价（受伤/消耗/环境破坏实时体现）
 - 20%细节法则（80%常规动作略写，20%关键击详写）
 
-战后同步：`character_update_by_name(novel_name="{小说名}", character_name={name}, status=...)` + `world_upsert`
+战后同步：`character_update_by_name(novel_name="{小说名}", character_name={name}, status=...)` + `world(action="upsert")`
 
 ## Step 4: 八维度审计
 

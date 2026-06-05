@@ -73,5 +73,5 @@
 新增维度时：
 1. 在 DB `foreshadows` 表新增列
 2. 在本模板追加字段
-3. 在 `foreshadow_plant` MCP 工具中新增对应参数
+3. 在 `foreshadow(action="plant")` MCP 工具中新增对应参数
 4. 更新 `consistency_guard` 的字段映射表

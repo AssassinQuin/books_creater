@@ -13,13 +13,13 @@
 ### Step 1: 更新数据
 
 执行用户指定的修改：
-- 改世界观 → `world_upsert`
+- 改世界观 → `world(action="upsert")`
 - 改人物 → `character_update`
-- 改能力 → `character_update` + `world_upsert`
+- 改能力 → `character_update` + `world(action="upsert")`
 
 ### Step 2: 影响范围分析
 
-加载 `engines/causality.md` → 调用 `db_search` 扫描全部影响：
+加载 `engines/causality.md` → 调用 `search(action="keyword")` 扫描全部影响：
 
 | 修改类型 | 可能影响 |
 |---------|---------|

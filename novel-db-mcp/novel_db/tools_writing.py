@@ -172,9 +172,7 @@ def validate_chapter(chapter_text: str, novel_name: str = "") -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def writing_rule_upsert(novel_name: str, rule_type: str, name: str, category: str = "",
+def _writing_rule_upsert(novel_name: str, rule_type: str, name: str, category: str = "",
                         pattern: str = "", replacement: str = "",
                         threshold_min: float = None, threshold_max: float = None,
                         scope: str = "chapter", severity: str = "error",
@@ -244,9 +242,7 @@ def writing_rule_upsert(novel_name: str, rule_type: str, name: str, category: st
             return json.dumps({"ok": True, "action": "created", "name": name}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def writing_rule_list(novel_name: str, category: str = "", is_active: bool = True) -> str:
+def _writing_rule_list(novel_name: str, category: str = "", is_active: bool = True) -> str:
     """列出写作校验规则。可按 category 过滤。
     novel_name: 小说名称
     """
@@ -439,7 +435,7 @@ def writing_finish(novel_name: str, chapter_number: int, summary: str, chapter_t
             "新NPC": "本章是否出现了新NPC？→ record_new_content(novel_name, 'npc', '人名', json_data)",
             "新物品": "本章是否出现了新物品？→ record_new_content(novel_name, 'item', '物品名', json_data)",
             "新设定": "本章是否有新增世界观设定？→ record_new_content(novel_name, 'setting', '设定名', json_data)",
-            "新伏笔": "本章是否埋了新伏笔？→ foreshadow_plant(novel_name, '描述', importance, tags)",
+            "新伏笔": "本章是否埋了新伏笔？→ foreshadow(novel_name, action='plant', description='描述')",
             "角色变化": "本章是否有角色状态变化？→ character_update(novel_name, character_name, status=...)",
             "角色蒸馏": "主要角色本章是否有决策/信念/关系变化？→ distillation_evolve(novel_name, character_name, chapter_number, key_decision='{\"situation\":\"...\",\"choice\":\"...\"}', decision_delta='[{\"trigger\":\"...\",\"rule_name\":\"...\",\"after\":\"...\"}]')",
             "线索追踪": "本章是否有新线索出现？→ 记录到设定/大纲/线索追踪.md"
@@ -447,9 +443,7 @@ def writing_finish(novel_name: str, chapter_number: int, summary: str, chapter_t
     }, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def foreshadow_plant(novel_name: str, description: str,
+def _foreshadow_plant(novel_name: str, description: str,
                      planted_chapter_id: int = None,
                      planned_recall_chapter: int = None,
                      importance: str = "medium",
@@ -490,9 +484,7 @@ def _foreshadow_recall_internal(novel_id: int, foreshadow_id: int, chapter_id: i
     return {"ok": True}
 
 
-@mcp.tool
-@mcp_tool
-def foreshadow_recall(novel_name: str, foreshadow_id: int, actual_recall_chapter_id: int) -> str:
+def _foreshadow_recall(novel_name: str, foreshadow_id: int, actual_recall_chapter_id: int) -> str:
     """回收伏笔。
       novel_name: 小说名称（验证归属）
       foreshadow_id: 伏笔ID
@@ -503,9 +495,7 @@ def foreshadow_recall(novel_name: str, foreshadow_id: int, actual_recall_chapter
     return json.dumps(result, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def foreshadow_list(novel_name: str, status: str = "") -> str:
+def _foreshadow_list(novel_name: str, status: str = "") -> str:
     """列出伏笔。status 可选: planted/recalled/abandoned
       novel_name: 小说名称
     """
@@ -519,9 +509,7 @@ def foreshadow_list(novel_name: str, status: str = "") -> str:
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def foreshadow_update(novel_name: str, foreshadow_id: int,
+def _foreshadow_update(novel_name: str, foreshadow_id: int,
                       description: str = _UNSET, importance: str = _UNSET,
                       planned_recall_chapter: int = _UNSET,
                       related_characters=_UNSET,
@@ -571,9 +559,7 @@ def foreshadow_update(novel_name: str, foreshadow_id: int,
 # ─── Echoes（回响 — 大事件余波的自然回溯）──────────────────
 
 
-@mcp.tool
-@mcp_tool
-def echo_create(novel_name: str, source_chapter_id: int, echo_chapter_id: int,
+def _echo_create(novel_name: str, source_chapter_id: int, echo_chapter_id: int,
                 source_event: str, echo_type: str,
                 echo_description: str = "", strong_related: bool = False,
                 tags: list = None) -> str:
@@ -616,9 +602,7 @@ def echo_create(novel_name: str, source_chapter_id: int, echo_chapter_id: int,
     return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def echo_list(novel_name: str, volume_id: int = 0, echo_chapter_id: int = 0,
+def _echo_list(novel_name: str, volume_id: int = 0, echo_chapter_id: int = 0,
               include_density: bool = False) -> str:
     """列出回响记录。可按卷或章节过滤，用于检查密度是否超标（普通回响≤2次/卷）。
       novel_name: 小说名称
@@ -704,9 +688,7 @@ ENGINE_MATRIX: dict[str, list[str]] = {
 }
 
 
-@mcp.tool
-@mcp_tool
-def resolve_engines(scene_types: list[str]) -> str:
+def _resolve_engines(scene_types: list[str]) -> str:
     """根据 Agent 3 标注的场面 AES 类型，自动解析需加载的引擎文件内容。
 
     编排器在收到 Agent 3 的场面类型标签后调用此工具。
@@ -758,4 +740,139 @@ def resolve_engines(scene_types: list[str]) -> str:
 
     return json.dumps(payload, ensure_ascii=False)
 
+
+# ── Action-based dispatch tools ──────────────────────────────────────
+
+
+@mcp.tool
+@mcp_tool
+def foreshadow(novel_name: str, action: str = "list", foreshadow_id: int = 0,
+               description: str = "", planted_chapter_id: int = 0,
+               planned_recall_chapter: int = 0, importance: str = "medium",
+               related_characters: list = None, tags: list = None,
+               status: str = "", reason: str = "",
+               actual_recall_chapter_id: int = 0) -> str:
+    """伏笔管理。
+
+    Actions:
+    - plant: 埋设伏笔。需 description。可选 planted_chapter_id/importance/related_characters/tags。
+    - list: 列出伏笔。可选 status 过滤(planted/recalled/abandoned)。
+    - update: 更新伏笔。需 foreshadow_id。只传需修改的字段。
+    - recall: 回收伏笔。需 foreshadow_id + actual_recall_chapter_id。
+    """
+    if action == "plant":
+        return _foreshadow_plant(
+            novel_name=novel_name, description=description,
+            planted_chapter_id=planted_chapter_id or None,
+            planned_recall_chapter=planned_recall_chapter or None,
+            importance=importance,
+            related_characters=related_characters, tags=tags,
+        )
+    elif action == "list":
+        return _foreshadow_list(novel_name=novel_name, status=status)
+    elif action == "update":
+        if not foreshadow_id:
+            return json.dumps({"error": "update action requires foreshadow_id"}, ensure_ascii=False)
+        # Convert empty strings to _UNSET so only explicitly set fields are updated
+        kwargs = {"novel_name": novel_name, "foreshadow_id": foreshadow_id}
+        if description:
+            kwargs["description"] = description
+        if importance:
+            kwargs["importance"] = importance
+        if planned_recall_chapter != 0:
+            kwargs["planned_recall_chapter"] = planned_recall_chapter
+        if related_characters is not None:
+            kwargs["related_characters"] = related_characters
+        if tags is not None:
+            kwargs["tags"] = tags
+        if status:
+            kwargs["status"] = status
+        if reason:
+            kwargs["reason"] = reason
+        return _foreshadow_update(**kwargs)
+    elif action == "recall":
+        if not foreshadow_id:
+            return json.dumps({"error": "recall action requires foreshadow_id"}, ensure_ascii=False)
+        if not actual_recall_chapter_id:
+            return json.dumps({"error": "recall action requires actual_recall_chapter_id"}, ensure_ascii=False)
+        return _foreshadow_recall(
+            novel_name=novel_name, foreshadow_id=foreshadow_id,
+            actual_recall_chapter_id=actual_recall_chapter_id,
+        )
+    else:
+        return json.dumps({"error": f"unknown action '{action}'. use plant/list/update/recall"}, ensure_ascii=False)
+
+
+@mcp.tool
+@mcp_tool
+def echo(novel_name: str, action: str = "list", source_chapter_id: int = 0,
+         echo_chapter_id: int = 0, source_event: str = "", echo_type: str = "",
+         echo_description: str = "", strong_related: bool = False,
+         tags: list = None, volume_id: int = 0, include_density: bool = False) -> str:
+    """回响管理。大事件后日常场景中的自然回溯。
+
+    Actions:
+    - create: 创建回响。需 source_chapter_id, echo_chapter_id, source_event, echo_type。
+    - list: 列出回响。可选 volume_id/echo_chapter_id/include_density。
+    """
+    if action == "create":
+        if not source_chapter_id:
+            return json.dumps({"error": "create action requires source_chapter_id"}, ensure_ascii=False)
+        if not echo_chapter_id:
+            return json.dumps({"error": "create action requires echo_chapter_id"}, ensure_ascii=False)
+        if not source_event:
+            return json.dumps({"error": "create action requires source_event"}, ensure_ascii=False)
+        if not echo_type:
+            return json.dumps({"error": "create action requires echo_type"}, ensure_ascii=False)
+        return _echo_create(
+            novel_name=novel_name, source_chapter_id=source_chapter_id,
+            echo_chapter_id=echo_chapter_id, source_event=source_event,
+            echo_type=echo_type, echo_description=echo_description,
+            strong_related=strong_related, tags=tags,
+        )
+    elif action == "list":
+        return _echo_list(
+            novel_name=novel_name, volume_id=volume_id,
+            echo_chapter_id=echo_chapter_id, include_density=include_density,
+        )
+    else:
+        return json.dumps({"error": f"unknown action '{action}'. use create/list"}, ensure_ascii=False)
+
+
+@mcp.tool
+@mcp_tool
+def writing_rule(novel_name: str, action: str = "list", rule_type: str = "",
+                 name: str = "", category: str = "", pattern: str = "",
+                 replacement: str = "", threshold_min: float = 0,
+                 threshold_max: float = 0, scope: str = "chapter",
+                 severity: str = "error", message: str = "",
+                 context_pattern: str = "", context_range: int = 0,
+                 is_active: bool = True, priority: int = 30,
+                 rule_category: str = "") -> str:
+    """写作校验规则管理。
+
+    Actions:
+    - upsert: 新增或更新规则。需 rule_type + name。详见 writing_rule_upsert 参数。
+    - list: 列出规则。可选 rule_category 过滤。
+    """
+    if action == "upsert":
+        if not rule_type:
+            return json.dumps({"error": "upsert action requires rule_type"}, ensure_ascii=False)
+        if not name:
+            return json.dumps({"error": "upsert action requires name"}, ensure_ascii=False)
+        return _writing_rule_upsert(
+            novel_name=novel_name, rule_type=rule_type, name=name,
+            category=category, pattern=pattern, replacement=replacement,
+            threshold_min=threshold_min if threshold_min != 0 else None,
+            threshold_max=threshold_max if threshold_max != 0 else None,
+            scope=scope, severity=severity, message=message,
+            context_pattern=context_pattern, context_range=context_range,
+            is_active=is_active, priority=priority,
+        )
+    elif action == "list":
+        return _writing_rule_list(
+            novel_name=novel_name, category=rule_category, is_active=is_active,
+        )
+    else:
+        return json.dumps({"error": f"unknown action '{action}'. use upsert/list"}, ensure_ascii=False)
 

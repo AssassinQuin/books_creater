@@ -33,7 +33,7 @@
    目的: 对话/动作/描写一致性
 
 4. 人物关系:
-   工具: relation_list(novel_name="{小说名}")
+   工具: relation(action="list", novel_name="{小说名}")
    提取: 出场人物之间的关系类型+强度
    目的: 对话语气差异化
 ```
@@ -42,22 +42,22 @@
 
 ```yaml
 5. 环境快照:
-   工具: world_query(novel_name="{小说名}", category="location", name="{本章地点}")
+   工具: world(action="query", novel_name="{小说名}", category="location", name="{本章地点}")
    提取: 空间结构 + 灵能维度 + 感官基线
    目的: 环境一致性
 
 6. 物品档案:
-   工具: world_query(novel_name="{小说名}", category="ability"/category="economy", name="{物品名}")
+   工具: world(action="query", novel_name="{小说名}", category="ability"/category="economy", name="{物品名}")
    提取: 外观+触感+功能+当前状态
    目的: 物品使用一致性
 
 7. 历史层:
-   工具: world_query(novel_name="{小说名}", category="history", name="{相关历史}")
+   工具: world(action="query", novel_name="{小说名}", category="history", name="{相关历史}")
    提取: 遗留规则+失传规则+自洽性锚点
    目的: 设定经得起推敲
 
 8. 未回收伏笔:
-   工具: foreshadow_list(novel_name="{小说名}", status="planted")
+   工具: foreshadow(action="list", novel_name="{小说名}", status="planted")
    提取: description + planned_recall_chapter + tags
    目的: 本章是否该推进某条暗线
 ```
@@ -66,7 +66,7 @@
 
 ```yaml
 9. 时间线:
-   工具: timeline_query(novel_name="{小说名}", from_chapter=N-3, to_chapter=N)
+   工具: timeline(action="query", novel_name="{小说名}", from_chapter=N-3, to_chapter=N)
    提取: 近期事件序列
    目的: 防止时空矛盾
 
@@ -94,8 +94,8 @@
 ```
 写完一章后:
 - 只更新出场人物的状态 → character_update 只改 status 字段
-- 只更新变化的环境 → world_upsert 只改变化属性
-- 只新增本章的伏笔/时间线 → foreshadow_plant / timeline_add
+- 只更新变化的环境 → world(action="upsert") 只改变化属性
+- 只新增本章的伏笔/时间线 → foreshadow(action="plant") / timeline(action="add")
 - 不出场的角色/不变化的地点 → 不动
 ```
 
@@ -117,13 +117,13 @@
 | 数据类型 | 存储位置 | 工具 |
 |----------|---------|------|
 | 人物档案+状态 | character表 | character_create/update/get |
-| 人物关系 | relation表 | relation_create/list |
-| 世界观设定 | world表 | world_upsert/query |
-| 地点快照 | world表(category="location") | world_upsert/query |
-| 物品档案 | world表(category="ability/economy") | world_upsert/query |
-| 历史层 | world表(category="history") | world_upsert/query |
-| 伏笔 | foreshadow表 | foreshadow_plant/list/recall |
-| 时间线 | timeline表 | timeline_add/query |
+| 人物关系 | relation表 | relation(action="create")/list |
+| 世界观设定 | world表 | world(action="upsert")/query |
+| 地点快照 | world表(category="location") | world(action="upsert")/query |
+| 物品档案 | world表(category="ability/economy") | world(action="upsert")/query |
+| 历史层 | world表(category="history") | world(action="upsert")/query |
+| 伏笔 | foreshadow表 | foreshadow(action="plant")/list/recall |
+| 时间线 | timeline表 | timeline(action="add")/query |
 | 章节摘要 | chapter表 | chapter_save_summary |
 | 维度变化 | dimension表 | dimension_log/query |
 

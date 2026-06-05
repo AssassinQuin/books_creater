@@ -102,7 +102,7 @@
 ## 存储协议
 
 ```yaml
-# world_upsert(novel_name="{小说名}", category="location")
+# world(action="upsert", novel_name="{小说名}", category="location")
 {
   "name": "第三区管道断裂口",
   "space": "管道截面，直径约两米，断裂处有碎石堆",

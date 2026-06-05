@@ -155,7 +155,7 @@ subordinate（下属）
 
 ### 5.3 DB同步检查
 
-- [ ] relation_create/update 是否执行？
+- [ ] relation(action="create")/update 是否执行？
 - [ ] character.status.ability_changes 是否更新？
 - [ ] 变化是否有 source_chapter 记录？
 

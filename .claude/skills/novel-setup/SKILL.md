@@ -17,8 +17,8 @@ version: "5.3.0"
 ```
 检测序列（按顺序，全部只读）：
 1. novel_get(novel_name) → 项目是否存在
-2. world_query(novel_name, category='core_setting') → 世界原则/创作宪法/品类感知
-3. world_query(novel_name, category='writing_spec') → 写作规范
+2. world(action="query", novel_name, category='core_setting') → 世界原则/创作宪法/品类感知
+3. world(action="query", novel_name, category='writing_spec') → 写作规范
 4. 如文件存在：Read novels/{小说名}/设定/世界观/重构进度.md → 获取进度描述
 ```
 
@@ -183,7 +183,7 @@ ELSE 无法判断
 ### R5: 持久化
 
 ```python
-world_upsert(category='core_setting',
+world(action="upsert", category='core_setting',
   name='参考研究-{作品名}',
   priority=80, is_constant=0,
   data={
@@ -203,7 +203,7 @@ world_upsert(category='core_setting',
 )
 ```
 
-后续步骤通过 `world_query(category='core_setting')` 自动加载，不重复研究。
+后续步骤通过 `world(action="query", category='core_setting')` 自动加载，不重复研究。
 
 ### 多参考冲突检测
 
@@ -261,7 +261,7 @@ world_upsert(category='core_setting',
 2. 告知用户："我感知到这偏向{品类}方向。这个品类的常见词汇风格是{概述}——但你可以完全打破它。"
 3. 用户确认品类方向或修正 → 写入 DB：
    ```
-   world_upsert(category='core_setting', name='品类感知', priority=50, is_constant=0,
+   world(action="upsert", category='core_setting', name='品类感知', priority=50, is_constant=0,
      data={"genre_sense": "...", "vocabulary_style": "...", "user_stance": "遵循/颠覆/混搭"})
    ```
 4. 后续生成中：品类词汇用于替换不合适的表达（如玄幻不说"数据库"），但不用于限制世界观的可能性
@@ -290,7 +290,7 @@ world_upsert(category='core_setting',
 
 用户确认后写入：
 ```
-world_upsert(category='writing_spec', name='创作宪法', priority=100, is_constant=1,
+world(action="upsert", category='writing_spec', name='创作宪法', priority=100, is_constant=1,
   data={"rules": [...铁律列表...]})
 ```
 
@@ -369,7 +369,7 @@ world_upsert(category='writing_spec', name='创作宪法', priority=100, is_cons
 
 所有原则经过挑战后，用户最终确认 → 写入 DB：
 ```
-world_upsert(category='core_setting', name='世界原则', priority=100, is_constant=1,
+world(action="upsert", category='core_setting', name='世界原则', priority=100, is_constant=1,
   data={"principles": [
     {"name":"...", "source":"用户说了...", "implies":"...", "forbids":"...", "causal_type":"..."},
     ...
@@ -378,7 +378,7 @@ world_upsert(category='core_setting', name='世界原则', priority=100, is_cons
 
 同步写入行为映射规则（供 `validate_chapter` 使用）：
 ```
-world_upsert(category='core_setting', name='行为映射规则', priority=99, is_constant=1,
+world(action="upsert", category='core_setting', name='行为映射规则', priority=99, is_constant=1,
   data={"rules": [...从原则推导的行为约束...]})
 ```
 
@@ -400,7 +400,7 @@ world_upsert(category='core_setting', name='行为映射规则', priority=99, is
 - 从映射表中逐条推导道德基调词
 - 推导格式：`基调词 ← 原则{N}({原则名})，因为{推导逻辑}`
 - 硬校验：推导结果与世界原则矛盾时强制重推
-- 用户确认 → `world_upsert(category='core_setting', name='氛围DNA-道德层')`
+- 用户确认 → `world(action="upsert", category='core_setting', name='氛围DNA-道德层')`
 
 #### Layer 2 — 感官层
 1. 问用户："用一种味道/温度/颜色形容你的世界？"
@@ -409,7 +409,7 @@ world_upsert(category='core_setting', name='行为映射规则', priority=99, is
    - 如 DB 中已有参考研究（前序步骤触发过协议）→ 加载蒸馏结果 → 复用模式，仅做本层适配验证
    - 如无但用户在本步骤提到参考作品 → 触发"参考作品研究协议"完整执行 R1-R5
    - 参考片段（100-200字）必须使用 R3 变形后的模式（非原作模式）
-4. 检查参考片段是否违反行为映射规则 → 用户确认 → `world_upsert(category='core_setting', name='氛围DNA-感官层')`
+4. 检查参考片段是否违反行为映射规则 → 用户确认 → `world(action="upsert", category='core_setting', name='氛围DNA-感官层')`
 
 #### Layer 3 — 禁忌+词汇
 4. 生成禁忌清单 + 词汇色彩 → 每条禁忌标注违反哪条世界原则
@@ -442,7 +442,7 @@ world_upsert(category='core_setting', name='行为映射规则', priority=99, is
 对每个维度执行：
 
 **前置：参考模式复用检查**
-- `world_query(novel_name, category='core_setting')` 检索参考研究条目
+- `world(action="query", novel_name, category='core_setting')` 检索参考研究条目
 - 如有相关参考模式 → 注入上下文，标注可借鉴的模式及变形适配说明
 - 如有 `verified: false` 条目 → 标注"参考意图未验证，仅作方向参考"
 
@@ -464,7 +464,7 @@ world_upsert(category='core_setting', name='行为映射规则', priority=99, is
 - 逐条检查：维度设定是否体现了变形后的模式方向？未体现是刻意避开还是遗漏？
 - 如发现新矛盾 → 触发"多参考冲突检测"重新评估
 
-用户确认 → `world_upsert` → 下一维度
+用户确认 → `world(action="upsert")` → 下一维度
 
 #### 5C: 维度间健康检查
 
@@ -527,8 +527,8 @@ world_upsert(category='core_setting', name='行为映射规则', priority=99, is
 
 **前置条件**：目标小说已存在且有世界原则。
 
-1. 加载世界原则 + 行为映射 + 品类感知 + 参考研究（如有）（`world_query`）
-   - `world_query` 返回空 → 提示用户先执行 Step 3 建立世界原则，或确认极简模式（直接写入，标注 `priority: 10`）
+1. 加载世界原则 + 行为映射 + 品类感知 + 参考研究（如有）（`world(action="query")`）
+   - `world(action="query")` 返回空 → 提示用户先执行 Step 3 建立世界原则，或确认极简模式（直接写入，标注 `priority: 10`）
 2. 收集用户要加的设定/物品信息
 3. **参考研究拦截**：用户提到参考作品/设定来源时 → 触发"参考作品研究协议"
 4. **因果链校验**（逐项检查，标注因果类型）：
@@ -538,7 +538,7 @@ world_upsert(category='core_setting', name='行为映射规则', priority=99, is
 5. 每项校验输出：`{校验项}: {通过/失败} ({因果类型}) — {具体说明}`
 6. 不一致时列出具体矛盾（引用违反的原则+因果类型） → 用户决定覆盖还是调整
 7. 新设定覆盖已有设定 → 展示新旧对比，触发矛盾处理三步法
-8. `world_upsert` 写入 → `sync_db_to_files`
+8. `world(action="upsert")` 写入 → `sync(action="db_to_files")`
 
 ## 约束
 从 `world_settings` 和 `writing_rules` 加载当前小说的约束。高层覆盖低层。

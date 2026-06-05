@@ -392,7 +392,8 @@ class TestWorldSettingsRoundTrip:
 
         content = faction_file.read_text(encoding="utf-8")
         assert "壁盾军团" in content
-        assert "faction" in content
+        # per-entity mode: category encoded in directory path, not file content
+        assert "势力" in str(faction_file)
 
     def test_location_sync(self, novel_id, engine, test_novel_dir):
         """地点（location）DB→File 同步验证。"""

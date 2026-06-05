@@ -20,7 +20,7 @@ version: "2.0.0"
 2. 基于上下文做创意决策（场面/因果链/角色弧线/伏笔操作/新实体）
 3. 写作前反思：加载 `engines/pre-write-reflection.md` → 输出四维反思（情绪定调/翻车预警/核心瞬间/禁用句式）→ 用户确认
 4. 用户确认创意蓝图 + 反思结果
-5. `resolve_engines(场景类型)` 获取引擎
+5. `engine(action="resolve", 场景类型)` 获取引擎
 6. 逐场面生成正文
 7. `validate_chapter(正文)` 校验 → 有违规必须修复
 8. 通过 → `writing_finish(...)` 存盘 + 角色快照 + 关系快照

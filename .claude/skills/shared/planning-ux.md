@@ -71,7 +71,7 @@ Ch{末}: {标题} | {场景数}个场景 | {章末钩子}
 
 ## 新实体注册
 
-事件架构引入新实体时：**列出所有新实体** → 查重(world_query+设定文件) → 术语验证 → 暂停等用户确认("OK") → 保存到文件+DB。
+事件架构引入新实体时：**列出所有新实体** → 查重(world(action="query")+设定文件) → 术语验证 → 暂停等用户确认("OK") → 保存到文件+DB。
 
 新实体需要经过查重、术语验证和用户确认才能确保世界观一致性。Agent 静默创建可能导致命名冲突、术语不一致或重复定义。
 
@@ -79,11 +79,11 @@ Ch{末}: {标题} | {场景数}个场景 | {章末钩子}
 
 | 新实体类型 | 保存文件 | DB操作 |
 |-----------|---------|--------|
-| 新地点 | 设定/地图.md | world_upsert(category='location') |
-| 新物品 | 设定/物品.md | world_upsert(category='item') |
+| 新地点 | 设定/地图.md | world(action="upsert", category='location') |
+| 新物品 | 设定/物品.md | world(action="upsert", category='item') |
 | 新NPC | 设定/角色总览.md | character_create() |
-| 新能力/概念 | 设定/世界观.md | world_upsert(category='ability') |
-| 新势力/组织 | 设定/世界观.md | world_upsert(category='faction') |
+| 新能力/概念 | 设定/世界观.md | world(action="upsert", category='ability') |
+| 新势力/组织 | 设定/世界观.md | world(action="upsert", category='faction') |
 
 ### 注册规范（参考 world-element-registry.md）
 

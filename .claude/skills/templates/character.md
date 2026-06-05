@@ -10,7 +10,7 @@
 | MD字段 | DB列 | 类型 | 必填 | 说明 |
 |--------|------|------|------|------|
 | role | role | TEXT | ✅ | protagonist/ally/antagonist/mentor/rival/love_interest/npc |
-| race | race | TEXT | ✅ | 种族，来自 world_query(novel_name="{小说名}", category='race') |
+| race | race | TEXT | ✅ | 种族，来自 world(action="query", novel_name="{小说名}", category='race') |
 | ability_level | ability_level | TEXT | 觉醒者必填 | 能力等级描述 |
 | faction_id | faction_id | INT | 有归属时 | 所属势力ID |
 | distillation_tracked | distillation_tracked | INT | 默认1 | 是否开启蒸馏追踪（1=是，0=否）。主角/重要角色开启，临时NPC可关闭 |
@@ -215,8 +215,8 @@
 
 | 维度 | DB表 | 查询工具 | 说明 |
 |------|------|----------|------|
-| 每章状态快照 | `character_state_snapshots` | `character_get_latest` | 位置/情绪/身体/能力/物品/知识 |
-| 蒸馏演化 | `character_distillation_evolution` | `distillation_get` / `distillation_timeline` / `distillation_compare` | 决策变化/信念转变/关系演变/声音变化/能力变化/弧线推进 |
+| 每章状态快照 | `character_state_snapshots` | `character_state(action="get_latest")` | 位置/情绪/身体/能力/物品/知识 |
+| 蒸馏演化 | `character_distillation_evolution` | `distillation(action="get")` / `distillation(action="timeline")` / `distillation(action="compare")` | 决策变化/信念转变/关系演变/声音变化/能力变化/弧线推进 |
 | 成长轨迹 | `growth_trajectory` JSONB | `character_detail` | 角色成长设计（含 relationships_end） |
 
 > **不在静态档案中维护**：`character_state_snapshots`（逐章）和 `character_distillation_evolution`（逐章）为纯动态数据。
@@ -293,6 +293,6 @@
 新增维度时：
 1. 在 DB `characters` 表新增 JSONB 列（如 `new_dimension JSONB DEFAULT '{}'`）
 2. 在本模板末尾 `## 扩展维度` 部分追加新节
-3. 在 `character_create` / `character_update` / `character_increment` MCP 工具中新增对应参数
+3. 在 `character_create` / `character_update` / `character_state(action="increment")` MCP 工具中新增对应参数
 4. 在 `novel-character/SKILL.md` 的写入DB部分追加字段说明
 5. 更新 `consistency_guard` 的字段映射表

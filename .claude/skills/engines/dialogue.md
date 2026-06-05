@@ -29,7 +29,7 @@
    - personality: 核心性格（影响语气）
    - background: 出身（影响用词层次）
 
-2. relation_list → 查说话人对听话人的关系:
+2. relation(action="list") → 查说话人对听话人的关系:
    - relation_type: ally/family/rival/subordinate...
    - intensity: 1-10（影响亲密度）
    - description: 关系描述（影响说话方式）

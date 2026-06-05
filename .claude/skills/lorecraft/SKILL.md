@@ -1,7 +1,7 @@
 ---
 name: lorecraft
 description: 世界观术语命名引擎——文化根脉提取法。为网文/小说世界观生成有文化深度、无AI味的术语体系。触发词：命名/术语/取名/造词/世界观命名/术语设计/去AI味/频率签名/权限/终端
-allowed-tools: Read, Write, Edit, Glob, Grep, mcp__novel-db__world_upsert
+allowed-tools: Read, Write, Edit, Glob, Grep, mcp__novel-db__world
 depends_on: references/term-map.md, references/quickref.md, references/core-principles.md
 lifecycle: core
 version: "1.4.0"
@@ -90,7 +90,7 @@ version: "1.4.0"
 
 1. 发现现代术语 → 判断概念类型（量化测量/层级控制/信息存储/通信传输/设备工具/安全保密）→ 按对应替代方向重新生成
 2. 无明确概念类型 → 执行四步法 → 生成新术语 → 🔒展示给用户确认
-3. 用户确认后 → 写入 DB(`world_upsert`) + 更新 term-map.md + 更新相关设定文件
+3. 用户确认后 → 写入 DB(`world(action="upsert")`) + 更新 term-map.md + 更新相关设定文件
 4. **生成后建议自检**：扫描全文有无现代术语残留
 
 ## 🔒 用户确认检查点
@@ -190,7 +190,7 @@ Step 4 验证测试：自然度、陌生化平衡、文化深度
 | 术语冲突消歧 | 当 lorecraft 建议的术语与 abilitycraft 已有能力名冲突时，保留已注册名，lorecraft 提供替代方案 |
 | 文化根脉不适用 | 当概念域无合适的文化根脉时（如外星科技元素），允许使用中性描述词，但标注'非灵能术语'并在 term-map 中注册 |
 | 用户对术语不满意 | 重新执行四步法，提供2-3个候选术语供选择 |
-| term-map 文件损坏/缺失 | 从 DB `world_query(category='terminology')` 恢复，DB 也为空则提示用户手动重建 |
+| term-map 文件损坏/缺失 | 从 DB `world(action="query", category='terminology')` 恢复，DB 也为空则提示用户手动重建 |
 | 写后检查发现大量现代术语(>15%) | 批量修复模式：按概念类型分组→逐组走四步法→验证→确认→入库 |
 
 ## 术语质量评估

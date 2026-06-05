@@ -617,12 +617,10 @@ def _load_world_context(result: dict, novel_id: int, volume_str: str,
     }
 
 
-@mcp.tool
-@mcp_tool
-def scene_create(novel_name: str, chapter_number: int, scene_number: int,
-                 location: str = "", characters_involved: list = None,
-                 conflict: str = "", emotion_type: str = "",
-                 key_beats: list = None, notes: str = "") -> str:
+def _scene_create(novel_name: str, chapter_number: int, scene_number: int,
+                  location: str = "", characters_involved: list = None,
+                  conflict: str = "", emotion_type: str = "",
+                  key_beats: list = None, notes: str = "") -> str:
     """创建场景大纲
       novel_name: 小说名称
       chapter_number: 章节序号
@@ -645,9 +643,7 @@ def scene_create(novel_name: str, chapter_number: int, scene_number: int,
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def scene_list(novel_name: str, chapter_number: int) -> str:
+def _scene_list(novel_name: str, chapter_number: int) -> str:
     """列出章节的场景大纲
       novel_name: 小说名称
       chapter_number: 章节序号
@@ -658,9 +654,7 @@ def scene_list(novel_name: str, chapter_number: int) -> str:
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def timeline_add(novel_name: str, chapter_number: int, event_time: str,
+def _timeline_add(novel_name: str, chapter_number: int, event_time: str,
                  event_order: int, event_description: str,
                  characters_involved: list = None,
                  location_id: int = None,
@@ -691,9 +685,7 @@ def timeline_add(novel_name: str, chapter_number: int, event_time: str,
     return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def timeline_query(novel_name: str, from_chapter: int = 0, to_chapter: int = 99999) -> str:
+def _timeline_query(novel_name: str, from_chapter: int = 0, to_chapter: int = 99999) -> str:
     """查询时间线事件，可按章节范围过滤
       novel_name: 小说名称
     """
@@ -708,12 +700,10 @@ def timeline_query(novel_name: str, from_chapter: int = 0, to_chapter: int = 999
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def scene_update(novel_name: str, chapter_number: int, scene_number: int,
-                 location=_UNSET, characters_involved=_UNSET,
-                 conflict=_UNSET, emotion_type=_UNSET,
-                 key_beats=_UNSET, notes=_UNSET) -> str:
+def _scene_update(novel_name: str, chapter_number: int, scene_number: int,
+                  location=_UNSET, characters_involved=_UNSET,
+                  conflict=_UNSET, emotion_type=_UNSET,
+                  key_beats=_UNSET, notes=_UNSET) -> str:
     """更新场景大纲（只传需要修改的字段，未传的字段不会被修改）
       novel_name: 小说名称
       chapter_number: 章节序号
@@ -742,9 +732,7 @@ def scene_update(novel_name: str, chapter_number: int, scene_number: int,
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def scene_delete(novel_name: str, chapter_number: int, scene_number: int) -> str:
+def _scene_delete(novel_name: str, chapter_number: int, scene_number: int) -> str:
     """删除场景大纲
       novel_name: 小说名称
       chapter_number: 章节序号
@@ -756,12 +744,10 @@ def scene_delete(novel_name: str, chapter_number: int, scene_number: int) -> str
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def timeline_update(novel_name: str, event_id: int,
-                    event_description=_UNSET, event_time=_UNSET,
-                    characters_involved=_UNSET,
-                    significance=_UNSET) -> str:
+def _timeline_update(novel_name: str, event_id: int,
+                     event_description=_UNSET, event_time=_UNSET,
+                     characters_involved=_UNSET,
+                     significance=_UNSET) -> str:
     """更新时间线事件（只传需要修改的字段）
       novel_name: 小说名称
       event_id: 时间线事件ID
@@ -785,9 +771,7 @@ def timeline_update(novel_name: str, event_id: int,
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def timeline_delete(novel_name: str, event_id: int) -> str:
+def _timeline_delete(novel_name: str, event_id: int) -> str:
     """删除时间线事件
       novel_name: 小说名称
       event_id: 时间线事件ID
@@ -795,3 +779,66 @@ def timeline_delete(novel_name: str, event_id: int) -> str:
     _resolve_novel_id(novel_name)
     query("DELETE FROM timeline_events WHERE id = ?", (event_id,), fetch="none")
     return json.dumps({"ok": True}, ensure_ascii=False)
+
+
+@mcp.tool
+@mcp_tool
+def scene(novel_name: str, action: str, chapter_number: int = 0,
+          scene_number: int = 0, location: str = "", characters_involved: list = None,
+          conflict: str = "", emotion_type: str = "", key_beats: list = None,
+          notes: str = "") -> str:
+    """场景大纲管理。
+
+    Actions:
+    - create: 创建场景大纲。需 chapter_number, scene_number。
+    - list: 列出章节场景。需 chapter_number。
+    - update: 更新场景。需 chapter_number, scene_number。只传需修改的字段。
+    - delete: 删除场景。需 chapter_number, scene_number。
+    """
+    if action == "create":
+        return _scene_create(novel_name, chapter_number, scene_number, location,
+                             characters_involved, conflict, emotion_type, key_beats, notes)
+    elif action == "list":
+        return _scene_list(novel_name, chapter_number)
+    elif action == "update":
+        return _scene_update(novel_name, chapter_number, scene_number,
+                             location or _UNSET, characters_involved if characters_involved is not None else _UNSET,
+                             conflict or _UNSET, emotion_type or _UNSET,
+                             key_beats if key_beats is not None else _UNSET,
+                             notes or _UNSET)
+    elif action == "delete":
+        return _scene_delete(novel_name, chapter_number, scene_number)
+    else:
+        return json.dumps({"error": f"Unknown action: {action}. Use create/list/update/delete."}, ensure_ascii=False)
+
+
+@mcp.tool
+@mcp_tool
+def timeline(novel_name: str, action: str, chapter_number: int = 0,
+             event_time: str = "", event_order: int = 0, event_description: str = "",
+             characters_involved: list = None, location_id: int = 0,
+             significance: str = "normal", event_id: int = 0,
+             from_chapter: int = 0, to_chapter: int = 99999) -> str:
+    """时间线事件管理。
+
+    Actions:
+    - add: 添加时间线事件。需 chapter_number, event_time, event_order, event_description。
+    - query: 查询时间线事件。可选 from_chapter/to_chapter 范围过滤。
+    - update: 更新事件。需 event_id。只传需修改的字段。
+    - delete: 删除事件。需 event_id。
+    """
+    if action == "add":
+        return _timeline_add(novel_name, chapter_number, event_time, event_order,
+                             event_description, characters_involved,
+                             location_id or None, significance)
+    elif action == "query":
+        return _timeline_query(novel_name, from_chapter or 0, to_chapter or 99999)
+    elif action == "update":
+        return _timeline_update(novel_name, event_id,
+                                event_description or _UNSET, event_time or _UNSET,
+                                characters_involved if characters_involved is not None else _UNSET,
+                                significance or _UNSET)
+    elif action == "delete":
+        return _timeline_delete(novel_name, event_id)
+    else:
+        return json.dumps({"error": f"Unknown action: {action}. Use add/query/update/delete."}, ensure_ascii=False)

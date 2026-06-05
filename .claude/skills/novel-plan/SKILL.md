@@ -22,9 +22,9 @@ version: "2.0.0"
 用户选哪个做哪个，不自动串联。
 
 ## 全书框架
-1. 加载：`world_query` + `character_list` + `foreshadow_list` + 氛围 DNA
+1. 加载：`world(action="query")` + `character_list` + `foreshadow(action="list")` + 氛围 DNA
 2. 设计框架（起承转合/卷功能/因果链/主线暗线）
-3. 用户确认 → `volume_create` / `volume_update` + `foreshadow_plant`
+3. 用户确认 → `volume_create` / `volume_update` + `foreshadow(action="plant")`
 4. 写入 `novels/{小说名}/设定/大纲/`
 
 ## 单卷大纲
@@ -32,7 +32,7 @@ version: "2.0.0"
 2. 设计事件架构（因果链/人物弧光/悬念锚点）→ 用户确认
 3. 设计逐章大纲（场景/伏笔/声音适配）→ 用户确认
 4. 三视角审查（读者/作者/人物并行）→ 修复 P0
-5. `chapter_plan` + `scene_create` + `foreshadow_plant` + 新实体入库
+5. `chapter_plan` + `scene(action="create")` + `foreshadow(action="plant")` + 新实体入库
 6. 写入 `novels/{小说名}/设定/大纲/V{N}-{卷名}.md`
 
 ## 约束

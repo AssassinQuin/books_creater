@@ -5,7 +5,7 @@
 
 ## 输入
 
-- 世界观数据（`world_query`）
+- 世界观数据（`world(action="query")`）
 - 已有角色列表（`character_list`）
 - 决策卡中的核心冲突
 
@@ -28,7 +28,7 @@
 
 强制外观模板：
 - appearance: 具体描写≥30字（体型/面部/发/服饰/标志特征/肤色体态）
-- race: `world_query(novel_name="{小说名}", category="race")`
+- race: `world(action="query", novel_name="{小说名}", category="race")`
 - 禁止形容词堆砌，必须具体视觉细节
 - 标志特征1-2个贯穿全文
 
@@ -47,7 +47,7 @@
 ### Step 5: 关系设计
 
 加载 `engines/relationship.md` → 设计角色关系网：
-- `relation_create` 创建关系
+- `relation(action="create")` 创建关系
 - 确保关系差异化（不同关系类型有不同互动模式）
 
 ### Step 6: 写入DB
@@ -62,4 +62,4 @@ relation_create_by_name(novel_name="{小说名}", from_name={from_name}, to_name
 
 - 状态总线.setting.characters 更新
 - 文件: `设定/人物/{名}.md`
-- DB: `character_create` + `relation_create`
+- DB: `character_create` + `relation(action="create")`

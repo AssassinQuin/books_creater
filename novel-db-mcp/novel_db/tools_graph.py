@@ -248,22 +248,9 @@ def _sync_chapter_edges(novel_id: int, chapter_id: int):
             _upsert_edge(novel_id, "character", cid, "chapter", chapter_id, "appears_in")
 
 
-@mcp.tool
-@mcp_tool
-def graph_query(novel_name: str, entity_type: str, entity_name: str,
-                depth: int = 2, edge_types: list = None,
-                direction: str = "both", max_results: int = 50) -> str:
-    """从指定实体出发，递归遍历关系网络。
-
-    参数:
-      novel_name: 小说名称
-      entity_type: 实体类型(world_setting/character/chapter/foreshadow)
-      entity_name: 实体名称(world_setting用name, character用name, chapter用编号, foreshadow用id)
-      depth: 遍历深度(默认2)
-      edge_types: 只遍历指定边类型(空=全部)
-      direction: 遍历方向(both/outgoing/incoming)
-      max_results: 最大返回结果数(默认50)
-    """
+def _graph_query(novel_name: str, entity_type: str, entity_name: str,
+                 depth: int = 2, edge_types: list = None,
+                 direction: str = "both", max_results: int = 50) -> str:
     novel_id = _resolve_novel_id(novel_name)
     entity_id = _resolve_entity_id(entity_type, entity_name, novel_id)
     if entity_id is None:
@@ -344,18 +331,8 @@ def graph_query(novel_name: str, entity_type: str, entity_name: str,
     }, ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def graph_neighbors(novel_name: str, entity_type: str, entity_name: str,
-                    edge_types: list = None) -> str:
-    """获取实体的直接关系邻居（单层遍历）。
-
-    参数:
-      novel_name: 小说名称
-      entity_type: 实体类型(world_setting/character/chapter/foreshadow)
-      entity_name: 实体名称
-      edge_types: 只返回指定边类型(空=全部)
-    """
+def _graph_neighbors(novel_name: str, entity_type: str, entity_name: str,
+                     edge_types: list = None) -> str:
     novel_id = _resolve_novel_id(novel_name)
     entity_id = _resolve_entity_id(entity_type, entity_name, novel_id)
     if entity_id is None:
@@ -404,16 +381,7 @@ def graph_neighbors(novel_name: str, entity_type: str, entity_name: str,
     }, ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def graph_cascade(novel_name: str, entity_type: str, entity_name: str) -> str:
-    """级联影响分析：修改该实体会影响哪些其他实体。从实体出发全图遍历，返回影响范围。
-
-    参数:
-      novel_name: 小说名称
-      entity_type: 实体类型(world_setting/character/chapter/foreshadow)
-      entity_name: 实体名称
-    """
+def _graph_cascade(novel_name: str, entity_type: str, entity_name: str) -> str:
     novel_id = _resolve_novel_id(novel_name)
     entity_id = _resolve_entity_id(entity_type, entity_name, novel_id)
     if entity_id is None:
@@ -467,3 +435,35 @@ def graph_cascade(novel_name: str, entity_type: str, entity_name: str) -> str:
         "by_depth": by_depth,
         "affected": affected,
     }, ensure_ascii=False, default=str)
+
+
+@mcp.tool
+@mcp_tool
+def graph(novel_name: str, entity_type: str, entity_name: str,
+          action: str = "query", depth: int = 2, edge_types: list = None,
+          direction: str = "both", max_results: int = 50) -> str:
+    """关系图查询。从指定实体出发遍历关系网络。
+
+    Actions:
+    - query: 递归遍历关系网络。可选 depth/edge_types/direction/max_results。
+    - neighbors: 获取直接关系邻居（单层遍历）。可选 edge_types。
+    - cascade: 级联影响分析，返回修改该实体后的影响范围。
+
+    参数:
+      novel_name: 小说名称
+      entity_type: 实体类型(world_setting/character/chapter/foreshadow)
+      entity_name: 实体名称(chapter用编号, foreshadow用id)
+      action: query|neighbors|cascade (默认query)
+      depth: 遍历深度(仅query, 默认2)
+      edge_types: 过滤边类型(仅query/neighbors)
+      direction: 遍历方向(仅query, both/outgoing/incoming)
+      max_results: 最大结果数(仅query, 默认50)
+    """
+    if action == "query":
+        return _graph_query(novel_name, entity_type, entity_name, depth, edge_types, direction, max_results)
+    elif action == "neighbors":
+        return _graph_neighbors(novel_name, entity_type, entity_name, edge_types)
+    elif action == "cascade":
+        return _graph_cascade(novel_name, entity_type, entity_name)
+    else:
+        return json.dumps({"error": f"Unknown action: {action}. Use query/neighbors/cascade."}, ensure_ascii=False)

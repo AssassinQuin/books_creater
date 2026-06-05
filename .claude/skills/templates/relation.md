@@ -70,5 +70,5 @@
 新增维度时：
 1. 在 DB `character_relations` 表新增 JSONB 列
 2. 在本模板追加新节
-3. 在 `relation_create` / `relation_update` MCP 工具中新增对应参数
+3. 在 `relation(action="create")` / `relation(action="update")` MCP 工具中新增对应参数
 4. 更新 `consistency_guard` 的字段映射表

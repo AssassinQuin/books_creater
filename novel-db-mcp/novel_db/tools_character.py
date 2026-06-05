@@ -206,9 +206,7 @@ def _relation_create_by_id(novel_name: str, from_character_id: int, to_character
     return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def relation_list(novel_name: str) -> str:
+def _relation_list(novel_name: str) -> str:
     """列出小说的所有人物关系
       novel_name: 小说名称
     """
@@ -277,9 +275,7 @@ def character_update(novel_name: str, character_name: str, name=_UNSET, role=_UN
                             distillation_tracked=distillation_tracked)
 
 
-@mcp.tool
-@mcp_tool
-def relation_create(novel_name: str, from_name: str, to_name: str,
+def _relation_create(novel_name: str, from_name: str, to_name: str,
                             relation_type: str, description: str = "",
                             chapter_established: int = None, intensity: int = 5) -> str:
     """按角色名创建人物关系（无需角色ID）。
@@ -303,9 +299,7 @@ def relation_create(novel_name: str, from_name: str, to_name: str,
     return _relation_create_by_id(novel_name, from_id, to_id, relation_type, description, chapter_established, intensity)
 
 
-@mcp.tool
-@mcp_tool
-def relation_update(novel_name: str, from_name: str, to_name: str,
+def _relation_update(novel_name: str, from_name: str, to_name: str,
                     relation_type: str = "", description: str = "",
                     intensity: int = 0, status: str = "") -> str:
     """更新人物关系（增量型）。关系类型/强度/描述/状态均可变更。
@@ -351,9 +345,7 @@ def relation_update(novel_name: str, from_name: str, to_name: str,
     return json.dumps({"ok": True, "from": from_name, "to": to_name}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def character_snapshot(novel_name: str, character_name: str, chapter_number: int,
+def _character_snapshot(novel_name: str, character_name: str, chapter_number: int,
                                 location: str = "", arc_phase: str = "",
                                 emotional_state: str = "", physical_state: str = "",
                                 ability_snapshot: str = "[]", inventory_snapshot: str = "[]",
@@ -386,9 +378,7 @@ def character_snapshot(novel_name: str, character_name: str, chapter_number: int
                              physical_state, ability_snapshot, inventory_snapshot, knowledge_snapshot, notes)
 
 
-@mcp.tool
-@mcp_tool
-def character_get_latest(novel_name: str, character_name: str) -> str:
+def _character_get_latest(novel_name: str, character_name: str) -> str:
     """获取角色最新状态快照（按名称查询，无需ID）。
 
     参数:
@@ -414,9 +404,7 @@ def character_get_latest(novel_name: str, character_name: str) -> str:
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def relation_snapshot(novel_name: str, from_name: str, to_name: str, chapter_number: int,
+def _relation_snapshot(novel_name: str, from_name: str, to_name: str, chapter_number: int,
                               intensity: int = 5, status: str = "active", notes: str = "") -> str:
     """按角色名保存关系快照（无需查ID）。关系变化时调用。
 
@@ -446,9 +434,7 @@ def relation_snapshot(novel_name: str, from_name: str, to_name: str, chapter_num
     return _relation_snapshot_by_id(rel["id"], ch["id"], intensity, status, notes)
 
 
-@mcp.tool
-@mcp_tool
-def character_increment(novel_name: str, character_name: str,
+def _character_increment(novel_name: str, character_name: str,
                         chapter_number: int = 0,
                         location: str = "", arc_phase: str = "",
                         emotional_state: str = "", physical_state: str = "",
@@ -562,9 +548,7 @@ def character_increment(novel_name: str, character_name: str,
     return json.dumps({"ok": True, "character_name": character_name, "updated": updates}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def plot_thread_create(novel_name: str, name: str,
+def _plot_thread_create(novel_name: str, name: str,
                         thread_type: str = "mainline",
                         description: str = "",
                         start_chapter_id: int = 0,
@@ -602,9 +586,7 @@ def plot_thread_create(novel_name: str, name: str,
     return json.dumps({"ok": True, "id": r["id"], "name": name}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def plot_thread_list(novel_name: str, thread_type: str = "") -> str:
+def _plot_thread_list(novel_name: str, thread_type: str = "") -> str:
     """列出线索/暗线。thread_type可选过滤。
       novel_name: 小说名称
     """
@@ -619,9 +601,7 @@ def plot_thread_list(novel_name: str, thread_type: str = "") -> str:
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def plot_thread_update(novel_name: str, thread_id: int, status: str = "",
+def _plot_thread_update(novel_name: str, thread_id: int, status: str = "",
                        end_chapter_number: int = 0,
                        progress_notes: str = "[]") -> str:
     """更新线索/暗线状态。每卷结束时调用。
@@ -739,14 +719,12 @@ def character_batch_detail(novel_name: str, character_names: list) -> str:
 # Character Distillation Evolution
 # ═══════════════════════════════════════════════════════
 
-@mcp.tool
-@mcp_tool
-def distillation_evolve(novel_name: str, character_name: str, chapter_number: int,
-                        decision_delta: str = "[]", new_knowledge: str = "[]",
-                        changed_beliefs: str = "[]", relation_shifts: str = "[]",
-                        voice_changes: str = "{}", ability_changes: str = "{}",
-                        arc_transition: str = "{}", key_decision: str = "{}",
-                        notes: str = "") -> str:
+def _distillation_evolve(novel_name: str, character_name: str, chapter_number: int,
+                         decision_delta: str = "[]", new_knowledge: str = "[]",
+                         changed_beliefs: str = "[]", relation_shifts: str = "[]",
+                         voice_changes: str = "{}", ability_changes: str = "{}",
+                         arc_transition: str = "{}", key_decision: str = "{}",
+                         notes: str = "") -> str:
     """记录人物蒸馏模型的演化增量。每章写完后调用，追踪人物决策、认知、关系、声音的演变。
 
     参数:
@@ -789,9 +767,7 @@ def distillation_evolve(novel_name: str, character_name: str, chapter_number: in
     return json.dumps({"ok": True, "character": character_name, "chapter": chapter_number}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def distillation_get(novel_name: str, character_name: str, chapter_number: int = 0) -> str:
+def _distillation_get(novel_name: str, character_name: str, chapter_number: int = 0) -> str:
     """获取人物蒸馏演化记录。可查询特定章节或全部历史。
 
     参数:
@@ -836,10 +812,8 @@ def distillation_get(novel_name: str, character_name: str, chapter_number: int =
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def distillation_timeline(novel_name: str, character_name: str,
-                          dimension: str = "decision_delta") -> str:
+def _distillation_timeline(novel_name: str, character_name: str,
+                           dimension: str = "decision_delta") -> str:
     """获取人物在某一维度的完整时间线。用于分析人物如何逐步演变。
 
     参数:
@@ -887,10 +861,8 @@ def distillation_timeline(novel_name: str, character_name: str,
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def distillation_compare(novel_name: str, character_name: str,
-                         chapter_a: int, chapter_b: int) -> str:
+def _distillation_compare(novel_name: str, character_name: str,
+                           chapter_a: int, chapter_b: int) -> str:
     """对比人物在两个章节之间的蒸馏模型变化。用于检验人物一致性/演变合理性。
 
     参数:
@@ -940,3 +912,108 @@ def distillation_compare(novel_name: str, character_name: str,
         "evolutions_between": [dict(r) for r in evolutions]
     }
     return json.dumps(result, ensure_ascii=False, default=str)
+
+
+# ═══════════════════════════════════════════════════════
+# Dispatch: relation(action=...)
+# ═══════════════════════════════════════════════════════
+
+@mcp.tool
+@mcp_tool
+def relation(novel_name: str, action: str = "list", from_name: str = "",
+             to_name: str = "", relation_type: str = "", description: str = "",
+             chapter_established: int = 0, intensity: int = 5,
+             status: str = "active", chapter_number: int = 0,
+             notes: str = "") -> str:
+    """人物关系管理。
+
+    Actions:
+    - create: 创建关系。需 from_name, to_name, relation_type。
+    - list: 列出所有关系。
+    - update: 更新关系。需 from_name, to_name。只传需修改的字段。
+    - snapshot: 保存关系快照。需 from_name, to_name, chapter_number。
+    """
+    if action == "create":
+        return _relation_create(novel_name, from_name, to_name, relation_type,
+                                 description, chapter_established or None, intensity)
+    elif action == "list":
+        return _relation_list(novel_name)
+    elif action == "update":
+        return _relation_update(novel_name, from_name, to_name,
+                                relation_type, description, intensity, status)
+    elif action == "snapshot":
+        return _relation_snapshot(novel_name, from_name, to_name,
+                                  chapter_number, intensity, status, notes)
+    else:
+        return json.dumps({"error": f"未知 action '{action}'。可选: create/list/update/snapshot"}, ensure_ascii=False)
+
+
+# ═══════════════════════════════════════════════════════
+# Dispatch: character_state(action=...)
+# ═══════════════════════════════════════════════════════
+
+@mcp.tool
+@mcp_tool
+def character_state(novel_name: str, character_name: str, action: str = "get_latest",
+                    chapter_number: int = 0, location: str = "",
+                    arc_phase: str = "", emotional_state: str = "",
+                    physical_state: str = "", ability_snapshot: str = "[]",
+                    inventory_snapshot: str = "[]", knowledge_snapshot: str = "{}",
+                    notes: str = "", ability_add: str = "", inventory_add: str = "",
+                    knowledge_add: str = "", snapshot_update: str = "",
+                    growth_add: str = "") -> str:
+    """角色状态快照与增量管理。
+
+    Actions:
+    - snapshot: 保存状态快照。需 chapter_number。
+    - get_latest: 获取最新状态快照。
+    - increment: 增量更新状态。可选任意增量字段。
+    """
+    if action == "snapshot":
+        return _character_snapshot(novel_name, character_name, chapter_number,
+                                   location, arc_phase, emotional_state,
+                                   physical_state, ability_snapshot,
+                                   inventory_snapshot, knowledge_snapshot, notes)
+    elif action == "get_latest":
+        return _character_get_latest(novel_name, character_name)
+    elif action == "increment":
+        return _character_increment(novel_name, character_name,
+                                    chapter_number, location, arc_phase,
+                                    emotional_state, physical_state,
+                                    ability_add, inventory_add, knowledge_add,
+                                    snapshot_update, growth_add)
+    else:
+        return json.dumps({"error": f"未知 action '{action}'。可选: snapshot/get_latest/increment"}, ensure_ascii=False)
+
+
+# ═══════════════════════════════════════════════════════
+# Dispatch: plot_thread(action=...)
+# ═══════════════════════════════════════════════════════
+
+@mcp.tool
+@mcp_tool
+def plot_thread(novel_name: str, action: str = "list", name: str = "",
+                thread_type: str = "mainline", description: str = "",
+                start_chapter_id: int = 0, volume_scope: str = "[]",
+                related_characters: str = "[]", related_foreshadows: str = "[]",
+                thread_id: int = 0, status: str = "",
+                end_chapter_number: int = 0, progress_notes: str = "[]") -> str:
+    """线索/暗线管理。
+
+    Actions:
+    - create: 创建线索。需 name。可选 thread_type/description 等。
+    - list: 列出线索。可选 thread_type 过滤。
+    - update: 更新线索状态。需 thread_id。
+    """
+    if action == "create":
+        return _plot_thread_create(novel_name, name, thread_type,
+                                   description, start_chapter_id,
+                                   volume_scope, related_characters,
+                                   related_foreshadows)
+    elif action == "list":
+        return _plot_thread_list(novel_name, thread_type)
+    elif action == "update":
+        return _plot_thread_update(novel_name, thread_id, status,
+                                    end_chapter_number, progress_notes)
+    else:
+        return json.dumps({"error": f"未知 action '{action}'。可选: create/list/update"}, ensure_ascii=False)

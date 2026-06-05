@@ -76,13 +76,11 @@ def _volume_in_range(volume_number: int, volume_range: str) -> bool:
 # CRUD Operations
 # ═══════════════════════════════════════════════════════════
 
-@mcp.tool
-@mcp_tool
-def world_upsert(novel_name: str, category: str, name: str, data: dict,
-                  keys=_UNSET, secondary_keys=_UNSET, tags=_UNSET,
-                  related_ids=_UNSET, volume_range=_UNSET, writing_guide=_UNSET,
-                  lorebook_id=_UNSET, priority=_UNSET, is_constant=_UNSET,
-                  region=_UNSET, faction_id=_UNSET) -> str:
+def _world_upsert(novel_name: str, category: str, name: str, data: dict,
+                   keys=_UNSET, secondary_keys=_UNSET, tags=_UNSET,
+                   related_ids=_UNSET, volume_range=_UNSET, writing_guide=_UNSET,
+                   lorebook_id=_UNSET, priority=_UNSET, is_constant=_UNSET,
+                   region=_UNSET, faction_id=_UNSET) -> str:
     """新增或更新世界观设定。
     
     参数:
@@ -197,11 +195,9 @@ def world_upsert(novel_name: str, category: str, name: str, data: dict,
     return json.dumps({"ok": True, "category": category, "name": name}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def world_query(novel_name: str, category: str = "", name: str = "",
-                region: str = "", volume: str = "", faction_id: int = None,
-                include_constants: bool = True) -> str:
+def _world_query(novel_name: str, category: str = "", name: str = "",
+                 region: str = "", volume: str = "", faction_id: int = None,
+                 include_constants: bool = True) -> str:
     """查询世界观设定，支持多维度过滤。
     
     过滤优先级: category+name > 多维过滤 > 全部
@@ -254,11 +250,9 @@ def world_query(novel_name: str, category: str = "", name: str = "",
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def world_load_context(novel_name: str, volume: str = "", regions: str = "",
-                       faction_names: str = "", categories: str = "",
-                       include_constants: bool = True) -> str:
+def _world_load_context(novel_name: str, volume: str = "", regions: str = "",
+                        faction_names: str = "", categories: str = "",
+                        include_constants: bool = True) -> str:
     """分层加载世界观上下文——写作时按需加载，不加载全部。
     
     核心加载逻辑:
@@ -374,9 +368,7 @@ def world_load_context(novel_name: str, volume: str = "", regions: str = "",
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
-@mcp.tool
-@mcp_tool
-def world_delete(novel_name: str, category: str, name: str) -> str:
+def _world_delete(novel_name: str, category: str, name: str) -> str:
     """删除世界观设定
       novel_name: 小说名称
     """
@@ -387,9 +379,7 @@ def world_delete(novel_name: str, category: str, name: str) -> str:
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def world_deactivate(novel_name: str, category: str, name: str, reason: str = "") -> str:
+def _world_deactivate(novel_name: str, category: str, name: str, reason: str = "") -> str:
     """世界观元素停用（不可逆型：地点毁灭、势力解散、物品消耗等）。
     参数:
       novel_name: 小说名称
@@ -421,9 +411,7 @@ def world_deactivate(novel_name: str, category: str, name: str, reason: str = ""
     return json.dumps({"ok": True, "category": category, "name": name, "status": "inactive", "reason": reason}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def world_batch_update_meta(novel_name: str, updates_json: str) -> str:
+def _world_batch_update_meta(novel_name: str, updates_json: str) -> str:
     """批量更新世界观条目的元数据(region/volume_range/faction_id/priority/is_constant)。
     
     参数:
@@ -464,9 +452,7 @@ def world_batch_update_meta(novel_name: str, updates_json: str) -> str:
     return json.dumps({"ok": True, "updated": updated, "errors": errors}, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def sync_lorebook(novel_name: str) -> str:
+def _sync_lorebook(novel_name: str) -> str:
     """从 设定/世界观/ 目录下的 MD 文件同步数据到 DB。
     递归扫描子目录，解析 ## category: name 格式，upsert 到 world_settings 表。
     每次写作前调一次，确保 DB 与文件一致。"""
@@ -592,9 +578,7 @@ def sync_lorebook(novel_name: str) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
-@mcp.tool
-@mcp_tool
-def engine_detail(engine_type: str, novel_name: str) -> str:
+def _engine_detail(engine_type: str, novel_name: str) -> str:
     """加载写作引擎参考。从 world_settings 读取，模型可自定义覆盖。
       novel_name: 小说名称
     """
@@ -663,3 +647,66 @@ def writing_spec(novel_name: str) -> str:
         specs = [dict(r) for r in rows]
         return json.dumps({"specs": specs}, ensure_ascii=False)
     return json.dumps({"specs": [], "note": "未设置写作规范。用 world_upsert(category='writing_spec') 添加"}, ensure_ascii=False)
+
+
+# ═══════════════════════════════════════════════════════════
+# Dispatch: world(action=...)
+# ═══════════════════════════════════════════════════════════
+
+@mcp.tool
+@mcp_tool
+def world(novel_name: str, action: str = "query", category: str = "",
+          name: str = "", data: dict = None, keys: list = None,
+          secondary_keys: list = None, tags: list = None,
+          related_ids: list = None, volume_range: str = "",
+          writing_guide: str = "", lorebook_id: str = "",
+          priority: int = 30, is_constant: bool = False,
+          region: str = "", faction_id: int = 0,
+          volume: str = "", regions: str = "",
+          faction_names: str = "", categories: str = "",
+          include_constants: bool = True,
+          reason: str = "", updates_json: str = "") -> str:
+    """世界观设定管理。
+
+    Actions:
+    - upsert: 新增或更新设定。需 category, name, data。可选 keys/secondary_keys/tags/related_ids/volume_range/writing_guide/lorebook_id/priority/is_constant/region/faction_id。
+    - query: 查询设定。可选 category/name/region/volume/faction_id/include_constants。
+    - load_context: 分层加载上下文。可选 volume/regions/faction_names/categories/include_constants。
+    - delete: 删除设定。需 category, name。
+    - deactivate: 停用设定。需 category, name, reason。
+    - batch_update_meta: 批量更新元数据。需 updates_json。
+    """
+    if action == "upsert":
+        # Convert None params to _UNSET for sentinel detection
+        _keys = _UNSET if keys is None else keys
+        _secondary_keys = _UNSET if secondary_keys is None else secondary_keys
+        _tags = _UNSET if tags is None else tags
+        _related_ids = _UNSET if related_ids is None else related_ids
+        _volume_range = _UNSET if not volume_range else volume_range
+        _writing_guide = _UNSET if not writing_guide else writing_guide
+        _lorebook_id = _UNSET if not lorebook_id else lorebook_id
+        _priority = _UNSET if priority == 30 else priority
+        _is_constant = _UNSET if not is_constant else is_constant
+        _region = _UNSET if not region else region
+        _faction_id = _UNSET if faction_id == 0 else faction_id
+        return _world_upsert(novel_name, category, name, data,
+                             keys=_keys, secondary_keys=_secondary_keys, tags=_tags,
+                             related_ids=_related_ids, volume_range=_volume_range,
+                             writing_guide=_writing_guide, lorebook_id=_lorebook_id,
+                             priority=_priority, is_constant=_is_constant,
+                             region=_region, faction_id=_faction_id)
+    elif action == "query":
+        _faction_id = faction_id if faction_id > 0 else None
+        return _world_query(novel_name, category, name, region, volume,
+                             faction_id=_faction_id, include_constants=include_constants)
+    elif action == "load_context":
+        return _world_load_context(novel_name, volume, regions, faction_names,
+                                    categories, include_constants)
+    elif action == "delete":
+        return _world_delete(novel_name, category, name)
+    elif action == "deactivate":
+        return _world_deactivate(novel_name, category, name, reason)
+    elif action == "batch_update_meta":
+        return _world_batch_update_meta(novel_name, updates_json)
+    else:
+        return json.dumps({"error": f"Unknown action: {action}. Use upsert/query/load_context/delete/deactivate/batch_update_meta."}, ensure_ascii=False)
