@@ -47,3 +47,17 @@
 - **痛点解决**：PP-17→resolved
 - **结果**：v3.3.0→v3.4.0，84→91（+7），审计 0 FAIL 2 WARN 1 INFO，0 FM-PP 回归
 - **遗留**：Step 3.2 空段落（继承债务）、top_k=50 与规则 ≤10 需例外说明
+
+## R5 — 2026-06-05
+- **策略**：S2+S3 synthesis（实用工作流改进 + 健壮错误处理）
+- **为什么改**：4个痛点——MCP故障时无存储fallback(PP-18)、蒸馏深度不足无法多轮深化(PP-19)、DB↔文档互转机制缺失(PP-20)、ctx_index跨session丢失(PP-21)
+- **改了什么**：
+  1. write_to_storage 三级降级链（MCP→项目文件→/tmp应急）
+  2. import_distill_json 校验协议（三字段必填+质量统计+占位值补全）
+  3. Phase 1.5 已有JSON数据自动导入
+  4. Phase 2.5 递进深化（最多2轮+20K预算+薄弱维度精准精读）
+  5. ctx文件持久化（.ctx-index.md快照+下游自动重建）
+  6. 审计WARN修复：skill_loader fallback、sanitized_name规则、路径规范化
+- **痛点解决**：PP-18→addressed, PP-19→addressed, PP-20→addressed, PP-21→addressed
+- **结果**：评分 91→84（独立审计更严格但0 FAIL），T_val 3/3(100%)，痛点回归 0/9(0%)
+- **遗留**：7个WARN不阻塞交付——最值得关注的是agent模块schema与编排器不一致（下轮优先修复）
