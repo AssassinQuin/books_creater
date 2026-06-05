@@ -1,14 +1,10 @@
 ---
 name: novel-distill
 description: >
-  参考作品蒸馏引擎 v3.5.0。批露式架构：编排器调度6个维度子agent模块，
-  每个模块引用对应元skill方法论指导蒸馏。borrowable独立存储+向量+ctx_index三通道检索。
-  v3.5.0: Phase 1.5 已有JSON导入、Phase 2.5 多轮递进深化、MCP三级降级链(write_to_storage)、
-  JSON import校验协议(import_distill_json)、ctx文件持久化+自动恢复。
-  v3.4.0: source_context/elements/adaptation_map 三字段实现跨项目通用适配映射，
-  维度差异化 schema（6维度各有专属 elements/adaptation_map 结构），
-  输出校验链（complete/partial_quality 质量标记）。
-  文件输出：sync_db_to_files 统一 DB→文件，模板驱动保证一致性。
+  参考作品蒸馏引擎 v4.0.0。项目方向感知蒸馏：检测活跃项目品类需求，
+  按相关度定向提取 borrowable 模式。中性化输出（抽象属性映射）。
+  批露式架构：编排器调度6维度子agent，每个引用对应元skill方法论。
+  三通道检索：ctx_index + DB向量 + keyword。文件统一归档+tmp自动清理。
   触发词：蒸馏XX/分析小说/拆解小说/蒸馏参考/导入蒸馏/深化蒸馏
 allowed-tools:
   - mcp__novel-db__*
@@ -23,107 +19,53 @@ allowed-tools:
   - Grep
   - Bash
   - Agent
-version: "3.5.0"
+version: "4.0.0"
 ---
 
-# 参考作品蒸馏引擎
-
-## 触发
-
-用户说"蒸馏XX""分析小说""拆解小说""蒸馏参考"。
-扩展触发："导入蒸馏""导入{JSON文件}""深化蒸馏""深化{作品名}的{维度}"。
+# 参考作品蒸馏引擎 v4.0.0
 
 ## 核心概念
 
-**`_参考库`**：novel-db 中的特殊小说名，存储所有参考作品的蒸馏数据。不绑定任何具体小说，全局共享。
+**`_参考库`**：novel-db 特殊小说名，存储所有参考作品蒸馏数据，全局共享。
 
-**四阶段流程**（v3.5.0 新增 Phase 1.5 和 Phase 2.5）：
-- Phase 0 输入确认 + 类型识别
-- Phase 1 粗提取 + 作品画像
-- **Phase 1.5 已有数据导入**（v3.5.0：检测已有 JSON → import_distill_json 校验 → 导入 DB）
-- Phase 2 精准蒸馏（定位 → 子agent并行蒸馏 → borrowable独立存储 → 向量索引）
-  - **Phase 2.5 递进深化**（v3.5.0：薄弱维度精准精读 + 二轮提取 → 合并）
-- Phase 3 蒸馏报告 + 下游消费指引 + **ctx 文件持久化**
+**项目方向感知**（v4.0 新增）：
+- Phase 0 检测活跃项目（从 CLAUDE.md 提取 genre/theme/needs）
+- Phase 1 按项目需求对维度打相关度分（1-5）
+- borrowable 新增 `project_relevance` 字段：`{project_name: {score, reason}}`
+- 蒸馏报告按相关度排序，高相关模式优先展示
 
-**批露式架构**：
-- 6个维度各有独立 agent 模块（`agents/dim-{维度}.md`）
-- 编排器（本文件）负责调度，子agent执行具体维度蒸馏
+**批露式架构**：6个维度各有独立 agent 模块（`agents/dim-{dim}.md`），编排器调度。
 
-**三通道检索**：
-- ctx_index 知识库：下游 skill 用 `ctx_search` 快速检索
-- DB 向量检索：`vector_search` / `db_search` 语义精准查找
-- borrowable 独立存储：每个可借鉴模式单独可查
+**三通道检索**：ctx_index（最快）→ DB向量（语义精准）→ keyword（兜底）。
 
-**ctx_index 跨 session 持久化**（v3.5.0）：
-- 蒸馏完成后 ctx_index 内容写入 `novels/_参考库/{作品名}/.ctx-index.md`
-- 下游 skill 检索 ctx 为空时自动重建（见三层检索协议）
+**文件管理**（v4.0 重构）：
+- 子agent 输出：`/tmp/distill-{作品名}/` 目录（OS 临时，非项目根）
+- 最终归档：`novels/_参考库/{作品名}/` 单层目录
+- Phase 3 末尾：强制清理 `/tmp/distill-{作品名}/`
 
-**文件存储 fallback**（v3.5.0）：
-- MCP 可用时：world_upsert → sync_db_to_files
-- MCP 不可用时：降级到 `novels/_参考库/{作品名}/distill/{维度}.json`
-- 详见"MCP 降级链"章节
-
-**borrowable 跨项目通用设计原则**：
-- adaptation_map 使用抽象属性要求，不做具名替换
-- source_context 中性描述原文设定基底
-- elements 以抽象类别描述可替换组件
-
-## MCP 降级链（v3.5.0 全局容错协议）
-
-所有涉及 world_upsert 的步骤必须遵循此降级链：
-
-```
-write_to_storage(novel_name, category, name, data, tags):
-    # 名称安全化：替换非字母数字/非中文字符为 _，截断超 50 字符
-    sanitized_name = name 替换 [^a-zA-Z0-9一-鿿_-] 为 _，截断至 50 字符
-
-    # L1: MCP 写入
-    尝试 world_upsert(novel_name, category, name, data, tags)
-    IF 成功: 记录 "MCP_OK: {category}/{name}"，返回 success
-    IF 失败: 记录 "MCP_FAIL: {category}/{name}"，进入 L2
-
-    # L2: 项目文件写入
-    fallback_dir = "novels/_参考库/{作品名}/distill"
-    file_path = "{fallback_dir}/{category}-{sanitized_name}.json"
-    尝试 mkdir -p {fallback_dir} + Write(path=file_path, content=JSON(..., _fallback: true))
-    IF 成功: 记录 "FILE_OK: {file_path}"，返回 degraded
-    IF 失败: 记录 "FILE_FAIL"，进入 L3
-
-    # L3: /tmp 应急
-    tmp_path = "/tmp/distill-{作品名}-{category}-{sanitized_name}.json"
-    Write(path=tmp_path, content=JSON(..., _emergency: true))
-    输出: "MCP 和项目文件均失败，数据已存 {tmp_path}，请手动恢复。"
-    返回 emergency
-```
-
-**日志**：每条降级日志含 `{步骤}|{调用}|{结果}|{降级级别}|{路径}`，Phase 3 报告中汇总。
-
-## JSON Import 校验（已迁移到 MCP 工具）
-
-导入外部 JSON 时使用 `distill_validate_json(json_content)` 或 `distill_import_file(work_name, file_path)`。
-
-校验规则：顶层三字段(dimension/data/borrowable) + 每条 borrowable 的 source_context(>=20字)/elements(非空数组)/adaptation_map(非空数组)。缺失字段自动补全占位值，标记 complete/partial_quality。
+**中性化输出**（v4.0 强化）：
+- source_context：抽象描述设定基底，禁止原作术语
+- replacement_guide：抽象属性要求，禁止具名替换
+- 子agent prompt 含"中性化审计"步骤
 
 ## 执行流程
 
-### Phase 0：输入确认 + 类型识别
+### Phase 0：输入确认 + 项目方向检测
 
 ```
 1. 获取文件路径（用户直接给，或追问）
-2. 验证文件存在：ls {path}
-3. IF 文件不存在 → 追问正确路径
-4. 文件内容校验：
-   - head -20 {path} | grep -c "[\x80-\xff]" → IF = 0 → 可能非文本 → 报错终止
-   - wc -c {path} → IF = 0 → 空文件 → 报错终止
-5. 文件信息统计：
-   - wc -l {path}（行数）
-   - grep -c "^第.*章\|^Chapter\|^\*\*\*" {path}（章节数估计）
-6. 输出概要："文件 {name}，{lines} 行，约 {chapters} 章"
-7. IF 文件 > 2000 行 → 提示将分段读取
-8. 类型识别：读取前 200 行，按关键词匹配作品类型（见类型信号表）
-9. 向量辅助识别（可选）：
-   - vector_search(novel_name="_参考库", query_text="{摘要前100字}")
-   - IF 命中已有蒸馏作品 → 对比类型标签辅助确认
+2. 验证文件：
+   - ls {path} → 不存在 → 追问正确路径
+   - head -20 {path} | grep -c "[\x80-\xff]" → = 0 → 可能非文本 → 报错终止
+   - wc -c {path} → = 0 → 空文件 → 报错终止
+3. 文件统计：wc -l → 行数；grep -c "^第.*章|^Chapter|^\*\*\*" → 章节估计
+4. 输出概要："文件 {name}，{lines} 行，约 {chapters} 章"
+4. 类型识别：前200行关键词匹配（见下表）
+5.【v4.0】项目方向检测：
+   a. 从 CLAUDE.md 读取 Active Project 的 genre/theme/needs
+   b. 提取项目品类标签（如：纯西幻/暗黑奇幻/公路文/种田文）
+   c. 若无活跃项目 → 通用模式（等同 v3.5）
+   d. 输出："检测到活跃项目「{name}」({genre})，蒸馏将优先提取对{genre}有价值的模式"
 ```
 
 **类型信号检测表**：
@@ -154,171 +96,108 @@ write_to_storage(novel_name, category, name, data, tags):
 | 历史架空 | 世界观、人物、节奏 | 叙事手法、亮点 | 能力体系 |
 | 通用 | 全部 ★★ | — | — |
 
+**【v4.0】项目方向维度优先级覆盖**：
+
+当检测到活跃项目时，根据项目品类调整优先级：
+
+```
+IF 活跃项目品类 == "西幻/暗黑奇幻":
+    对所有参考作品，以下维度优先级提升：
+    - 能力体系：★★★（多分支体系设计参考）
+    - 世界观：★★★（设定揭示方式参考）
+    - 节奏结构：★★★（百万字节奏参考）
+    - 叙事手法：★★（信息投放/伏笔管理）
+    - 人物：★★（群像/反派设计）
+    - 亮点：★（创新点灵感）
+```
+
+其他品类按项目需求自行调整（上表仅为示例）。通用规则：与项目品类越近的参考作品，蒸馏优先级越高。
+
+**project_relevance 评分锚点**：
+- 5分=品类一致且模式直接可用（如西幻项目蒸馏西幻作品的能力体系）
+- 3分=品类不同但模式可适配（如西幻项目蒸馏东方玄幻的节奏结构）
+- 1分=品类差异大仅可取灵感（如西幻项目蒸馏蒸汽朋克的机械设定）
+
 ### Phase 1：粗提取 + 作品画像
 
-**目标**：快速识别作品骨架，输出作品画像和推荐维度优先级。
-
-#### Step 1.1：结构识别
-
 ```
-分段读取文件（每段 500-800 行，重叠 50 行）：
-1. 识别卷/章结构（正则：第X卷/第X章/Chapter X）
-2. 记录每个分段的起止位置和标题
-3. 输出结构摘要
-```
-
-#### Step 1.2：逐卷快速摘要
-
-对每个卷/大段，提取（每卷限 200 字）：
-
-```
-- 核心事件（1-2 句）
-- 出现人物（名字列表）
-- 关键设定（地名/能力/势力名）
-- 情绪基调（1 个词）
+1. 结构识别：分段读取（500-800行/段，50行重叠），识别卷/章结构
+2. 逐卷快速摘要（每卷限200字）：核心事件 / 人物 / 设定 / 情绪基调
+3. 维度覆盖检测：6维度信号密度计算
+4.【v4.0】项目相关度评分：
+   FOR dim IN 6维度:
+       relevance = 计算该维度对活跃项目品类的有用度（1-5分）
+       → 基于：品类匹配度 + 项目缺失度 + 已有参考作品覆盖度
+   输出相关度排序，供用户确认
+5. 作品画像写入 DB：write_to_storage("_参考库", "ref_meta", "{作品名}", ...)
+6. 卷摘要写入 DB：write_to_storage("_参考库", "ref_volume", ...)
 ```
 
-#### Step 1.3：维度覆盖检测 + 密度计算
-
-| 维度 | 检测信号 |
-|------|---------|
-| 世界观 | 出现地理描述/历史事件/种族/文化 |
-| 能力体系 | 出现等级/技能/修炼/战斗描述 |
-| 人物 | 出现多人物互动/关系变化/成长 |
-| 叙事手法 | 出现伏笔/悬念/视角切换/非线性叙事 |
-| 节奏结构 | 可识别弧段/高潮/日常/转折 |
-| 核心亮点 | 独特设定/创新手法/高口碑要素 |
-
-密度计算：
+**write_to_storage 降级链**：
 ```
-density = 该维度信号在卷摘要中出现总次数 / 卷总数
-density >= 2 → 高密度（深蒸馏）
-density < 2 → 低密度（快速扫描）
+L1: world(action="upsert") → 成功则返回
+L2: Write("novels/_参考库/{作品名}/distill/{category}-{name}.json") → 成功则返回
+L3: Write("/tmp/distill-{作品名}/{category}-{name}.json") → 应急
 ```
 
-#### Step 1.4：作品画像生成
+### Phase 1.5：已有数据导入
 
-```bash
-# 使用 write_to_storage 降级链写入
-write_to_storage(
-  novel_name="_参考库",
-  category="ref_meta",
-  name="{作品名}",
-  data={...画像数据（同v3.4.0）...}
-)
-
-# 存储卷摘要（每个卷一条）
-FOR vol IN 卷列表:
-    write_to_storage(novel_name="_参考库", category="ref_volume", name="{作品名}-卷{N}", data={...})
-```
-
-#### Step 1.5：输出推荐菜单
+**触发条件**：Phase 1 完成后自动执行，或用户独立触发。
 
 ```
-{作品名} 粗提取完成：
-- {N} 卷，{M} 章
-- 作品类型：{type_signature}
-- 推荐蒸馏重点：{distillation_focus}
-
-可蒸馏维度（按推荐优先级）：
-  [1] 叙事手法 ★★★ — ...
-  ...
-选择要深入蒸馏的维度（可多选，如 1,2,4。留空则蒸馏推荐维度 1-3）：
+1. 扫描已有数据源（按优先级）：
+   a. novels/_参考库/{作品名}/distill/*.json
+   b. /tmp/distill-{作品名}/*.json
+   c. 项目根目录/tmp_distill*.txt（旧格式，需转换）
+2. IF 无文件 → 跳过，进入 Phase 2
+3. IF 有文件 → distill(action="import", work_name, file_path) 批量导入
+4. Import 后输出菜单：[A] 深化 / [B] 新维度 / [C] 报告
 ```
 
-### Phase 1.5：已有数据导入（v3.5.0 新增）
-
-**触发条件**：Phase 1 完成后自动执行，或用户独立触发"导入{JSON文件}"。
-
-```
-1. 扫描已有数据源（按优先级，使用 Glob）：
-   a. novels/_参考库/{作品名}/distill/*.json   ← Phase 2c fallback 产物
-   b. /tmp/distill-{作品名}-*.json              ← 子agent写入的临时文件（绝对路径）
-   c. 项目根目录/tmp_distill_*.txt              ← 旧格式粗提取（需转换）
-
-2. IF 无任何文件 → 跳过 Phase 1.5，进入 Phase 2
-
-3. IF 检测到文件：
-   对每个文件调用 distill_import_file(work_name, file_path)
-   → 自动完成校验 + 批量写入 + 质量标记
-   → 输出导入统计（complete/partial 数量）
-
-4. Import 后输出菜单：
-   [A] 深化已有维度（Phase 2.5）
-   [B] 蒸馏新维度（Phase 2）
-   [C] 直接生成报告（Phase 3）
-```
-
-**独立触发**：用户说"导入 tmp_distill-女巫-world.json"时：
-- 跳过 Phase 0/1，直接执行 `distill_import_file(work_name, file_path)`
+**独立触发**：用户说"导入 xxx.json"时：
+- 跳过 Phase 0/1，直接执行 `distill(action="import", work_name, file_path)`
 - 从文件名提取作品名和维度（格式：distill-{作品名}-{维度}.json）
 
-### Phase 2：精准蒸馏（用户选维度后）
+### Phase 2：精准蒸馏
 
-#### Step 2a：定位（确定蒸馏范围）
+#### Step 2a：定位
 
 ```
-1. 根据所选维度和优先级，生成蒸馏计划
-2. 对每个维度，用 Phase 1 卷摘要定位相关章节
+1. 根据维度+优先级+项目相关度，生成蒸馏计划
+2. 用 Phase 1 卷摘要定位相关章节
 3. 输出蒸馏计划，用户确认后进入 2b
 ```
 
-#### Step 2b：子agent并行蒸馏（批露式调度）
+#### Step 2b：子agent并行蒸馏
 
-**编排器职责**：为每个维度加载对应模块 + 元 skill 方法论，组装子 agent prompt。
+**编排器**：为每个维度加载对应模块 + 元skill方法论，组装子agent prompt。
 
-```
-FOR dim IN 用户选择的维度列表:
-    dim_module = skill_loader("novel-distill", "agent", "dim-{dim}")
-    IF dim_module 为空 OR 包含 "NOT_FOUND":
-        OUTPUT "⚠ 维度模块 {dim} 加载失败，跳过"
-        CONTINUE（下一个维度）
-    meta_skill = META_SKILL_MAP[dim]
-    IF meta_skill != null:
-        methodology = skill_loader(meta_skill.skill, meta_skill.level, meta_skill.resource)
-    ELSE:
-        methodology = ""
-    agent_prompt = assemble_prompt(module, methodology, path, genre, priority, location, summaries)
-END FOR
-```
+维度模块映射：
 
-**元 skill 方法论映射**：
+| 维度 | skill_loader 名称 | 元 skill |
+|------|-------------------|---------|
+| world | dim-world | novel-setup/worldbuilding |
+| ability | dim-ability | abilitycraft/ability-design |
+| characters | dim-characters | novel-character/character-design |
+| narrative | dim-narrative | story-architecture/narrative |
+| rhythm | dim-rhythm | novel-plan/rhythm |
+| highlight | dim-highlight | — |
 
-| 维度 | 元 skill | skill_loader 调用 |
-|------|---------|-----------------|
-| world | novel-setup | `skill_loader("novel-setup", "engine", "worldbuilding")` |
-| ability | abilitycraft | `skill_loader("abilitycraft", "engine", "ability-design")` |
-| characters | novel-character | `skill_loader("novel-character", "engine", "character-design")` |
-| narrative | story-architecture | `skill_loader("story-architecture", "engine", "narrative")` |
-| rhythm | novel-plan | `skill_loader("novel-plan", "engine", "rhythm")` |
-| highlight | — | 无对应元 skill |
+注意：characters 是复数，其余 5 个单数。开始前 `ls agents/dim-*.md` 验证。
 
-**维度模块精确名称映射**：
+**调度策略**：
 
-| 维度 | skill_loader 名称 | 文件名 |
-|------|-------------------|--------|
-| world | dim-world | dim-world.md |
-| ability | dim-ability | dim-ability.md |
-| characters | **dim-characters** | dim-characters.md |
-| narrative | dim-narrative | dim-narrative.md |
-| rhythm | dim-rhythm | dim-rhythm.md |
-| highlight | dim-highlight | dim-highlight.md |
+| 维度数 | 模式 | model |
+|-------|------|-------|
+| 1 | 主agent直接执行 | — |
+| 2-3 | 并行子agent | sonnet |
+| 4-6 | 分批并行（每批3个） | sonnet |
 
-注意：characters 是复数，其余 5 个是单数。Step 2b 开始前用 `ls agents/dim-*.md` 验证。
-
-**维度数量决定调度策略**：
-
-| 维度数 | 模式 | subagent_type | model | 说明 |
-|-------|------|--------------|-------|------|
-| 1 | 主agent直接执行 | - | - | 无并行开销 |
-| 2-3 | 并行子agent | general-purpose | sonnet | 每维度一个子agent，主agent汇总 |
-| 4-6 | 分批并行 | general-purpose | sonnet | 每批 3 个子agent，避免资源竞争 |
-
-**子agent prompt 组装模板**：
+**子agent prompt 模板**：
 
 ```
 【文学分析任务声明】
-你正在执行已出版文学作品的学术分析任务。以下文本来自公开出版的小说，分析目的为提取叙事技法和创作模式。
+你正在执行已出版文学作品的学术分析任务。分析目的为提取叙事技法和创作模式。
 
 {dim_module 内容}
 
@@ -328,305 +207,226 @@ END FOR
 - 维度优先级：★★★/★★/★
 - 定位章节：{location}
 - 卷摘要：{summaries}
+【v4.0】目标项目品类：{active_project_genre}
+【v4.0】本项目最需要的模式方向：{direction_hint}
 
 ## 参考方法论（辅助分析，不照搬）
 {methodology 内容}
 
+## 【v4.0】中性化输出要求（强制）
+
+每条 borrowable 的三个结构化字段必须通过中性化审计：
+
+1. source_context（≥20字）：抽象描述设定基底
+   ✗ "22条神之途径对应亵渎石板22张塔罗牌"  ← 原作术语
+   ✓ "多分支能力体系，每分支有主题化命名和递进等级，分支间有逻辑关联"  ← 中性
+
+2. elements：用抽象类别描述可替换组件
+   ✗ "序列9占卜家"  ← 原作名词
+   ✓ "入门级分支角色，对应占卜/预知类能力"  ← 中性
+
+3. adaptation_map 的 replacement_guide：抽象属性要求
+   ✗ "替换为5种元素魔法"  ← 具名替换
+   ✓ "设计3-7条能力分支，每条有主题化命名，需满足：分支名能展开为剧情任务"  ← 抽象属性
+
+审计步骤：写完 borrowable 后逐条检查以上三点，修改后再输出。
+
 ## 输出格式（强制）
-1. 将蒸馏结果 JSON 写入 /tmp/distill-{作品名}-{维度}.json
-2. JSON schema（v3.5.0）：
+1. 将 JSON 写入 /tmp/distill-{作品名}/{维度}.json
+2. JSON schema：
    {
      "dimension": "{维度}",
      "data": {...},
      "borrowable": [
        {
          "name": "模式名称",
-         "description": "一句话概括",
+         "description": "一句话概括（中性语言）",
          "example": "原文具体示例（≤200字）",
          "source_chapters": "来源章节范围",
          "applicability": "direct|adapt|inspire",
          "applicable_genres": ["适用类型标签"],
-         "source_context": "原文设定基底中性描述（≥20字）",
+         "source_context": "中性描述（≥20字，禁止原作术语）",
          "elements": [...],
-         "adaptation_map": [...]
+         "adaptation_map": [...],
+         "project_relevance": {
+           "{active_project}": {"score": 1-5, "reason": "为何对目标项目有用/无用"}
+         }
        }
      ],
      "metadata": {"distilled_at": "...", "chapters_covered": "..."}
    }
-3. source_context/elements/adaptation_map 为必填字段
-4. 写入完成后打印 "DISTILL_COMPLETE: {维度}"
-5. 只返回摘要（≤500字）
+3. 写入完成后打印 "DISTILL_COMPLETE: {维度}"
+4. 只返回摘要（≤500字）
 ```
 
-**维度-elements 结构映射**：
+**维度-elements 结构**（各维度差异化）：
 
-| 维度 | elements 含义 | 数组元素结构 |
-|------|-------------|------------|
-| 叙事手法 | 叙事技巧组件 | `{"technique": "...", "trigger_chapter": "...", "effect": "...", "frequency": "..."}` |
-| 能力体系 | 升级机制组件 | `{"component": "...", "value_range": "...", "constraint": "...", "progression": "..."}` |
-| 人物 | 角色原型要素 | `{"archetype": "...", "driver": "...", "relation_web": "...", "growth_arc": "..."}` |
-| 世界观 | 设定组件 | `{"component": "...", "detail": "...", "interaction": "...", "reveal_method": "..."}` |
-| 节奏结构 | 节奏单元 | `{"unit_type": "...", "beat_pattern": "...", "transition_trigger": "...", "chapter_span": "..."}` |
-| 核心亮点 | 创新点 | `{"innovation": "...", "impact": "...", "replicability": "...", "risk": "..."}` |
+| 维度 | elements 元素结构 |
+|------|-----------------|
+| 叙事手法 | `{technique, trigger_chapter, effect, frequency}` |
+| 能力体系 | `{component, value_range, constraint, progression}` |
+| 人物 | `{archetype, driver, relation_web, growth_arc}` |
+| 世界观 | `{component, detail, interaction, reveal_method}` |
+| 节奏结构 | `{unit_type, beat_pattern, transition_trigger, chapter_span}` |
+| 核心亮点 | `{innovation, impact, replicability, risk}` |
 
-**维度-adaptation_map 结构映射**：
+**维度-adaptation_map**：统一结构 `{aspect, original, abstract_role, replacement_guide}`。
 
-所有维度统一结构：`{"aspect": "层面", "original": "原文形态", "abstract_role": "抽象功能", "replacement_guide": "替换属性要求"}`
+**并行约束**：每子agent限读3000行，必须写文件，失败→主agent串行重试。并行时子agent间不共享中间结果。
 
-关键约束：replacement_guide 使用抽象属性要求，禁止具名替换。
+### Phase 2.5：递进深化
 
-**并行约束**：
-- 每个子agent限读 3000 行
-- 子agent必须将 JSON 写入 `/tmp/distill-{作品名}-{维度}.json`
-- 任一子agent失败 → 主agent降级串行重试该维度
-- 主agent用 `ctx_execute_file` 提取 JSON
-
-### Phase 2.5：递进深化（v3.5.0 新增）
-
-**目标**：对薄弱维度执行精准精读和二轮提取，提升 borrowable 数量和质量。
-
-**触发条件**（可配置，默认值）：
-- 该维度 borrowable 数量 < 5（Phase 0 时可调：`--deepen-threshold=N`）
-- 该维度 partial_quality 占比 > 50%
-- 用户显式触发："深化{作品名}的{维度}"
-
-**边界保护**：
-- 最多 2 轮深化
-- 每轮 token 预算 ≤ 20K
-- 深化后 borrowable 未增加 → 标记 "ineffective"，不再允许该维度深化
-
-**执行流程**：
-
-```
-1. 薄弱维度评估：
-   result = distill_assess_quality(work_name, deepen_threshold=5)
-   → 返回各维度统计 + weak_dimensions 列表
-   → IF weak_dimensions 为空 AND 非用户触发 → 跳过
-
-2. 输出评估结果，用户确认后执行深化
-
-4. 深化执行：
-   FOR dim IN 薄弱维度:
-       a. 定位薄弱章节：基于 Phase 1 卷摘要中该维度的信号密度，
-          选取密度最低的 1-2 个卷段（已覆盖章节之外的区域）
-       b. 精准精读 1000-2000 行（仅读薄弱卷段，不重读全文）
-       c. 二轮提取（传入已有 borrowable 避免重复）
-       d. 结果合并去重（pattern_name 相同保留更完整者）
-
-5. 输出深化报告：
-   "{维度} 深化完成：新增 {M} 条（总计 {N+M} 条）"
-```
+**触发**：borrowable < 5条 / partial > 50% / 用户触发"深化{作品}的{维度}"
 
 **独立触发**：用户说"深化 将夜 世界观"时：
 - 跳过 Phase 0/1/2，直接进入 Phase 2.5
 - 前置条件：DB 中已有该作品该维度的 borrowable 数据
 - 不满足 → 提示先执行完整蒸馏
 
-### Phase 2c：borrowable 独立存储 + 向量索引
+**边界**：最多2轮，每轮 ≤20K token，深化无增量→标记"ineffective"
 
-**一步完成**：主 agent 从子 agent 的 /tmp JSON 文件读取蒸馏结果后，调用 `distill_batch_write`：
-
+**流程**：
 ```
-distill_batch_write(work_name, borrowables_json)
-→ 自动完成：三字段校验 + quality标记 + 缺失补全 + 批量INSERT/UPDATE + 向量标记
-→ 返回：{ok, total, complete, partial, details[{name, quality, missing_fields}]}
-```
-
-**MCP 不可用时**：降级到 write_to_storage 降级链逐条写入。
-
-**向量索引验证**（写入后）：
-```bash
-result = vector_search(novel_name="_参考库", query_text="{作品名}", top_k=3)
-IF 失败: 降级 db_search(keyword="borrowable", top_k=10) + 标注 "向量验证降级"
+1. distill(action="assess", work_name) → 薄弱维度列表
+2. 用户确认后，对每个薄弱维度精准精读薄弱卷段（1000-2000行）
+3. 二轮提取 + 合并去重
+4. 输出："深化完成：新增 M 条（总计 N+M 条）"
 ```
 
-**维度记录去重规则**：
-- 维度记录 data 只存 borrowable_summary（count + pattern names）
-- 完整 borrowable 只在 ref_borrowable 中
-- 禁止在维度记录中嵌入完整 borrowable 数组
-
-**文件输出（DB→文件同步）**：
-
-```bash
-sync_db_to_files(novel_name="_参考库", data_type="world")
-```
-
-**ctx_index 知识库索引**：
-
-```bash
-ctx_index(content=蒸馏报告全文, source="ref-distill-{作品名}")
-ctx_index(content=模式清单表格, source="ref-patterns-{作品名}")
-```
-
-### Phase 3：蒸馏报告 + 下游消费指引 + ctx 持久化
-
-#### Step 3.1：蒸馏报告（使用 MCP 工具）
+### Phase 2c：borrowable 独立存储
 
 ```
-result = distill_generate_report(work_name)
-→ 返回: {report_markdown, ctx_files: {ref-distill-*, ref-patterns-*, ref-summary-*}, stats}
-→ report_markdown: 完整 Markdown 蒸馏报告（含基础信息/维度统计/模式表格/检索验证）
-→ ctx_files: 三个 ctx 持久化文件内容（供 Write + ctx_index 使用）
+distill(action="batch_write", work_name, borrowables_json)
+→ 自动：校验 + quality标记 + 批量INSERT/UPDATE
+→ 返回：{ok, total, complete, partial}
 ```
 
-模型拿到返回值后：
-1. Write 报告到 `novels/_参考库/{作品名}/蒸馏报告.md`
-2. Write ctx_files 三个文件到对应路径
-3. ctx_index 索引三个 ctx 文件
+**向量索引验证**：`search(action="vector", query_text="{作品名}", top_k=3)`
 
-#### Step 3.2：下游消费指引
+**维度记录去重**：维度 data 只存 summary，完整 borrowable 只在 ref_borrowable。
 
-#### Step 3.3：下游知识注入
+**文件同步**：`sync(action="db_to_files", novel_name="_参考库", data_type="world")`
 
-**1. 更新 CLAUDE.md 参考作品区**：
+### Phase 3：蒸馏报告 + 清理
+
+#### Step 3.1：报告生成
+
 ```
-参考作品：无职转生（✓已蒸馏）、权游（待蒸馏）、将夜（✓已蒸馏）
-
-### 参考作品检索方式
-- 精准：db_search("_参考库", keyword="{作品名}", category="ref_borrowable", top_k=5)
-- 语义：vector_search("_参考库", query_text="XX")
-- 快速：ctx_search(queries=["{作品名}"], source="ref-patterns-{作品名}")
-- 文件：novels/_参考库/{作品名}/蒸馏报告.md → borrowable-{维度}.md
+result = distill(action="report", work_name)
+→ {report_markdown, ctx_files: {ref-distill-*, ref-patterns-*, ref-summary-*}, stats}
 ```
 
-**2. 蒸馏摘要注入 ctx_index**：
+模型操作：
+1. Write 报告 → `novels/_参考库/{作品名}/蒸馏报告.md`
+2. Write `.ctx-index.md` → `novels/_参考库/{作品名}/.ctx-index.md`
+3. ctx_index 索引三个 source
+
+#### Step 3.2：按维度输出 borrowable 详情
+
 ```
-ctx_index(content="# {作品名} 蒸馏摘要\n\n## 检索入口\n...\n## TOP 5 模式\n...", source="ref-summary-{作品名}")
-```
-
-#### Step 3.4：ctx 文件持久化（已合并到 Step 3.1）
-
-`distill_generate_report` 返回的 ctx_files 已包含三个持久化文件内容。
-Step 3.1 中已一次性 Write + ctx_index，无需额外步骤。
-
-#### Step 3.5：DB→文件同步 + 按作品输出（强制）
-
-```bash
-# 1. 聚合备份
-sync_db_to_files(novel_name="_参考库", data_type="world")
-
-# 2. 按作品输出 borrowable 详情（按维度分文件）
 FOR dim IN 已蒸馏维度:
-    db_search(novel_name="_参考库", keyword="{作品名}", category="ref_borrowable", top_k=50)
-    Write(path="novels/_参考库/{作品名}/borrowable-{dim}.md", content=筛选后详情)
+    search(action="keyword", keyword="{作品名}", category="ref_borrowable", top_k=50)
+    Write → novels/_参考库/{作品名}/borrowable-{dim}.md
+```
+
+#### Step 3.3：【v4.0】tmp 文件清理（强制）
+
+```bash
+# 清理子agent输出目录
+rm -rf /tmp/distill-{作品名}/
+
+# 清理项目根目录的旧格式文件（需用户确认）
+ls tmp_distill_*.txt tmp_distill-*.json tmp_chapters*.txt 2>/dev/null
+→ 列出文件 + 大小 → 用户确认后删除
+```
+
+#### Step 3.4：下游知识注入
+
+```
+1. 更新 CLAUDE.md 参考作品区（标注已蒸馏 + 检索方式）
+2. ctx_index 注入蒸馏摘要（source="ref-summary-{作品名}"）
+```
+
+#### Step 3.5：DB→文件同步
+
+```
+sync(action="db_to_files", novel_name="_参考库", data_type="world")
 ```
 
 输出结构：
 ```
 novels/_参考库/
-├── 设定/世界观/ref_*.md      ← sync 聚合备份
 ├── {作品名}/
 │   ├── 蒸馏报告.md
-│   ├── .ctx-index.md          ← ctx 持久化（v3.5.0）
-│   ├── distill/               ← JSON fallback（v3.5.0）
-│   │   └── {dim}.json
-│   ├── world.md
-│   ├── borrowable-叙事手法.md
-│   └── ...
+│   ├── .ctx-index.md
+│   ├── borrowable-{维度}.md    ← 按维度分文件
+│   └── distill/{dim}.json      ← JSON fallback（仅MCP不可用时）
 ```
 
-## 检索接口（其他 skill 使用）
+## 检索接口
 
-### 三层检索协议（含 ctx 恢复）
+### 三层检索协议
 
 ```
 L1: ctx_search（最快）
     → ctx_search(queries=["{作品名} {需求}"], source="ref-patterns-{作品名}")
-    → 命中 → 直接使用
-    → 未命中 → 检查 .ctx-index.md 存在 → Read → ctx_index 重建 → 重试
-    → 仍无 → 降级 L2
-
-L1.5: adaptation_map 检索
-    → ctx_search(queries=["adaptation_map {aspect}"], source="ref-patterns-{作品名}")
+    → 命中 → 直接用
+    → 未命中 → Read .ctx-index.md → ctx_index 重建 → 重试
+    → 仍无 → L2
 
 L2: vector_search（语义精准）
-    → vector_search(novel_name="_参考库", query_text="{需求}")
-    → 命中 ref_borrowable → 检查 quality → complete 直接用 / partial_quality 降级
+    → search(action="vector", novel_name="_参考库", query_text="{需求}")
+    → 命中 → 检查 quality → complete直接用 / partial → L2.5降级
 
-L3: db_search（兜底，top_k=10）
-    → db_search(novel_name="_参考库", keyword="{关键词}", top_k=10)
+L3: keyword_search（兜底）
+    → search(action="keyword", novel_name="_参考库", keyword="{关键词}", top_k=10)
 
-L4: 空结果 → 提示"该作品/模式尚未蒸馏，是否现在蒸馏？"
+L4: 空结果 → "该模式尚未蒸馏，是否现在蒸馏？"
 ```
 
-### adaptation_map 缺失降级指引
+### partial_quality 降级
+
+检索到 partial 时：三选一 [A] 手动适配 [B] 重新蒸馏 [C] 仅灵感参考
+
+### 部分下锅检索
 
 ```
-检索到 partial_quality 时：
-1. 提示缺失字段 + 三选一：[A] 手动适配 [B] 重新蒸馏 [C] 仅灵感参考
-2. 不阻塞当前操作
-3. 选 [A] 则提供该维度的 adaptation_map 空模板
-```
-
-### 部分下锅接口
-
-```
-# 按模式检索
-vector_search(novel_name="_参考库", query_text="{需求}")
-# 按适用性
-db_search(novel_name="_参考库", keyword="direct", category="ref_borrowable", top_k=10)
+# 按模式语义检索
+search(action="vector", novel_name="_参考库", query_text="{需求描述}")
+# 按适用性筛选
+search(action="keyword", novel_name="_参考库", keyword="direct", category="ref_borrowable", top_k=10)
 # 按作品+维度
-db_search(novel_name="_参考库", keyword="{作品名}", category="ref_{维度}", top_k=5)
-# 跨作品
-vector_search(novel_name="_参考库", query_text="日常蓄力 暴击释放 节奏模式")
-# 按 adaptation_map aspect
-vector_search(novel_name="_参考库", query_text="组织形态 定期同步多线情报的枢纽组织")
+search(action="keyword", novel_name="_参考库", keyword="{作品名}", category="ref_{维度}", top_k=5)
+# 跨作品检索（按模式描述）
+search(action="vector", novel_name="_参考库", query_text="日常蓄力 暴击释放 节奏模式")
 ```
 
 ### adaptation_map 使用原则
 
-1. 先读 source_context 判断设定基底兼容性
+1. 先读 source_context 判断兼容性
 2. 再看 elements 识别可替换组件
 3. 参照 adaptation_map 逐项 keep→replace
 4. 禁止直接用 original 做具名替换
-5. 蒸馏数据跨项目通用
 
 ## 大文件处理策略
 
 | 文件大小 | 策略 |
 |---------|------|
 | < 2000 行 | 一次读取 |
-| 2000-10000 行 | 分段读取（每段 800 行，重叠 50 行） |
-| > 10000 行 | Phase 1 仅读首尾+每卷首章，Phase 2 按维度精准读取 |
+| 2000-10000 行 | 分段（800行/段，50行重叠） |
+| > 10000 行 | Phase 1 读首尾+每卷首章，Phase 2 按维度精准读取 |
 
-## 质量保障
+## 关键约束（12条）
 
-1. **交叉验证**：人物关系与世界观设定交叉检查
-2. **引用溯源**：每条数据标注来源章节范围
-3. **避免过度解读**：只提取文本明确存在的内容
-4. **借鉴定级**：borrowable 三级标签 direct/adapt/inspire
-5. **子agent输出校验**：import_distill_json 校验后写入（v3.5.0）
-6. **向量索引验证**：失败时降级用 db_search
-7. **ctx_index 索引**：蒸馏报告+模式清单+检索摘要自动索引
-8. **文件持久化**：sync_db_to_files 聚合 + db_search+Write 按作品输出
-9. **下游知识注入**：更新 CLAUDE.md + ctx_index 注入
-10. **文学分析语境**：子agent prompt 含文学分析声明
-11. **命名一致性**：Step 2b 前用 ls 验证，characters 复数
-12. **db_search 结果控制**：必须带 top_k（≤10）
-13. **borrowable 去重存储**：维度记录只存 summary
-14. **跨项目通用适配**（v3.4.0）：source_context/elements/adaptation_map 必填
-15. **输出校验链**（v3.4.0）：写入前逐条验证三字段
-16. **下游降级兼容**（v3.4.0）：partial_quality 三选一降级
-17. **MCP 降级链**（v3.5.0）：所有 world_upsert 使用 write_to_storage 三级降级
-18. **JSON import 校验**（v3.5.0）：import_distill_json 强制 schema + 质量统计
-19. **多轮递进深化**（v3.5.0）：Phase 2.5 最多2轮 + 20K token预算 + ineffective 检测
-20. **ctx 文件持久化**（v3.5.0）：.ctx-index.md 快照 + 下游自动重建
-
-## 禁止
-
-- 不编造原文没有的内容
-- 不做主观价值判断
-- 不存储完整原文段落
-- 不跳过 Phase 1 直接进入 Phase 2
-- 不在子agent并行时共享未校验的中间结果
-- 不将 borrowable 只嵌在维度 JSON 内不独立存储
-- 不在维度记录中嵌入完整 borrowable 数组
-- 不使用子 agent 执行纯机械 world_upsert 循环
-- 不在 db_search 中省略 top_k
-- 不编造文件内容——Write 数据来源必须是 DB 查询
-- 不在 adaptation_map 的 replacement_guide 中使用具名替换
-- 不将蒸馏数据针对特定目标作品预适配
-- 不在 import_distill_json 校验失败时跳过（v3.5.0）
-- 不跳过 .ctx-index.md 快照写入（v3.5.0）
-- 不在深化无效后继续深化同一维度（v3.5.0）
-- 不在 Phase 2.5 深化时跳过去重直接合并（v3.5.0）
+1. **不编造**：只提取文本明确存在的内容；Write 数据来源必须是 DB 查询
+2. **中性化**：source_context/replacement_guide 禁止原作术语和具名替换
+3. **去重存储**：维度记录只存 summary，完整 borrowable 在 ref_borrowable
+4. **文件清理**：Phase 3 末尾强制清理 tmp 文件（/tmp/ 和项目根）
+5. **top_k 必带**：search(action="keyword") 必须 top_k ≤ 10
+6. **子agent写文件**：输出写入 /tmp/distill-{作品名}/，不返回内联
+7. **项目方向感知**：borrowable 含 project_relevance 字段（评分是检索辅助标签，不改变 borrowable 通用性）
+8. **batch_write 走 MCP**：主agent直接调 distill(action="batch_write")，不用子agent
+9. **Phase 1 前置**：不跳过 Phase 1 直接 Phase 2
+10. **命名一致**：characters 复数，其余单数，开始前 ls 验证
+11. **不存储原文**：不存储完整原文段落，example 限 ≤200 字
+12. **并行隔离**：子agent并行时不共享未校验的中间结果
