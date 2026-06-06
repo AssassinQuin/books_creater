@@ -1,0 +1,634 @@
+{
+  "dimension": "narrative",
+  "data": {
+    "pov": "多重限知视角交替（鲁路修/朱雀/C.C.三重视角轴），偶尔切入全知视角制造信息落差。Stage4鲁路修POV密度最高(56)，Stage3朱雀POV最强(55)，R2 TURN4 C.C.视角显著增加(25)。三视角共享同一事件但各自携带不同信息量，形成读者拼图体验。",
+    "pacing_pattern": "反转密集驱动型节奏。每2-3章一个信息反转，每5-8章一个结构性反转（阵营瓦解/身份揭露/能力升级）。情绪节拍呈'温水-骤冷-缓慢回温'循环，暖色弧不藏威胁但埋暗线钩子，冷色弧兑现暖色弧的暗线同时制造新的悬念。Stage4尤菲之死是全篇节奏转折点——前半段节奏由'谜题驱动'切换为'后果驱动'。",
+    "hook_types": [
+      {
+        "type": "章首悬念钩",
+        "examples": "Stage1开篇以朱雀对鲁路修的审视切入，读者已知两人表面友谊下的深层裂痕，但不知裂痕来源",
+        "effect": "制造'表面vs深层'的认知张力，让读者在每段日常对话中寻找裂缝"
+      },
+      {
+        "type": "章尾信息反转钩",
+        "examples": "V.V.向朱雀揭露Geass真相——'ZERO拥有超常的力量'、'每一次异常行动同时总会有ZERO在场'，朱雀逐层推导出鲁路修=ZERO",
+        "effect": "将读者的拼图碎片在角色视角内完成拼合，角色'终于知道了'的震撼传递给读者"
+      },
+      {
+        "type": "身份切换钩",
+        "examples": "鲁路修在校园日常与ZERO指挥之间切换，每次切换都伴随着信息量的变化——校园场景读者知道'他是ZERO'，战斗场景读者知道'他还在演学生'",
+        "effect": "双重身份本身成为钩子，读者不断审视每个场景中'哪些人在演戏'"
+      },
+      {
+        "type": "悲剧级联钩",
+        "examples": "尤菲之死后：黑色骑士团民兵溃散→正规军阵型崩溃→井上驾驶舱被炸飞→杉山向不在场的ZERO求救→藤堂独力死守→迪特哈尔特旁观感叹",
+        "effect": "一个事件的多视角余波，每个视角揭示不同层面的损失，层层递进制造绝望"
+      },
+      {
+        "type": "道德悖论钩",
+        "examples": "鲁路修内心独白'真正重要的东西只要有一样就够了。如果不抱着将其他一切全部舍弃的觉悟，你就无法守护最重要的东西'",
+        "effect": "让读者在认同反派逻辑的同时感到不安，无法简单判断对错"
+      }
+    ],
+    "foreshadowing": [
+      {
+        "planted": "Stage0 L79 - C.C.与Geass的契约暗示，'驾驭这非凡力量之人，必将无可避免地走向孤独'",
+        "recalled": "R2 TURN4 - Zero Requiem终局，鲁路修选择孤独地死去完成计划",
+        "span": "全篇9卷，约50000行",
+        "description": "核心主题伏笔：力量的代价是孤独。从开篇序章的诗性预告到终局的自我实现。"
+      },
+      {
+        "planted": "Stage0 L499 - 娜娜莉与朱雀的羁绊，以及娜娜莉双眼的异常",
+        "recalled": "R2 TURN4 L1836+ - 娜娜莉被Geass、最终在Zero Requiem中得知真相",
+        "span": "跨两季8卷",
+        "description": "角色命运伏笔：看似被保护者实则被Geass操纵，打破'娜娜莉是纯粹善良'的读者预期。"
+      },
+      {
+        "planted": "Stage1-SHADOW - Geass能力永久化的早期暗示（L160）",
+        "recalled": "R2 TURN4 L2916+ - 鲁路修Geass永久化、双眼失控的完全体",
+        "span": "8卷，从单眼到双眼的渐进失控",
+        "description": "能力升级伏笔：Geass从可控工具到无法关闭的诅咒，每卷增加一个失控维度。"
+      },
+      {
+        "planted": "Stage0 L1267 - 玛丽安娜之死的核心谜团",
+        "recalled": "R2-TURN 1 L17 + R2 TURN4 - 玛丽安娜真实计划揭晓（C的世界/利用孩子）",
+        "span": "跨两季，从核心谜题到反转揭露",
+        "description": "世界观伏笔：母亲之死的真相与整个世界机制的关联，最终揭露时同时解答多个谜题。"
+      },
+      {
+        "planted": "Stage0 L489 - 朱雀'从内部改变'的理想主义宣言",
+        "recalled": "R2 TURN4 - 朱雀作为ZERO刺杀鲁路修，从体制内改变者变为体制破坏者",
+        "span": "9卷，角色弧从正到反再回到一种扭曲的正",
+        "description": "角色弧伏笔：朱雀的方法论从'内部改革'到'配合Zero Requiem'的转变，证明他的初衷未变但手段彻底颠覆。"
+      }
+    ],
+    "unique_techniques": [
+      {
+        "name": "面具信息隔离",
+        "description": "双重身份不仅是角色设定，更是叙事信息管理工具。面具创造了两个信息域：面具下的人知道面具外的人不知道的一切，反之亦然。切换身份=切换读者的信息权限。",
+        "example": "Stage4-ZERO中鲁路修以学生身份出现在尤菲的特区构想中，读者知道他是ZERO所以能看出他话语中的试探和算计；而当场景切到柯内莉亚视角时，读者又只能通过她的判断来审视ZERO——信息权限随视角切换而改变。"
+      },
+      {
+        "name": "第三方揭露机制",
+        "description": "关键信息不是由主角或反派直接揭露，而是通过信息优势方的第三方（V.V./C.C./查尔斯）选择性告知某角色。第三方拥有上帝视角但只披露有利于自身目的的碎片。",
+        "example": "Stage4-ZERO L2840+ - V.V.出现在朱雀面前逐层揭露Geass真相：'ZERO拥有超常的力量'→列举过往事件中的异常→朱雀自己推导出ZERO=鲁路修。V.V.不是全盘托出，而是引导朱雀自己得出结论，这样读者的震撼来自'推导完成'而非'被告知'。"
+      },
+      {
+        "name": "悲剧级联余波",
+        "description": "重大悲剧事件后不立即切走，而是用3-5个不同角色的视角展示事件的即时余波，每个视角聚焦不同层面的损失（战术/情感/信任/生存），形成层叠式的绝望递进。",
+        "example": "尤菲之死后的余波链：民兵溃散（恐惧回归）→井上被炸飞（干部死亡）→杉山向不在场的ZERO求救（信任动摇）→藤堂独力死守（战术绝望）→迪特哈尔特旁观感叹（智囊失控）→柯内莉亚感情爆发（对手的崩溃）。每个角色只看到自己这一层的灾难，读者拼合后看到全貌。"
+      },
+      {
+        "name": "传说化叙事收束",
+        "description": "终局后用'后世传说/轶事'来收束叙事。虚构的暴君轶事（杀猫镇民、选美毒气室）将严肃的牺牲转化为荒诞传说，让读者的情感在荒诞中得到释放——笑中带泪的收束技巧。",
+        "example": "R2 TURN4 Epilogue - '所谓无道暴君鲁路修在位的时间并不长。但在这短短的时间里，也有大量有关他的轶事流传于世。当然了，其中有很多荒诞不经的成分。譬如这个。一天，鲁路修和自己的骑士枢木朱雀视察了不列颠国内的某个小镇……' 用荒诞传说包裹真实的牺牲，让读者在讽刺笑声中完成情感宣泄。"
+      },
+      {
+        "name": "视角决定正邪",
+        "description": "同一事件在不同角色视角中呈现截然相反的道德判断。作者通过视角切换而非旁白来传达'正义是相对的'这一主题，从不直接评判任何一方。",
+        "example": "作者后记直接阐述技法理念：'本作大致分成了体制方与反体制方两大视点……正义不再是正义，邪恶也不再是邪恶了。有时连身为旁观者这一事实都可能成为恶。' 迪特哈尔特对ZERO的崇拜、朱雀对ZERO的憎恨、鲁路修对自身的清醒认知——三种视角三套正义逻辑。"
+      },
+      {
+        "name": "渐进式能力失控",
+        "description": "主角的核心能力不是线性升级，而是渐进失控。每卷增加一个失控维度（次数增加→条件放宽→无法关闭→双眼化→永久化），能力的强大与代价同步增长，形成'越强越危险'的内在张力。",
+        "example": "Geass失控时间线：Stage1可控（单次使用）→Stage2条件放宽（对同一人多次使用导致永久服从）→Stage3次数增加（不自觉发动）→Stage4关键失控（对尤菲的永久命令）→R2无法关闭→双眼化→完全体。每一步失控都推动一个重大剧情转折。"
+      },
+      {
+        "name": "计划内嵌计划",
+        "description": "最终揭露主角的终极计划包含了之前所有的'失败'和'意外'。读者回溯时会发现那些看似失误的情节其实都是计划的一部分——但这不是事后合理化，而是作者确实在早期就埋下了足够模糊的暗示。",
+        "example": "Zero Requiem：鲁路修成为暴君→收集全世界憎恶→让朱雀以ZERO身份刺杀自己→用'暴君之死'统一世界。R2前期看似鲁路修性格大变、变得冷酷无情，终局揭露这是计划的一部分——成为真正的魔王才能让'魔王被消灭'具有世界性的意义。"
+      }
+    ],
+    "info_delivery": "三层信息投放体系：(1)主角知情-读者知情-配角不知情（日常场景中的戏剧反讽，如鲁路修以学生身份与将来的敌人对话）；(2)主角知情-读者不知情-配角不知情（鲁路修的真实计划，读者直到终局才完全理解）；(3)第三方知情-主角不知情-读者不知情（V.V./查尔斯/Marianne的隐藏议程，通过选择性揭露逐步释放）。信息揭露的核心技巧是'引导推导而非直接告知'——让角色或读者自己拼出结论。"
+  },
+  "borrowable": [
+    {
+      "name": "面具信息隔离",
+      "description": "双重身份作为叙事信息管理工具，切换身份=切换读者的信息权限",
+      "example": "鲁路修以学生身份出现在尤菲的特区构想中时，读者知道他是ZERO所以能看出他话语中的试探和算计；场景切到柯内莉亚视角时，读者只能通过她的判断审视ZERO——信息权限随视角切换而改变",
+      "source_chapters": "Stage1-SHADOW至R2 TURN4",
+      "applicability": "direct",
+      "source_context": "鲁路修拥有学生和ZERO双重身份，校园场景与战场场景交替出现，读者在不同视角中携带不同信息量",
+      "elements": [
+        {
+          "technique": "信息权限切换",
+          "trigger_chapter": "Stage1-SHADOW",
+          "effect": "读者在不同视角中携带不同信息量，形成拼图体验",
+          "frequency": "每卷20-60处"
+        },
+        {
+          "technique": "戏剧反讽制造",
+          "trigger_chapter": "Stage1-SHADOW",
+          "effect": "读者知道角色身份真相时，每个日常场景都变成紧张源",
+          "frequency": "每卷10-30处"
+        }
+      ],
+      "adaptation_map": [
+        {
+          "aspect": "双重身份",
+          "original": "学生/叛逆领袖ZERO",
+          "abstract_role": "表面身份/隐藏身份",
+          "replacement_guide": "任何两个社会角色，要求一个是弱势一个是强势，形成反差"
+        },
+        {
+          "aspect": "信息隔离装置",
+          "original": "面具",
+          "abstract_role": "身份切换的物理/社会标志",
+          "replacement_guide": "可用面具/化名/变形术/幻术/社会地位切换等"
+        },
+        {
+          "aspect": "信息权限管理",
+          "original": "视角切换改变读者知情权",
+          "abstract_role": "叙事视角作为信息阀门",
+          "replacement_guide": "保持三视角结构，确保每卷至少两个信息权限层级"
+        }
+      ],
+      "project_relevance": {
+        "这次不一样": {
+          "score": 5,
+          "reason": "主角如有秘密身份（觉醒者/地下组织成员），面具信息隔离可直接应用。以太世界观中能力者身份本身就是信息差来源。"
+        }
+      },
+      "applicable_genres": [
+        "任何拥有秘密身份/双重角色的叙事，特别是政治权谋和间谍题材"
+      ]
+    },
+    {
+      "name": "第三方揭露机制",
+      "description": "关键信息由信息优势方选择性告知角色，引导角色自行推导出结论而非直接告知",
+      "example": "V.V.出现在朱雀面前，不是直接说'鲁路修就是ZERO'，而是列举过往事件中的异常：'每一次异常行动同时总会有ZERO在场'——让朱雀自己拼出鲁路修=ZERO的结论，读者的震撼来自推导完成而非被告知",
+      "source_chapters": "Stage4-ZERO",
+      "applicability": "direct",
+      "source_context": "尤菲之死后，V.V.向朱雀揭露Geass真相和鲁路修的ZERO身份，朱雀在引导下自行推导",
+      "elements": [
+        {
+          "technique": "选择性信息碎片",
+          "trigger_chapter": "Stage4-ZERO",
+          "effect": "第三方只给出推导线索而非结论，角色和读者同步完成拼图",
+          "frequency": "全篇关键转折5-8次"
+        },
+        {
+          "technique": "引导推导而非告知",
+          "trigger_chapter": "Stage4-ZERO",
+          "effect": "让角色自己说出真相，比被告知的情感冲击力强3-5倍",
+          "frequency": "重大揭露时使用"
+        }
+      ],
+      "adaptation_map": [
+        {
+          "aspect": "信息揭露者",
+          "original": "V.V.（神秘存在）",
+          "abstract_role": "拥有上帝视角的第三方",
+          "replacement_guide": "可用古老存在/预言者/史官/知情NPC，要求其有独立动机不完全是工具人"
+        },
+        {
+          "aspect": "揭露方式",
+          "original": "列举异常→引导推导",
+          "abstract_role": "碎片化信息投放",
+          "replacement_guide": "给3-5个线索让角色/读者自己推导，不要直接说答案"
+        },
+        {
+          "aspect": "揭露动机",
+          "original": "V.V.推动自己的计划",
+          "abstract_role": "第三方的私心",
+          "replacement_guide": "揭露者必须有自己的目的，不是好心告知而是利用信息达成目的"
+        }
+      ],
+      "project_relevance": {
+        "这次不一样": {
+          "score": 4,
+          "reason": "以太世界观中C.C.式的古老存在可以作为信息揭露者。真相揭露时用碎片推导法比直接告知更有冲击力。"
+        }
+      },
+      "applicable_genres": [
+        "任何需要揭露重大秘密的转折点，特别是反转叙事"
+      ]
+    },
+    {
+      "name": "悲剧级联余波",
+      "description": "重大事件后用3-5个不同角色的视角展示即时余波，每层聚焦不同层面的损失，层叠递进制造绝望",
+      "example": "尤菲死后：民兵溃散（恐惧回归）→井上被炸飞（干部死亡）→杉山向不在场的ZERO求救（信任动摇）→藤堂独力死守（战术绝望）→迪特哈尔特旁观感叹（智囊失控）→柯内莉亚感情爆发（对手崩溃），每个角色只看到自己这一层的灾难",
+      "source_chapters": "Stage4-ZERO",
+      "applicability": "direct",
+      "source_context": "尤菲之死引发黑色骑士团全线崩溃，作者用6个不同视角逐层展示灾难的各个维度",
+      "elements": [
+        {
+          "technique": "多视角余波链",
+          "trigger_chapter": "Stage4-ZERO",
+          "effect": "每个角色只看到灾难的一层，读者拼合后看到全貌的绝望",
+          "frequency": "重大转折后使用"
+        },
+        {
+          "technique": "损失分层递进",
+          "trigger_chapter": "Stage4-ZERO",
+          "effect": "从战术到情感到信任到生存，层层加码不让读者喘息",
+          "frequency": "全篇3-4次大级联"
+        }
+      ],
+      "adaptation_map": [
+        {
+          "aspect": "余波视角选择",
+          "original": "民兵→干部→将领→智囊→敌将",
+          "abstract_role": "从底层到高层到对手的视角链",
+          "replacement_guide": "选3-5个不同层级的角色，每个聚焦一个损失维度"
+        },
+        {
+          "aspect": "级联节奏",
+          "original": "每个视角1-3段快速切换",
+          "abstract_role": "短促有力的视角跳跃",
+          "replacement_guide": "每个视角不超过200字，快速切换形成节奏感"
+        },
+        {
+          "aspect": "绝望递进",
+          "original": "从战术失败到信任崩塌",
+          "abstract_role": "物质损失→情感损失→信念损失",
+          "replacement_guide": "前两个视角写物质损失，中间写情感，最后写信念动摇"
+        }
+      ],
+      "project_relevance": {
+        "这次不一样": {
+          "score": 5,
+          "reason": "暗黑奇幻中重大事件（战役失败/角色死亡）后的级联余波可制造强烈的情感冲击。特别是群像结构下每个配角的损失都能击中不同读者。"
+        }
+      },
+      "applicable_genres": [
+        "重大转折/角色死亡/阵营瓦解后的余波处理"
+      ]
+    },
+    {
+      "name": "渐进式能力失控",
+      "description": "主角核心能力渐进失控而非线性升级，每卷增加一个失控维度，强大与代价同步增长",
+      "example": "Geass失控线：可控（单次指令）→条件放宽（对同一人多次=永久）→次数增加（不自觉发动）→关键失控（对尤菲的不可逆命令）→无法关闭→双眼化→完全体。每一步失控都推动剧情转折，能力的强大与代价形成'越强越危险'的内在张力",
+      "source_chapters": "Stage1-SHADOW至R2 TURN4",
+      "applicability": "direct",
+      "source_context": "Geass力量从可控工具到无法关闭的诅咒，每卷增加一个失控维度并推动重大剧情",
+      "elements": [
+        {
+          "technique": "失控维度递进",
+          "trigger_chapter": "Stage1-SHADOW",
+          "effect": "每一步失控都制造新的叙事可能性和角色困境",
+          "frequency": "每卷1次失控升级"
+        },
+        {
+          "technique": "代价与强大同步",
+          "trigger_chapter": "Stage2-KNIGHT",
+          "effect": "力量越强代价越大，读者既期待升级又害怕升级",
+          "frequency": "持续贯穿全篇"
+        }
+      ],
+      "adaptation_map": [
+        {
+          "aspect": "失控维度",
+          "original": "使用次数→控制力→范围→永久性",
+          "abstract_role": "力量的使用代价逐层升级",
+          "replacement_guide": "设定3-5个失控维度，每个对应一次剧情转折"
+        },
+        {
+          "aspect": "失控触发事件",
+          "original": "对尤菲的不可逆命令",
+          "abstract_role": "失控引发的不可逆灾难",
+          "replacement_guide": "在暖色弧结尾安排失控事件，让主角的能力成为悲剧的导火索"
+        },
+        {
+          "aspect": "终极形态",
+          "original": "双眼Geass完全体",
+          "abstract_role": "力量失控的最终形态",
+          "replacement_guide": "终极形态不应是纯强化，而应包含重大代价（丧失人性/记忆/感知等）"
+        }
+      ],
+      "project_relevance": {
+        "这次不一样": {
+          "score": 5,
+          "reason": "以太觉醒者的5境界体系可与渐进失控完美结合。觉醒→洞见的每一步升级都伴随着失控风险，创造'越强越危险'的张力。"
+        }
+      },
+      "applicable_genres": [
+        "任何力量体系设定，特别是有明确升级路径的能力系统"
+      ]
+    },
+    {
+      "name": "计划内嵌计划",
+      "description": "最终揭露主角的终极计划包含了之前所有'失败'和'意外'，读者回溯发现那些失误其实是计划的一部分",
+      "example": "Zero Requiem：鲁路修成为暴君→收集全世界憎恶→让朱雀以ZERO身份刺杀自己。R2前期看似鲁路修性格大变变得冷酷无情，终局揭露这是计划——成为真正的魔王才能让'魔王被消灭'有世界性意义。这不是事后合理化，因为作者确实在早期埋下了模糊暗示",
+      "source_chapters": "R2全卷至R2 TURN4",
+      "applicability": "direct",
+      "source_context": "Zero Requiem计划将R2全部看似OOC的鲁路修行为统一解释为宏大计划的一部分",
+      "elements": [
+        {
+          "technique": "行为重新解释",
+          "trigger_chapter": "R2 TURN4",
+          "effect": "读者回溯时重新理解之前所有'异常行为'，获得二次震撼",
+          "frequency": "终局1次，但暗示贯穿后半段"
+        },
+        {
+          "technique": "模糊前兆",
+          "trigger_chapter": "R2-TURN 1",
+          "effect": "早期埋下的暗示足够模糊，既不剧透也不算作弊",
+          "frequency": "后半段每卷2-3处模糊暗示"
+        }
+      ],
+      "adaptation_map": [
+        {
+          "aspect": "终极计划",
+          "original": "Zero Requiem（自毁式救世）",
+          "abstract_role": "包含所有前文的宏大终局",
+          "replacement_guide": "终局计划必须能重新解释后半段至少3个'异常行为'"
+        },
+        {
+          "aspect": "模糊暗示",
+          "original": "鲁路修冷酷化被解释为计划的一部分",
+          "abstract_role": "行为异常的合理解释",
+          "replacement_guide": "异常行为必须有表面解释（性格变化）和深层解释（计划的一部分）双重可读性"
+        },
+        {
+          "aspect": "二次震撼",
+          "original": "读者知道结局后回看前文获得新理解",
+          "abstract_role": "重读价值",
+          "replacement_guide": "至少3个前文场景在知道结局后产生完全不同的含义"
+        }
+      ],
+      "project_relevance": {
+        "这次不一样": {
+          "score": 4,
+          "reason": "百万字长篇的终局设计可以借鉴此技法。主角的最终计划如果能重新解释后半段30%以上的'异常行为'，将极大提升重读价值。但需要极早期就开始埋设模糊暗示。"
+        }
+      },
+      "applicable_genres": [
+        "长篇叙事的终局设计，特别是反英雄主角"
+      ]
+    },
+    {
+      "name": "传说化收束",
+      "description": "终局后用后世荒诞传说/轶事收束叙事，将严肃牺牲转化为讽刺喜剧，让读者在笑中带泪中完成情感宣泄",
+      "example": "R2 TURN4 Epilogue列举暴君鲁路修的荒诞轶事：因猫偷鱼杀光全镇居民、因美女不逊全部送入毒气室。读者知道这些是夸张编造，知道真实的鲁路修为了世界牺牲了一切——荒诞传说与真实牺牲的反差制造了'笑中带泪'的收束效果",
+      "source_chapters": "R2 TURN4 Epilogue",
+      "applicability": "direct",
+      "source_context": "Zero Requiem后，用后世流传的荒诞暴君传说收束全篇，读者的真实记忆与传说的荒诞形成情感反差",
+      "elements": [
+        {
+          "technique": "荒诞传说包裹真实",
+          "trigger_chapter": "R2 TURN4",
+          "effect": "读者笑着读完轶事后突然意识到真实的悲剧分量，情感反差加倍",
+          "frequency": "终局1次"
+        },
+        {
+          "technique": "读者知情优越感",
+          "trigger_chapter": "R2 TURN4",
+          "effect": "读者知道真相所以能欣赏传说的荒诞，这种知情优越感强化了与主角的情感联结",
+          "frequency": "尾声使用"
+        }
+      ],
+      "adaptation_map": [
+        {
+          "aspect": "传说内容",
+          "original": "暴君鲁路修的荒诞轶事",
+          "abstract_role": "与真实形象截然相反的后世传说",
+          "replacement_guide": "传说必须足够荒诞且与角色真实形象形成强烈反差"
+        },
+        {
+          "aspect": "情感反差",
+          "original": "荒诞轶事vs真实牺牲",
+          "abstract_role": "喜剧外壳包裹悲剧内核",
+          "replacement_guide": "先用2-3个笑话让读者放松，最后一句点出真实情感"
+        },
+        {
+          "aspect": "知情优越感",
+          "original": "读者知道真相所以能欣赏荒诞",
+          "abstract_role": "读者比传说中的人知道更多",
+          "replacement_guide": "传说中的'事实'必须与读者已知的事实矛盾，利用信息差制造优越感"
+        }
+      ],
+      "project_relevance": {
+        "这次不一样": {
+          "score": 3,
+          "reason": "百万字终局可考虑此收束技巧。主角如果牺牲了自己，后世对他的误解/神化/妖魔化可以作为尾声的情感落点。"
+        }
+      },
+      "applicable_genres": [
+        "长篇叙事的终局/尾声处理"
+      ]
+    },
+    {
+      "name": "视角决定正邪",
+      "description": "同一事件在不同角色视角中呈现截然相反的道德判断，通过视角切换而非旁白传达'正义是相对的'",
+      "example": "鲁路修的同一个行动：迪特哈尔特视为'英雄的魅力'、朱雀视为'不可饶恕的罪恶'、柯内莉亚视为'必须消灭的威胁'、鲁路修自己视为'必要的代价'。作者从不直接评判，让读者自己在视角切换中形成判断",
+      "source_chapters": "Stage0至R2 TURN4（全篇贯穿）",
+      "applicability": "direct",
+      "source_context": "全篇采用多视角交替叙事，每个角色都有自己的正义逻辑，作者从不通过旁白统一道德判断",
+      "elements": [
+        {
+          "technique": "多视角道德相对化",
+          "trigger_chapter": "Stage0",
+          "effect": "读者无法简单站队，被迫理解每一方的逻辑",
+          "frequency": "每卷5-10次关键视角切换"
+        },
+        {
+          "technique": "不评判原则",
+          "trigger_chapter": "Stage0",
+          "effect": "作者沉默让读者的道德判断更有参与感",
+          "frequency": "贯穿全篇"
+        }
+      ],
+      "adaptation_map": [
+        {
+          "aspect": "视角选择",
+          "original": "鲁路修/朱雀/C.C.三轴",
+          "abstract_role": "至少两个对立立场的视角",
+          "replacement_guide": "每个主要阵营至少有一个POV角色，确保读者能理解每一方的逻辑"
+        },
+        {
+          "aspect": "道德立场",
+          "original": "各角色有各自完整的正义逻辑",
+          "abstract_role": "每个视角都有自洽的道德体系",
+          "replacement_guide": "反派必须有让读者能理解的立场，不是'坏'而是'被困住'"
+        },
+        {
+          "aspect": "旁白克制",
+          "original": "作者后记才直接阐述理念",
+          "abstract_role": "正文不评判，留白给读者",
+          "replacement_guide": "正文中绝不出现'他是对的/错的'这类旁白判断"
+        }
+      ],
+      "project_relevance": {
+        "这次不一样": {
+          "score": 5,
+          "reason": "CLAUDE.md中'反派不是坏的，是被困住的'直接对应此技法。群像叙事中每个阵营的POV角色必须有自己的正义逻辑。"
+        }
+      },
+      "applicable_genres": [
+        "群像叙事、政治题材、道德灰色地带故事"
+      ]
+    },
+    {
+      "name": "三视角拼图叙事",
+      "description": "三个主要POV角色各自携带不同信息量，读者需要跨视角拼合才能获得完整图景。任何单一视角都是残缺的。",
+      "example": "Stage2中C.C.视角占32处（全卷最高），揭示了大量鲁路修和朱雀视角中看不到的背景信息；Stage3朱雀视角飙升到55处，大量从'敌人'角度重新解读前文事件；Stage4鲁路修视角最高(56)但也是信息最不可靠的一卷——因为他自己也在被欺骗",
+      "source_chapters": "Stage0至R2 TURN4（全篇贯穿，各卷比例不同）",
+      "applicability": "direct",
+      "source_context": "鲁路修/朱雀/C.C.三视角各携带不同信息，读者跨视角拼合获得完整图景，任何单一视角都是残缺的",
+      "elements": [
+        {
+          "technique": "视角比例调度",
+          "trigger_chapter": "Stage0",
+          "effect": "通过调整各卷视角比例来控制信息投放节奏",
+          "frequency": "每卷调整一次比例"
+        },
+        {
+          "technique": "不可靠叙述者",
+          "trigger_chapter": "Stage4-ZERO",
+          "effect": "POV角色自身也被欺骗时，读者从最信任的视角获得错误信息",
+          "frequency": "关键转折2-3次"
+        }
+      ],
+      "adaptation_map": [
+        {
+          "aspect": "视角轴选择",
+          "original": "鲁路修/朱雀/C.C.",
+          "abstract_role": "三个信息层级不同的POV角色",
+          "replacement_guide": "选三个角色分别代表'知道最多的''知道一部分的''什么都不知道但能观察的'"
+        },
+        {
+          "aspect": "比例调度",
+          "original": "各卷POV比例不同反映叙事重心",
+          "abstract_role": "通过视角比例控制信息投放",
+          "replacement_guide": "卷级规划时同步规划各POV比例，信息密集卷用'信息少'的视角制造悬念"
+        },
+        {
+          "aspect": "不可靠视角",
+          "original": "鲁路修自身也被欺骗",
+          "abstract_role": "最信任的POV提供错误信息",
+          "replacement_guide": "在关键转折让最可信的POV角色被蒙蔽，制造读者的信任危机"
+        }
+      ],
+      "project_relevance": {
+        "这次不一样": {
+          "score": 4,
+          "reason": "以太世界中可以设计三个信息层级：觉醒者视角（知道最多）、普通人视角（知道一部分）、古老存在视角（知道过去但未必理解现在）。"
+        }
+      },
+      "applicable_genres": [
+        "任何群像叙事，特别是有信息差的长篇"
+      ]
+    },
+    {
+      "name": "伏笔跨卷回收网",
+      "description": "伏笔不按单卷完成'埋-收'，而是跨2-8卷的长线伏笔。早期埋设的内容在后半段回收时附带新的信息增量，不是简单解答而是'解答+新谜题'",
+      "example": "玛丽安娜之死：Stage0埋设'母亲被暗杀'→Stage1暗示'与Geass有关'→Stage2-KNIGHT扩展'C的世界存在'→R2揭露'玛丽安娜的计划和查尔斯的关系'→终局揭露完整真相。每次回收不仅回答旧问题，还带出2-3个新问题",
+      "source_chapters": "Stage0至R2 TURN4",
+      "applicability": "direct",
+      "source_context": "5条核心伏笔线跨2-9卷完成回收，每条线的回收节点同时也是新线索的起点",
+      "elements": [
+        {
+          "technique": "长线伏笔",
+          "trigger_chapter": "Stage0",
+          "effect": "读者在回收时获得'原来早就开始了'的二次震撼",
+          "frequency": "5-8条主线级伏笔"
+        },
+        {
+          "technique": "回收+新谜",
+          "trigger_chapter": "Stage2-KNIGHT",
+          "effect": "每次解答旧问题的同时带出新问题，维持悬念不断裂",
+          "frequency": "每次回收至少带出1个新线索"
+        }
+      ],
+      "adaptation_map": [
+        {
+          "aspect": "伏笔跨度",
+          "original": "2-9卷",
+          "abstract_role": "跨卷级长线伏笔",
+          "replacement_guide": "百万字作品应设计5-8条跨10-30章的伏笔线"
+        },
+        {
+          "aspect": "回收节点",
+          "original": "每次回收附带新信息增量",
+          "abstract_role": "解答+新谜的复合节点",
+          "replacement_guide": "回收伏笔时必须同时埋入至少1条新线索，不允许'纯净回收'"
+        },
+        {
+          "aspect": "伏笔密度",
+          "original": "每卷20-45处暗示",
+          "abstract_role": "保持持续但不过密的暗示",
+          "replacement_guide": "每3-5章至少1处暗示，读者能发现但不会提前猜到全部"
+        }
+      ],
+      "project_relevance": {
+        "这次不一样": {
+          "score": 5,
+          "reason": "百万字西幻必须建立跨卷伏笔网。以太的历史循环、觉醒者起源、主角身世等都适合做跨卷长线伏笔。"
+        }
+      },
+      "applicable_genres": [
+        "50万字以上长篇叙事"
+      ]
+    },
+    {
+      "name": "暖冷弧暗线钩",
+      "description": "暖色弧中不藏威胁，但埋下看似无关的暗线钩子（读者会忘的细节），冷色弧时兑现这些暗线作为小胜利的来源",
+      "example": "Stage2-KNIGHT（偏暖色弧）中C.C.视角占32处，大量看似闲笔的记忆碎片和内心独白，在Stage4冷色弧中成为理解Geass失控的关键；Stage0中朱雀'从内部改变'的宣言看似理想主义废话，在R2终局被Zero Requiem重新赋予意义",
+      "source_chapters": "全篇各卷交替",
+      "applicability": "direct",
+      "source_context": "暖色弧埋暗线钩子，冷色弧兑现暗线作为转折燃料",
+      "elements": [
+        {
+          "technique": "暖弧暗线埋设",
+          "trigger_chapter": "Stage0",
+          "effect": "读者在放松时接收信息，不设防所以记忆更深",
+          "frequency": "每个暖色弧3-5个暗线钩子"
+        },
+        {
+          "technique": "冷弧暗线兑现",
+          "trigger_chapter": "Stage4-ZERO",
+          "effect": "兑现暖色弧的遗忘细节，制造'原来那时就在铺垫'的惊喜",
+          "frequency": "冷色弧转折点兑现"
+        }
+      ],
+      "adaptation_map": [
+        {
+          "aspect": "暗线钩子",
+          "original": "C.C.的记忆碎片、朱雀的理想宣言",
+          "abstract_role": "暖色弧中看似无关的重要细节",
+          "replacement_guide": "在日常生活场景中自然插入1-2句'奇怪的细节'，不做强调"
+        },
+        {
+          "aspect": "读者遗忘机制",
+          "original": "暗线钩子不加重复不加强调",
+          "abstract_role": "利用人类遗忘曲线",
+          "replacement_guide": "暗线钩子只出现1次，不重复不强调，让读者自然遗忘"
+        },
+        {
+          "aspect": "兑现时机",
+          "original": "冷色弧最绝望时兑现",
+          "abstract_role": "暗线在最低谷兑现为转机",
+          "replacement_guide": "暗线兑现应出现在读者最绝望的时刻，成为'还有希望'的信号"
+        }
+      ],
+      "project_relevance": {
+        "这次不一样": {
+          "score": 5,
+          "reason": "CLAUDE.md的节奏铁律'暖色弧埋暗线钩子，冷色弧兑现'与此技法完全一致。暗线钩子应自然融入世界观展示（日常即世界观）。"
+        }
+      },
+      "applicable_genres": [
+        "任何需要情绪波浪管理的长篇叙事"
+      ]
+    }
+  ],
+  "metadata": {
+    "distilled_at": "2026-06-05",
+    "total_hooks": 5,
+    "total_foreshadows": 5,
+    "avg_foreshadow_span": "5.4卷（跨季级长线）",
+    "narrative_density_peaks": {
+      "双重身份密度最高卷": "Stage4-ZERO（63处）",
+      "信息不对称密度最高卷": "R2 TURN4（57处）",
+      "反转密度最高卷": "R2 TURN4（87处）",
+      "悲剧讽刺密度最高卷": "R2-TURN 3（33处）",
+      "道德模糊密度最高卷": "Stage3-SWORD（68处）",
+      "钩子密度最高卷": "R2 TURN4（203处）"
+    },
+    "pov_distribution_summary": "鲁路修POV总量最高（Stage4:56），朱雀POV在Stage3达峰（55），C.C.视角在R2后半段显著增加（TURN2:10, TURN3:19, TURN4:25），全知视角仅在Stage4使用较多（9处）暗示作者有意在关键卷让读者获得'上帝视角'再在R2收回去",
+    "cross_volume_foreshadow_count": 5,
+    "borrowable_count": 10,
+    "key_insight": "Code Geass叙事的核心技法是信息管理——通过面具、视角切换、第三方揭露、渐进式失控等机制，精确控制读者在每个时刻知道什么、不知道什么、以为知道什么。三视角拼图结构让同一事件在不同视角中呈现截然不同的面貌，读者必须跨视角拼合才能接近真相。终局的Zero Requiem将全部叙事技法汇聚：面具信息隔离（朱雀继承ZERO面具）、第三方揭露（V.V.揭露Geass真相的后果）、悲剧级联（鲁路修之死的多视角余波）、传说化收束（暴君轶事）。"
+  }
+}

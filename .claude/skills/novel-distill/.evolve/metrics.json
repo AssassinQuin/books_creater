@@ -1,6 +1,6 @@
 {
   "skill": "novel-distill",
-  "total_rounds": 7,
+  "total_rounds": 8,
   "latest_score": 85,
   "scores": [
     49,
@@ -9,6 +9,7 @@
     84,
     91,
     84,
+    85,
     85
   ],
   "deltas": [
@@ -17,7 +18,8 @@
     5,
     7,
     -7,
-    1
+    1,
+    0
   ],
   "avg_score_delta": 7.0,
   "strategies_used": [
@@ -26,7 +28,8 @@
     "S4-context-optimization",
     "S0+S3+S4-synthesis",
     "S2+S3-synthesis",
-    "S2-restructure+script-validation"
+    "S2-restructure+script-validation",
+    "R8-quickfix-normalize"
   ],
   "last_evolved": "2026-06-05",
   "T_train_pass_rates": [
@@ -43,7 +46,7 @@
     "estimated-0.70",
     1.0
   ],
-  "pain_points_resolved": 15,
+  "pain_points_resolved": 18,
   "pain_points_open": 7,
   "pain_points_addressed": 4,
   "regression_count": 0,

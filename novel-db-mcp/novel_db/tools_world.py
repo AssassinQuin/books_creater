@@ -656,9 +656,9 @@ def writing_spec(novel_name: str) -> str:
 @mcp.tool
 @mcp_tool
 def world(novel_name: str, action: str = "query", category: str = "",
-          name: str = "", data: dict = None, keys: list = None,
-          secondary_keys: list = None, tags: list = None,
-          related_ids: list = None, volume_range: str = "",
+          name: str = "", data: dict = None, keys: str = "",
+          secondary_keys: str = "", tags: str = "",
+          related_ids: str = "", volume_range: str = "",
           writing_guide: str = "", lorebook_id: str = "",
           priority: int = 30, is_constant: bool = False,
           region: str = "", faction_id: int = 0,
@@ -677,11 +677,11 @@ def world(novel_name: str, action: str = "query", category: str = "",
     - batch_update_meta: 批量更新元数据。需 updates_json。
     """
     if action == "upsert":
-        # Convert None params to _UNSET for sentinel detection
-        _keys = _UNSET if keys is None else keys
-        _secondary_keys = _UNSET if secondary_keys is None else secondary_keys
-        _tags = _UNSET if tags is None else tags
-        _related_ids = _UNSET if related_ids is None else related_ids
+        # Convert empty/None params to _UNSET for sentinel detection
+        _keys = _UNSET if not keys else keys
+        _secondary_keys = _UNSET if not secondary_keys else secondary_keys
+        _tags = _UNSET if not tags else tags
+        _related_ids = _UNSET if not related_ids else related_ids
         _volume_range = _UNSET if not volume_range else volume_range
         _writing_guide = _UNSET if not writing_guide else writing_guide
         _lorebook_id = _UNSET if not lorebook_id else lorebook_id

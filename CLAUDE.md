@@ -8,12 +8,12 @@
 
 - 状态：`worldbuilding` — Step 5 世界观维度（势力/经济/日常已完成，待地理/种族/文化/历史）
 - NOVEL_NAME：`这次不一样`
-- 参考作品：无职转生（旅行揭示世界）、权游（残酷不可逆）、全职法师（✓已蒸馏）、将夜（✓已蒸馏）、海贼王（同能力不同开发）、诡秘之主（✓已蒸馏）、指环王（✓已蒸馏）、第一序列（✓已蒸馏）、放开那个女巫（✓已蒸馏）、叛逆的鲁鲁修（✓已蒸馏）
+- 参考作品：无职转生（旅行揭示世界）、权游（✓已蒸馏31条）、全职法师（✓已蒸馏）、将夜（✓已蒸馏）、海贼王（同能力不同开发）、诡秘之主（✓已蒸馏）、指环王（✓已蒸馏）、第一序列（✓已蒸馏）、放开那个女巫（✓已蒸馏）、叛逆的鲁鲁修（✓已蒸馏）、故障乌托邦（✓已蒸馏61条）、神墓（✓已蒸馏43条/4维度）
 
 ### 蒸馏作品检索方式
 - 语义检索：`vector_search(novel_name="_参考库", query_text="描述")`
 - 关键词：`db_search(novel_name="_参考库", keyword="作品名", top_k=10)`
-- 快速查看：`ctx_search(queries=["诡秘之主 {模式名}"], source="ref-distill-诡秘之主")`、`ctx_search(queries=["全职法师 {需求}"], source="ref-patterns-全职法师")`、`ctx_search(queries=["指环王 {需求}"], source="ref-patterns-指环王")`、`ctx_search(queries=["第一序列 {需求}"], source="ref-patterns-第一序列")`、`ctx_search(queries=["放开那个女巫 {需求}"], source="ref-patterns-放开那个女巫")`
+- 快速查看：`ctx_search(queries=["权游 {需求}"], source="ref-patterns-权游")`、`ctx_search(queries=["诡秘之主 {模式名}"], source="ref-distill-诡秘之主")`、`ctx_search(queries=["全职法师 {需求}"], source="ref-patterns-全职法师")`、`ctx_search(queries=["指环王 {需求}"], source="ref-patterns-指环王")`、`ctx_search(queries=["第一序列 {需求}"], source="ref-patterns-第一序列")`、`ctx_search(queries=["放开那个女巫 {需求}"], source="ref-patterns-放开那个女巫")`、`ctx_search(queries=["将夜 {需求}"], source="ref-patterns-将夜")`、`ctx_search(queries=["叛逆的鲁鲁修 {需求}"], source="ref-patterns-叛逆的鲁鲁修")`、`ctx_search(queries=["故障乌托邦 {需求}"], source="ref-distill-故障乌托邦")`、`ctx_search(queries=["神墓 {需求}"], source="ref-distill-神墓")`
 - 文件查阅：`novels/_参考库/{作品名}/蒸馏报告.md`
 - 方向：从北到南，春秋战国历史骨架，公路文+种田文混合
 - 核心驱动：以太（Aether）— 封印→复苏→混乱→再封印的历史循环

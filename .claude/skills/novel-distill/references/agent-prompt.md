@@ -54,11 +54,11 @@
 ## 输出格式（强制）
 1. 使用 Write 工具将 JSON 写入 {work_dir}/{维度}.json
    （ctx_execute 仅用于分析，sandbox 内文件不持久化）
-2. JSON schema：
+2. JSON schema（**严格按此结构，不可变体**）：
    {
      "dimension": "{维度}",
      "data": {...},
-     "borrowable": [
+     "borrowable": [                          ← 必须是 "borrowable"，不是 "borrowables"
        {
          "name": "模式名称（≤10字中文）",
          "description": "一句话概括（中性语言）",
@@ -68,7 +68,7 @@
          "applicable_genres": ["适用类型标签"],
          "source_context": "中性描述（≥20字，禁止原作术语）",
          "elements": [...],
-         "adaptation_map": [...],
+         "adaptation_map": [{"aspect":"...","original":"...","abstract_role":"...","replacement_guide":"..."}],  ← 必须是数组
          "project_relevance": {
            "{active_project}": {"score": 1-5, "reason": "为何对目标项目有用/无用"}
          }
@@ -76,13 +76,20 @@
      ],
      "metadata": {"distilled_at": "...", "chapters_covered": "..."}
    }
+
+   **常见错误警告（检查你的输出避免这些）**：
+   ✗ "borrowables": [...]  ← 键名错误，应为 "borrowable"
+   ✗ 输出裸数组 [...]     ← 必须包裹在 {dimension, data, borrowable, metadata} 结构中
+   ✗ "adaptation_map": {"key": "value"}  ← 必须是对象数组 [{aspect, original, abstract_role, replacement_guide}]
+   ✗ 缺失 description/example/source_chapters 等必填字段
+
 3. 写入完成后打印 "DISTILL_COMPLETE: {维度}"
 4. 只返回摘要（≤500字）
 ```
 
 ## 维度 elements 差异化结构
 
-| 维度 | elements 字段 |
+| 维度 | elements 字段（数组内的对象结构） |
 |------|-------------|
 | narrative | `technique, trigger_chapter, effect, frequency` |
 | ability | `component, value_range, constraint, progression` |
@@ -92,3 +99,30 @@
 | highlight | `innovation, impact, replicability, risk` |
 
 adaptation_map 统一结构：`{aspect, original, abstract_role, replacement_guide}`
+
+## dim 模块与 borrowable schema 的关系（重要）
+
+dim 模块（如 dim-narrative.md）中定义的 Schema（如 pov, hook_types, foreshadowing 等）描述的是输出 JSON 的 **`data` 字段**内容，不是 borrowable 数组的结构。
+
+**输出 JSON 的三层结构**：
+```
+{
+  "dimension": "narrative",
+  "data": { ← dim 模块的 Schema 定义的是这一层
+    "pov": "...",
+    "hook_types": [...],
+    ...
+  },
+  "borrowable": [ ← 这一层严格遵循上方的标准 borrowable schema
+    {
+      "name": "...",
+      "description": "...",
+      ...  ← 必须是标准字段，不使用 dim 模块的自定义字段名
+      "elements": [...]  ← elements 的内部结构才使用维度差异化的字段
+    }
+  ],
+  "metadata": {...}
+}
+```
+
+**禁止**：在 borrowable 条目中使用 dim 模块 data 层的字段名（如 technique, trigger_chapter 等）作为顶层字段。这些字段只能出现在 `elements` 数组内部。

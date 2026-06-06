@@ -1,8 +1,8 @@
 ---
 name: novel-distill
 description: >
-  参考作品蒸馏引擎 v5.0.0。项目方向感知 + 脚本校验 + 持久化中间产物。
-  批露式架构：编排器调度6维度子agent，脚本化后处理校验。
+  参考作品蒸馏引擎 v5.1.0。项目方向感知 + 输出规范化 + 脚本校验 + 持久化中间产物。
+  批露式架构：编排器调度6维度子agent，规范化+校验双层后处理。
   三通道检索：ctx_index + DB向量 + keyword。
   触发词：蒸馏XX/分析小说/拆解小说/蒸馏参考/导入蒸馏/深化蒸馏
 allowed-tools:
@@ -18,10 +18,10 @@ allowed-tools:
   - Grep
   - Bash
   - Agent
-version: "5.0.0"
+version: "5.1.0"
 ---
 
-# 参考作品蒸馏引擎 v5.0.0
+# 参考作品蒸馏引擎 v5.1.0
 
 ## 核心概念
 
@@ -85,7 +85,24 @@ version: "5.0.0"
 
 **并行约束**：每agent限读3000行，必须用 **Write 工具**写文件到 `{work_dir}/{dim}.json`，失败→主agent串行重试。
 
-#### 2b.5：脚本校验（v5.0 新增）
+#### 2b.4：输出规范化（v5.1 新增）
+
+子agent 完成写入后，**立即运行规范化脚本**修复常见 schema 偏差：
+
+```bash
+python3 scripts/normalize-distill.py {work_dir}
+```
+
+自动修复项：
+- 键名修正：`borrowables` → `borrowable`
+- 结构包裹：裸数组 → `{dimension, data, borrowable, metadata}`
+- JSON 修复：unquoted strings、trailing commas
+- 字段补全：缺失的 `description`/`example`/`source_chapters`/`applicability`/`applicable_genres`/`project_relevance`
+- 类型转换：`adaptation_map` dict→array、`elements` string→array
+
+**规范化后立即运行校验**，若仍有错误→返回子agent修复。
+
+#### 2b.5：脚本校验
 
 ```bash
 python3 scripts/validate-distill.py {work_dir}
@@ -174,3 +191,4 @@ adaptation_map 使用：先读 source_context → 再看 elements → 逐项 kee
 10. **不存原文**：example 限 ≤200 字
 11. **并行隔离**：子agent 不共享未校验中间结果
 12. **校验必过**：validate-distill.py 错误→返回子agent修复→重跑（最多3次），仍失败标记 partial
+13. **规范化先行**：子agent写入后必须先 normalize-distill.py 再 validate-distill.py，禁止跳过规范化
