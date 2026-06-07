@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+
+log = logging.getLogger(__name__)
 import re
 
 from .db import mcp, query, transaction

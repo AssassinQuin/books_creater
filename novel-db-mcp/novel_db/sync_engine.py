@@ -1533,7 +1533,7 @@ class SyncEngine:
 
         file_keys_seen = set()
         for row in rows:
-            key = str(row.get(tpl.id_field, ""))
+            key = self._resolve_data_key(tpl, row)
             db_hash = _compute_hash(_db_row_to_hashable(dict(row)))
             fpath = self._resolve_filepath(tpl, novel_name, row)
 
@@ -1596,7 +1596,7 @@ class SyncEngine:
             if not rows:
                 return {"error": f"实体不存在: {entity_key}"}
             row = rows[0]
-            data_key = str(row.get(tpl.id_field, ""))
+            data_key = self._resolve_data_key(tpl, row)
             fpath = self._resolve_filepath(tpl, novel_name, row)
             db_hash = _compute_hash(_db_row_to_hashable(dict(row)))
             if os.path.exists(fpath):
