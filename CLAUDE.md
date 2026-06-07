@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-百万字网文创作引擎。Claude Code skills + MCP 驱动结构化长篇创作。
+百万字网文创作引擎。Claude Code skills 驱动结构化长篇创作。
 
 ## Active Project
 
@@ -11,15 +11,14 @@
 - 参考作品：无职转生（旅行揭示世界）、权游（✓已蒸馏31条）、全职法师（✓已蒸馏）、将夜（✓已蒸馏）、海贼王（同能力不同开发）、诡秘之主（✓已蒸馏）、指环王（✓已蒸馏）、第一序列（✓已蒸馏）、放开那个女巫（✓已蒸馏）、叛逆的鲁鲁修（✓已蒸馏）、故障乌托邦（✓已蒸馏61条）、神墓（✓已蒸馏43条/4维度）
 
 ### 蒸馏作品检索方式
-- 语义检索：`vector_search(novel_name="_参考库", query_text="描述")`
-- 关键词：`db_search(novel_name="_参考库", keyword="作品名", top_k=10)`
+
 - 快速查看：`ctx_search(queries=["权游 {需求}"], source="ref-patterns-权游")`、`ctx_search(queries=["诡秘之主 {模式名}"], source="ref-distill-诡秘之主")`、`ctx_search(queries=["全职法师 {需求}"], source="ref-patterns-全职法师")`、`ctx_search(queries=["指环王 {需求}"], source="ref-patterns-指环王")`、`ctx_search(queries=["第一序列 {需求}"], source="ref-patterns-第一序列")`、`ctx_search(queries=["放开那个女巫 {需求}"], source="ref-patterns-放开那个女巫")`、`ctx_search(queries=["将夜 {需求}"], source="ref-patterns-将夜")`、`ctx_search(queries=["叛逆的鲁鲁修 {需求}"], source="ref-patterns-叛逆的鲁鲁修")`、`ctx_search(queries=["故障乌托邦 {需求}"], source="ref-distill-故障乌托邦")`、`ctx_search(queries=["神墓 {需求}"], source="ref-distill-神墓")`
 - 文件查阅：`novels/_参考库/{作品名}/蒸馏报告.md`
 - 方向：从北到南，春秋战国历史骨架，公路文+种田文混合
 - 核心驱动：以太（Aether）— 封印→复苏→混乱→再封印的历史循环
 - 已完成 Phase A（世界观）：
   - Step 0-4：品类感知、创作宪法、世界原则(5条)、氛围DNA三层、行为映射规则
-  - Step 5 维度：能力体系(以太+觉醒+元素魔法+进阶5境+六准则)、势力(5势力+概览)、经济体系、日常生活、文化体系、地理(大陆概览)、历史(三纪简史)、魔物体系
+  - Step 5 维度：能力体系(以太+觉醒+元素能力+进阶5境+六准则)、势力(5势力+概览)、经济体系、日常生活、文化体系、地理(大陆概览)、历史(三纪简史)、魔物体系
   - Step 6 创造性对抗：知情者暗局、浓度上升可观测性
   - Step 7 交叉验证：10项全部通过
   - 术语统一：法师→觉醒者、泉眼/地脉→已清除、多种族→已删除
@@ -28,34 +27,21 @@
 
 ### 断点续传
 
-下次恢复时：进入 Phase B 大纲规划（novel-plan skill）。DB 已写入：core_setting×7, ability×5, faction×6, location×2, economy×1, daily_life×1, culture×1, history×1, bestiary×2。
+下次恢复时：进入 Phase B 大纲规划（novel-plan skill）。
 
 ## Core Rules
 
-### 数据铁律
+### 数据管理
 
-**DB 为权威源，MCP 为唯一操作方式。禁止 sqlite3/Python 直接操作 DB。**
+**文件为唯一权威源，直接读写 markdown 文件。**
 
-```
-skill操作 → MCP工具 → DB → sync_db_to_files() → 文件（人可读副本）
-```
-
-| 权威源 | 读取方式 |
-|--------|---------|
-| 世界观/角色/伏笔/关系 | MCP 工具优先，返回空时回退读文件 |
-| 卷级大纲 | `volume_get()` 优先 |
-| 章节正文 | `Read()` 读文件 |
-
-### 提交前同步检查（强制）
-
-每次 git commit + push 前必须执行：
-
-1. `Read` 检查本次修改的文件，确认内容是预期的（非空/非模板）
-2. 同步：DB→文件用 `sync_db_to_files`，文件→DB 用 `sync_files_to_db`
-3. 同步后再次 `Read` 确认文件未被空数据覆盖
-4. 确认后才可提交推送
-
-**原因**：`sync_db_to_files` 已用空数据覆盖核心设定文件两次。必须验证。
+| 数据类型 | 位置 |
+|----------|------|
+| 世界观/设定 | `novels/{小说名}/设定/世界观/` |
+| 人物档案 | `novels/{小说名}/设定/人物/` |
+| 卷级大纲 | `novels/{小说名}/设定/大纲/` |
+| 章节正文 | `novels/{小说名}/正文/` |
+| 参考蒸馏 | `novels/_参考库/` |
 
 ### 参考文件导航
 
@@ -67,12 +53,11 @@ skill操作 → MCP工具 → DB → sync_db_to_files() → 文件（人可读�
 | `.claude/skills/engines/` | 写作引擎（场景/描写/战斗/叙事/反AI/声音） |
 | `.claude/skills/templates/` | 实体模板（人物/世界观/关系/伏笔/卷大纲/审计报告） |
 | `.claude/skills/phases/` | 阶段执行指令（A1-C3，含全书框架/卷级规划 Agent） |
-| `.claude/skills/shared/` | 共享协议（DB保存/引擎加载/三视角/管线验证/P0修复/增量审计/卷级约束） |
-| `skills/memory/references/mcp-tools.md` | Memory MCP 16个工具完整参数 |
+| `.claude/skills/shared/` | 共享协议（引擎加载/三视角/管线验证/增量审计/卷级约束） |
 
 ## Skill Map
 
-约束层级：L0 基调锚 > L1 行为映射 > L2 氛围DNA > L3 世界观 > L4 品类 > L5 执行规范。高层覆盖低层，氛围DNA 通过 `world_upsert(category='core_setting')` 存DB，下游 skill 自动获取。
+约束层级：L0 基调锚 > L1 行为映射 > L2 氛围DNA > L3 世界观 > L4 品类 > L5 执行规范。高层覆盖低层。
 
 | Skill | 阶段 | 触发词 | 功能 |
 |-------|------|--------|------|
@@ -170,7 +155,7 @@ get_chapter_context → 创意决策(用户确认) → resolve_engines → 逐�
 
 - 审查：大纲/正文/设定/健康/创意 5 种模式
 - 修复：修复/润色/术语修复 3 种模式
-- 健康诊断：`health_check(novel_name)` 检查伏笔积压/配角活跃/暗线推进/卷完成度
+- 健康诊断：检查伏笔积压/配角活跃/暗线推进/卷完成度
 
 ## File Organization
 
@@ -179,7 +164,7 @@ get_chapter_context → 创意决策(用户确认) → resolve_engines → 逐�
 ```
 novels/{小说名}/
 ├── 设定/
-│   ├── 人物/          ← 角色档案（DB同步）
+│   ├── 人物/          ← 角色档案
 │   ├── 世界观/        ← 按题材分类
 │   ├── 大纲/          ← 全书概览 + 卷大纲
 │   ├── 写作/          ← 执行规范 + 作者声音
@@ -192,7 +177,7 @@ novels/{小说名}/
 
 - 大纲用指针引用详情，不复制
 - 同一内容只在主文件完整描述，其他用指针
-- 章节正文先写文件，再调 `writing_finish` 写 DB 元数据
+- 章节正文直接写文件
 
 ### Git 提交规范
 

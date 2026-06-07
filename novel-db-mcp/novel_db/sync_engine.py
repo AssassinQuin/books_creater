@@ -806,8 +806,9 @@ class SyncEngine:
             f.write(full_content)
 
         file_hash = _compute_hash(full_content)
+        db_hash = _compute_hash("\n".join(_db_row_to_hashable(dict(r)) for r in rows))
         _record_file_hash(novel_id, tpl.name, group_key, full_content)
-        _snapshot_sync_hashes(novel_id, tpl.name, group_key, "", file_hash)
+        _snapshot_sync_hashes(novel_id, tpl.name, group_key, db_hash, file_hash)
         return {"wrote": len(rows), "conflict": None}
 
     def _sync_one_to_file(self, tpl: SyncTemplate, novel_id: int,
@@ -869,6 +870,20 @@ class SyncEngine:
                 content_lines.extend(rendered)
 
         full_content = "\n".join(content_lines) + "\n"
+
+        # 安全保护：当渲染内容只有标题（无实际数据）时跳过写入
+        # 防止空 DB data 覆盖文件中的丰富内容（已发生 3 次）
+        non_header_lines = [l for l in content_lines
+                           if l.strip()
+                           and not l.startswith("# ")
+                           and not l.startswith("> ")
+                           and not l.startswith("- **")]
+        if not non_header_lines:
+            log.warning(
+                "sync: 跳过空内容写入 %s (data_key=%s) — DB data 为空，"
+                "保留文件原有内容", fpath, data_key
+            )
+            return {"wrote": False, "conflict": None, "skipped_empty": True}
 
         # 写入文件
         if tpl.merge_mode == "section_replace" and os.path.exists(fpath):
@@ -1531,39 +1546,86 @@ class SyncEngine:
 
         results = {"db_only": [], "file_only": [], "conflict": [], "consistent": []}
 
-        file_keys_seen = set()
-        for row in rows:
-            key = self._resolve_data_key(tpl, row)
-            db_hash = _compute_hash(_db_row_to_hashable(dict(row)))
-            fpath = self._resolve_filepath(tpl, novel_name, row)
+        # 判断模式：与 db_to_files 一致，按 file_pattern 是否含 {name} 分派
+        per_entity = not tpl.group_by or (tpl.file_pattern and "{name}" in tpl.file_pattern)
 
-            if os.path.exists(fpath):
-                file_keys_seen.add(key)
+        if not per_entity:
+            # 聚合模式：同一组多行→一个文件，hash 存在 group_key 下
+            groups_seen: dict[str, list[dict]] = {}
+            for row in rows:
+                gk = str(row.get(tpl.group_by, "_default"))
+                groups_seen.setdefault(gk, []).append(dict(row))
+
+            for gk, group_rows in groups_seen.items():
+                # group 模式下 db_to_files 用 group_key 存 hash
+                fpath = self._resolve_filepath(tpl, novel_name, group_rows[0])
+                if not os.path.exists(fpath):
+                    for r in group_rows:
+                        results["db_only"].append({"type": entity_type, "key": self._resolve_data_key(tpl, r)})
+                    continue
+
                 with open(fpath, "r", encoding="utf-8") as f:
                     file_hash = _compute_hash(f.read())
-                if db_hash != file_hash:
-                    # 用 stored hash 判断谁改了
+
+                stored = _get_hash_record(novel_id, tpl.name, gk)
+                if stored and stored.get("last_sync_hash") and stored.get("last_sync_file_hash"):
+                    # group 模式用聚合 db_hash（所有行拼接）
+                    db_content = "\n".join(_db_row_to_hashable(r) for r in group_rows)
+                    db_hash = _compute_hash(db_content)
+                    db_changed = db_hash != stored["last_sync_hash"]
+                    file_changed = file_hash != stored["last_sync_file_hash"]
+                    if db_changed and file_changed:
+                        results["conflict"].append({"type": entity_type, "key": gk,
+                            "resolution": "DB→file" if tpl.authority == "db" else "file→DB",
+                            "source": "both_changed"})
+                    elif file_changed:
+                        results["conflict"].append({"type": entity_type, "key": gk,
+                            "resolution": "DB→file" if tpl.authority == "db" else "file→DB",
+                            "source": "file_changed"})
+                    elif db_changed:
+                        results["conflict"].append({"type": entity_type, "key": gk,
+                            "resolution": "DB→file" if tpl.authority == "db" else "file→DB",
+                            "source": "db_changed"})
+                    else:
+                        results["consistent"].append({"type": entity_type, "key": gk})
+                else:
+                    results["conflict"].append({"type": entity_type, "key": gk,
+                        "resolution": "DB→file" if tpl.authority == "db" else "file→DB",
+                        "source": "unknown"})
+        else:
+            # per-entity 模式：逐行检查，hash 存在 data_key 下
+            for row in rows:
+                key = self._resolve_data_key(tpl, row)
+                db_hash = _compute_hash(_db_row_to_hashable(dict(row)))
+                fpath = self._resolve_filepath(tpl, novel_name, row)
+
+                if os.path.exists(fpath):
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        file_hash = _compute_hash(f.read())
                     stored = _get_hash_record(novel_id, tpl.name, key)
                     if stored and stored.get("last_sync_hash") and stored.get("last_sync_file_hash"):
                         db_changed = db_hash != stored["last_sync_hash"]
                         file_changed = file_hash != stored["last_sync_file_hash"]
                         if db_changed and file_changed:
-                            source = "both_changed"
+                            results["conflict"].append({"type": entity_type, "key": key,
+                                "resolution": "DB→file" if tpl.authority == "db" else "file→DB",
+                                "source": "both_changed"})
                         elif file_changed:
-                            source = "file_changed"
+                            results["conflict"].append({"type": entity_type, "key": key,
+                                "resolution": "DB→file" if tpl.authority == "db" else "file→DB",
+                                "source": "file_changed"})
+                        elif db_changed:
+                            results["conflict"].append({"type": entity_type, "key": key,
+                                "resolution": "DB→file" if tpl.authority == "db" else "file→DB",
+                                "source": "db_changed"})
                         else:
-                            source = "db_changed"
+                            results["consistent"].append({"type": entity_type, "key": key})
                     else:
-                        source = "unknown"
-                    results["conflict"].append({
-                        "type": entity_type, "key": key,
-                        "resolution": "DB→file" if tpl.authority == "db" else "file→DB",
-                        "source": source,
-                    })
+                        results["conflict"].append({"type": entity_type, "key": key,
+                            "resolution": "DB→file" if tpl.authority == "db" else "file→DB",
+                            "source": "unknown"})
                 else:
-                    results["consistent"].append({"type": entity_type, "key": key})
-            else:
-                results["db_only"].append({"type": entity_type, "key": key})
+                    results["db_only"].append({"type": entity_type, "key": key})
 
         # 文件中有但DB无的
         base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
@@ -1595,14 +1657,13 @@ class SyncEngine:
             rows = self._query_entities(tpl, novel_id, entity_key)
             if not rows:
                 return {"error": f"实体不存在: {entity_key}"}
-            row = rows[0]
-            data_key = self._resolve_data_key(tpl, row)
-            fpath = self._resolve_filepath(tpl, novel_name, row)
-            db_hash = _compute_hash(_db_row_to_hashable(dict(row)))
+            fpath = self._resolve_filepath(tpl, novel_name, rows[0])
+            db_hash = _compute_hash("\n".join(_db_row_to_hashable(dict(r)) for r in rows))
+            hash_key = str(rows[0].get(tpl.group_by, "_default")) if tpl.group_by else self._resolve_data_key(tpl, rows[0])
             if os.path.exists(fpath):
                 with open(fpath, "r", encoding="utf-8") as f:
                     file_hash = _compute_hash(f.read())
-                _snapshot_sync_hashes(novel_id, tpl.name, data_key, db_hash, file_hash)
+                _snapshot_sync_hashes(novel_id, tpl.name, hash_key, db_hash, file_hash)
             return {"resolved": entity_key, "strategy": "skip"}
         elif strategy == "reverse":
             return self.files_to_db(novel_name, entity_type)
