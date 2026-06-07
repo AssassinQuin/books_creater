@@ -3,8 +3,9 @@ import json
 from .db import mcp, query, transaction
 from .errors import mcp_tool
 from .sync import _record_db_hash, _auto_sync_to_files
-from .resolvers import _resolve_novel_id, _UNSET
+from .resolvers import _resolve_novel_id
 from .sql_utils import build_update_sql
+from .param_utils import coerce_list, coerce_dict
 
 _JSON_FIELDS = {
     'main_plotlines', 'act_intro', 'act_rise', 'act_twist', 'act_resolution',
@@ -75,12 +76,19 @@ def _volume_get_by_id(volume_id: int) -> str:
 def _volume_update_by_id(volume_id: int, novel_id: int = 0, **kwargs) -> str:
     fields = {}
     for key, val in kwargs.items():
-        if val is _UNSET:
+        if val is None:
             continue
         if key in _JSON_FIELDS:
-            if val is None:
-                continue
-            fields[key] = json.dumps(val, ensure_ascii=False)
+            # coerce_list/coerce_dict 防御：LLM 可能传 str 而非 list/dict
+            if isinstance(val, list):
+                parsed = val
+            elif isinstance(val, dict):
+                parsed = val
+            else:
+                # 尝试 JSON 解析（LLM 可能传 JSON 字符串）
+                parsed = coerce_list(val) or coerce_dict(val)
+            if parsed is not None:
+                fields[key] = json.dumps(parsed, ensure_ascii=False)
         elif key in _TEXT_FIELDS:
             fields[key] = val
         else:
@@ -120,19 +128,19 @@ def volume_get(novel_name: str, number: int) -> str:
 
 @mcp.tool
 @mcp_tool
-def volume_update(novel_name: str, number: int, title=_UNSET,
-                  main_plotlines=_UNSET, notes=_UNSET,
-                  core_emotion=_UNSET, pov_anchor=_UNSET,
-                  time_span=_UNSET, voice_mapping=_UNSET,
-                  causal_chain=_UNSET,
-                  act_intro=_UNSET, act_rise=_UNSET,
-                  act_twist=_UNSET, act_resolution=_UNSET,
-                  character_arcs=_UNSET, interaction_matrix=_UNSET,
-                  boundaries=_UNSET, suspense_anchors=_UNSET,
-                  key_dialogues=_UNSET, writing_priorities=_UNSET,
-                  hard_constraints=_UNSET,
-                  next_volume_bridge=_UNSET, info_pacing=_UNSET,
-                  rhythm_allocation=_UNSET) -> str:
+def volume_update(novel_name: str, number: int, title=None,
+                  main_plotlines=None, notes=None,
+                  core_emotion=None, pov_anchor=None,
+                  time_span=None, voice_mapping=None,
+                  causal_chain=None,
+                  act_intro=None, act_rise=None,
+                  act_twist=None, act_resolution=None,
+                  character_arcs=None, interaction_matrix=None,
+                  boundaries=None, suspense_anchors=None,
+                  key_dialogues=None, writing_priorities=None,
+                  hard_constraints=None,
+                  next_volume_bridge=None, info_pacing=None,
+                  rhythm_allocation=None) -> str:
     """按卷号更新卷信息（无需volume_id）。传入需要修改的字段，未传的字段不会被修改。支持富数据字段（因果链/四幕/人物弧光等）。
       novel_name: 小说名称
       number: 卷号

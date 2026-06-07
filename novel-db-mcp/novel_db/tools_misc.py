@@ -11,6 +11,7 @@ from .sync import (
     _db_row_to_hashable, _NOVELS_BASE,
 )
 from .sync_engine import engine as _sync_engine
+from .param_utils import coerce_list
 
 
 @mcp.tool
@@ -228,12 +229,12 @@ def skill_loader(skill: str, level: str, resource: str, project: str = "") -> st
 
 
 def _db_search(novel_name: str, keyword: str, top_k: int = 20,
-               mode: str = "keyword", entity_types: str = "", min_score: float = 0.1) -> str:
+               mode: str = "keyword", entity_types: list = None, min_score: float = 0.1) -> str:
     # Vector mode: delegate to vector_search
     if mode == "vector":
         from .tools_vector import _get_vector_store, _ensure_vector_index
         novel_id = _resolve_novel_id(novel_name)
-        type_list = [t.strip() for t in entity_types.split(",") if t.strip()] if entity_types else None
+        type_list = coerce_list(entity_types)
         store = _get_vector_store()
         _ensure_vector_index(store, novel_id, entity_types=type_list)
         from .tools_vector import _resolve_entity_name
@@ -349,7 +350,7 @@ def _extract_world_summary(r: dict) -> str:
 @mcp.tool
 @mcp_tool
 def search(novel_name: str, keyword: str, action: str = "keyword",
-           top_k: int = 20, entity_types: str = "", min_score: float = 0.1,
+           top_k: int = 20, entity_types: list = None, min_score: float = 0.1,
            rebuild: bool = False, min_missing: int = 1,
            with_suggestions: bool = False, entity_type: str = "",
            field_name: str = "", field_value: str = "",
@@ -367,7 +368,7 @@ def search(novel_name: str, keyword: str, action: str = "keyword",
       keyword: 搜索关键词或自然语言查询
       action: keyword|vector|incomplete|search_update (默认keyword)
       top_k: 返回最多结果数(默认20)
-      entity_types: 逗号分隔实体类型过滤(空=全部)
+      entity_types: 实体类型列表过滤(空=全部)，如 ["world_setting", "character"]
       min_score: 最低相似度阈值(默认0.1)
       rebuild: 强制重建向量索引(默认False)
       min_missing: 最少缺失字段数(仅incomplete，默认1)
@@ -384,7 +385,8 @@ def search(novel_name: str, keyword: str, action: str = "keyword",
                           entity_types=entity_types, min_score=min_score)
     elif action == "incomplete":
         from .tools_vector import _vector_find_incomplete
-        return _vector_find_incomplete(novel_name, entity_types, min_missing, with_suggestions)
+        _et_str = ",".join(coerce_list(entity_types) or [])
+        return _vector_find_incomplete(novel_name, _et_str, min_missing, with_suggestions)
     elif action == "search_update":
         from .tools_vector import _vector_search_and_update
         return _vector_search_and_update(novel_name, keyword, entity_type,

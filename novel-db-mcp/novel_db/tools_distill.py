@@ -6,6 +6,7 @@ from .resolvers import _resolve_novel_id
 from .errors import mcp_tool
 from .sql_utils import build_update_sql
 from .sync import _record_db_hash
+from .param_utils import coerce_list, coerce_dict
 
 logger = logging.getLogger(__name__)
 
@@ -507,11 +508,11 @@ def distill(action: str, work_name: str = "", borrowables_json: str = "",
 @mcp.tool
 @mcp_tool
 def distillation(novel_name: str, character_name: str, action: str = "get",
-                 chapter_number: int = 0, decision_delta: str = "[]",
-                 new_knowledge: str = "[]", changed_beliefs: str = "[]",
-                 relation_shifts: str = "[]", voice_changes: str = "{}",
-                 ability_changes: str = "{}", arc_transition: str = "{}",
-                 key_decision: str = "{}", notes: str = "",
+                 chapter_number: int = 0, decision_delta: list = None,
+                 new_knowledge: list = None, changed_beliefs: list = None,
+                 relation_shifts: list = None, voice_changes: dict = None,
+                 ability_changes: dict = None, arc_transition: dict = None,
+                 key_decision: dict = None, notes: str = "",
                  chapter_a: int = 0, chapter_b: int = 0,
                  dimension: str = "decision_delta") -> str:
     """人物蒸馏演化追踪。记录/查询/对比人物决策、认知、关系的演变。
@@ -524,10 +525,16 @@ def distillation(novel_name: str, character_name: str, action: str = "get",
     """
     from .tools_character import _distillation_evolve, _distillation_get, _distillation_timeline, _distillation_compare
     if action == "evolve":
+        _dd = json.dumps(coerce_list(decision_delta) or [], ensure_ascii=False)
+        _nk = json.dumps(coerce_list(new_knowledge) or [], ensure_ascii=False)
+        _cb = json.dumps(coerce_list(changed_beliefs) or [], ensure_ascii=False)
+        _rs = json.dumps(coerce_list(relation_shifts) or [], ensure_ascii=False)
+        _vc = json.dumps(coerce_dict(voice_changes) or {}, ensure_ascii=False)
+        _ac = json.dumps(coerce_dict(ability_changes) or {}, ensure_ascii=False)
+        _at = json.dumps(coerce_dict(arc_transition) or {}, ensure_ascii=False)
+        _kd = json.dumps(coerce_dict(key_decision) or {}, ensure_ascii=False)
         return _distillation_evolve(novel_name, character_name, chapter_number,
-                                    decision_delta, new_knowledge, changed_beliefs,
-                                    relation_shifts, voice_changes, ability_changes,
-                                    arc_transition, key_decision, notes)
+                                    _dd, _nk, _cb, _rs, _vc, _ac, _at, _kd, notes)
     elif action == "get":
         return _distillation_get(novel_name, character_name, chapter_number)
     elif action == "timeline":

@@ -14,6 +14,8 @@ from .md_parser import split_sections, parse_bullet_fields
 
 logger = logging.getLogger(__name__)
 
+from .param_utils import coerce_list, coerce_dict
+
 
 def _resolve_world_setting_id(novel_id: int, category: str, name: str) -> int:
     row = query(
@@ -79,21 +81,21 @@ def _volume_in_range(volume_number: int, volume_range: str) -> bool:
 # ═══════════════════════════════════════════════════════════
 
 def _world_upsert(novel_name: str, category: str, name: str, data: dict,
-                   keys=_UNSET, secondary_keys=_UNSET, tags=_UNSET,
-                   related_ids=_UNSET, volume_range=_UNSET, writing_guide=_UNSET,
-                   lorebook_id=_UNSET, priority=_UNSET, is_constant=_UNSET,
-                   region=_UNSET, faction_id=_UNSET) -> str:
+                   keys=None, secondary_keys=None, tags=None,
+                   related_ids=None, volume_range=None, writing_guide=None,
+                   lorebook_id=None, priority=None, is_constant=None,
+                   region=None, faction_id=None) -> str:
     """新增或更新世界观设定。
-    
+
     参数:
       novel_name: 小说名称
       category: 类别(race/faction/location/ability/economy/daily_life/history/bestiary/building/culture/plant/item/core_setting)
       name: 设定名称
       data: 设定数据(JSON对象)
-      keys: 主键JSON数组
-      secondary_keys: 次键JSON数组
-      tags: 标签JSON数组
-      related_ids: 关联ID JSON数组
+      keys: 主键列表
+      secondary_keys: 次键列表
+      tags: 标签列表
+      related_ids: 关联ID列表
       volume_range: 卷范围(如'V1-V3','V5-V12','V1-尾声')
       writing_guide: 写作指导
       lorebook_id: Lorebook ID
@@ -114,27 +116,24 @@ def _world_upsert(novel_name: str, category: str, name: str, data: dict,
 
         if existing:
             fields = {"data": data_json}
-            if region is not _UNSET:
+            if region is not None:
                 fields["region"] = region if region else "全域"
-            if faction_id is not _UNSET:
+            if faction_id is not None:
                 fields["faction_id"] = faction_id
-            if keys is not _UNSET:
-                fields["keys"] = json.loads(keys)
-            if secondary_keys is not _UNSET:
-                fields["secondary_keys"] = json.loads(secondary_keys)
-            if tags is not _UNSET:
-                fields["tags"] = json.loads(tags)
-            if related_ids is not _UNSET:
-                fields["related_ids"] = json.loads(related_ids)
-            if volume_range is not _UNSET:
+            for field_name, raw_val in [("keys", keys), ("secondary_keys", secondary_keys),
+                                         ("tags", tags), ("related_ids", related_ids)]:
+                parsed = coerce_list(raw_val)
+                if parsed is not None:
+                    fields[field_name] = json.dumps(parsed, ensure_ascii=False)
+            if volume_range is not None:
                 fields["volume_range"] = volume_range
-            if writing_guide is not _UNSET:
+            if writing_guide is not None:
                 fields["writing_guide"] = writing_guide
-            if lorebook_id is not _UNSET:
+            if lorebook_id is not None:
                 fields["lorebook_id"] = lorebook_id
-            if priority is not _UNSET:
+            if priority is not None:
                 fields["priority"] = priority
-            if is_constant is not _UNSET:
+            if is_constant is not None:
                 fields["is_constant"] = is_constant
 
             sql, params = build_update_sql(
@@ -148,33 +147,27 @@ def _world_upsert(novel_name: str, category: str, name: str, data: dict,
             insert_vals = [novel_id, category, name, data_json]
 
             insert_cols.append("region")
-            insert_vals.append(region if region is not _UNSET and region else "全域")
+            insert_vals.append(region if region else "全域")
             insert_cols.append("priority")
-            insert_vals.append(priority if priority is not _UNSET else 30)
+            insert_vals.append(priority if priority is not None else 30)
             insert_cols.append("is_constant")
-            insert_vals.append(is_constant if is_constant is not _UNSET else False)
-            if faction_id is not _UNSET:
+            insert_vals.append(is_constant if is_constant is not None else False)
+            if faction_id:
                 insert_cols.append("faction_id")
                 insert_vals.append(faction_id)
-            if keys is not _UNSET:
-                insert_cols.append("keys")
-                insert_vals.append(json.loads(keys))
-            if secondary_keys is not _UNSET:
-                insert_cols.append("secondary_keys")
-                insert_vals.append(json.loads(secondary_keys))
-            if tags is not _UNSET:
-                insert_cols.append("tags")
-                insert_vals.append(json.loads(tags))
-            if related_ids is not _UNSET:
-                insert_cols.append("related_ids")
-                insert_vals.append(json.loads(related_ids))
-            if volume_range is not _UNSET:
+            for field_name, raw_val in [("keys", keys), ("secondary_keys", secondary_keys),
+                                         ("tags", tags), ("related_ids", related_ids)]:
+                parsed = coerce_list(raw_val)
+                if parsed is not None:
+                    insert_cols.append(field_name)
+                    insert_vals.append(json.dumps(parsed, ensure_ascii=False))
+            if volume_range:
                 insert_cols.append("volume_range")
                 insert_vals.append(volume_range)
-            if writing_guide is not _UNSET:
+            if writing_guide:
                 insert_cols.append("writing_guide")
                 insert_vals.append(writing_guide)
-            if lorebook_id is not _UNSET:
+            if lorebook_id:
                 insert_cols.append("lorebook_id")
                 insert_vals.append(lorebook_id)
 
@@ -256,40 +249,40 @@ def _world_query(novel_name: str, category: str = "", name: str = "",
     return json.dumps([dict(r) for r in rows], ensure_ascii=False, default=str)
 
 
-def _world_load_context(novel_name: str, volume: str = "", regions: str = "",
-                        faction_names: str = "", categories: str = "",
+def _world_load_context(novel_name: str, volume: str = "", regions: list = None,
+                        faction_names: list = None, categories: list = None,
                         include_constants: bool = True) -> str:
     """分层加载世界观上下文——写作时按需加载，不加载全部。
-    
+
     核心加载逻辑:
       1. 常驻设定(is_constant=1): 总是加载(如纹路法则等核心规则)
       2. 卷级过滤(volume): 只加载volume_range包含当前卷的条目
       3. 地区过滤(regions): 只加载匹配地区的条目 + 全域条目
       4. 势力过滤(faction_names): 只加载匹配势力的条目
       5. 类别过滤(categories): 只加载指定类别
-    
+
     参数:
       novel_name: 小说名称
       volume: 当前卷号(如'V1','V5')，为空则不过滤卷级
-      regions: 逗号分隔的地区列表(如'外围,北境')，为空则不过滤地区
-      faction_names: 逗号分隔的势力名称列表(如'壁盾军团,教会')，为空则不过滤势力
-      categories: 逗号分隔的类别列表(如'ability,location')，为空则加载所有类别
+      regions: 地区列表(如['外围','北境'])，为空则不过滤地区
+      faction_names: 势力名称列表(如['壁盾军团','教会'])，为空则不过滤势力
+      categories: 类别列表(如['ability','location'])，为空则加载所有类别
       include_constants: 是否包含常驻设定(默认True)
-    
+
     返回:
       分层加载结果，含各维度统计和匹配的设定条目
-    
+
     用法示例:
-      world_load_context("这次不一样了", volume="V1", regions="外围,北境")
-      world_load_context("这次不一样了", volume="V5", faction_names="教会,星火社")
-      world_load_context("这次不一样了", volume="V8", categories="ability,faction")
+      world_load_context("这次不一样了", volume="V1", regions=["外围","北境"])
+      world_load_context("这次不一样了", volume="V5", faction_names=["教会","星火社"])
+      world_load_context("这次不一样了", volume="V8", categories=["ability","faction"])
     """
     novel_id = _resolve_novel_id(novel_name)
-    
-    # Parse multi-value params
-    region_list = [r.strip() for r in regions.split(',') if r.strip()] if regions else []
-    faction_name_list = [f.strip() for f in faction_names.split(',') if f.strip()] if faction_names else []
-    category_list = [c.strip() for c in categories.split(',') if c.strip()] if categories else []
+
+    # Parse multi-value params — coerce_list handles list/JSON/逗号分隔
+    region_list = coerce_list(regions) or []
+    faction_name_list = coerce_list(faction_names) or []
+    category_list = coerce_list(categories) or []
     
     # Resolve faction names to IDs
     faction_ids = []
@@ -675,15 +668,15 @@ def writing_spec(novel_name: str) -> str:
 @mcp.tool
 @mcp_tool
 def world(novel_name: str, action: str = "query", category: str = "",
-          name: str = "", data: dict = None, keys: str = "",
-          secondary_keys: str = "", tags: str = "",
-          related_ids: str = "", volume_range: str = "",
-          writing_guide: str = "", lorebook_id: str = "",
-          priority: int = 30, is_constant: bool = False,
-          region: str = "", faction_id: int = 0,
-          volume: str = "", regions: str = "",
-          faction_names: str = "", categories: str = "",
-          include_constants: bool = True,
+          name: str = "", data: dict = None,
+          keys: list = None, secondary_keys: list = None,
+          tags: list = None, related_ids: list = None,
+          volume_range: str = "", writing_guide: str = "",
+          lorebook_id: str = "", priority: int = 30,
+          is_constant: bool = False, region: str = "",
+          faction_id: int = 0, volume: str = "",
+          regions: list = None, faction_names: list = None,
+          categories: list = None, include_constants: bool = True,
           reason: str = "", updates_json: str = "") -> str:
     """世界观设定管理。
 
@@ -696,24 +689,12 @@ def world(novel_name: str, action: str = "query", category: str = "",
     - batch_update_meta: 批量更新元数据。需 updates_json。
     """
     if action == "upsert":
-        # Convert empty/None params to _UNSET for sentinel detection
-        _keys = _UNSET if not keys else keys
-        _secondary_keys = _UNSET if not secondary_keys else secondary_keys
-        _tags = _UNSET if not tags else tags
-        _related_ids = _UNSET if not related_ids else related_ids
-        _volume_range = _UNSET if not volume_range else volume_range
-        _writing_guide = _UNSET if not writing_guide else writing_guide
-        _lorebook_id = _UNSET if not lorebook_id else lorebook_id
-        _priority = _UNSET if priority == 30 else priority
-        _is_constant = _UNSET if not is_constant else is_constant
-        _region = _UNSET if not region else region
-        _faction_id = _UNSET if faction_id == 0 else faction_id
         return _world_upsert(novel_name, category, name, data,
-                             keys=_keys, secondary_keys=_secondary_keys, tags=_tags,
-                             related_ids=_related_ids, volume_range=_volume_range,
-                             writing_guide=_writing_guide, lorebook_id=_lorebook_id,
-                             priority=_priority, is_constant=_is_constant,
-                             region=_region, faction_id=_faction_id)
+                             keys=keys, secondary_keys=secondary_keys, tags=tags,
+                             related_ids=related_ids, volume_range=volume_range,
+                             writing_guide=writing_guide, lorebook_id=lorebook_id,
+                             priority=priority, is_constant=is_constant,
+                             region=region, faction_id=faction_id)
     elif action == "query":
         _faction_id = faction_id if faction_id > 0 else None
         return _world_query(novel_name, category, name, region, volume,
