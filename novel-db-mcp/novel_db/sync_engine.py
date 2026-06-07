@@ -74,6 +74,8 @@ from .sync import (
     _is_empty, _jsonb_to_md, _jsonb_to_md_narrative, _parse_json_field,
     _render_md_table, _md_bullet,
     _record_db_hash, _record_file_hash,
+    _compute_hash, _db_row_to_hashable,
+    _get_hash_record, _detect_conflict, _snapshot_sync_hashes,
     _NOVELS_BASE,
 )
 
@@ -510,7 +512,7 @@ class SyncEngine:
         # 查询DB行
         rows = self._query_entities(tpl, novel_id, entity_key)
 
-        result = {"synced": 0, "skipped": 0, "errors": []}
+        result = {"synced": 0, "skipped": 0, "errors": [], "conflicts": []}
 
         # 分组模式：按 group_by 列分组
         # 如果 file_pattern 含 {name}，说明每个实体需要独立文件（如世界观按分类子目录）
@@ -531,9 +533,12 @@ class SyncEngine:
                     if row.get("name", "") in self._SKIP_ENTITY_NAMES:
                         continue
                     try:
-                        did_write = self._sync_one_to_file(
+                        r = self._sync_one_to_file(
                             tpl, novel_id, novel_name, row, overwrite)
-                        if did_write:
+                        if r.get("conflict"):
+                            result["conflicts"].append(r["conflict"])
+                            result["skipped"] += 1
+                        elif r["wrote"]:
                             result["synced"] += 1
                         else:
                             result["skipped"] += 1
@@ -555,10 +560,14 @@ class SyncEngine:
 
             for group_key, group_rows in groups.items():
                 try:
-                    did_write = self._sync_group_to_file(
+                    r = self._sync_group_to_file(
                         tpl, novel_id, novel_name, group_key, group_rows, overwrite)
-                    result["synced"] += did_write
-                    result["skipped"] += (len(group_rows) - did_write)
+                    if r.get("conflict"):
+                        result["conflicts"].append(r["conflict"])
+                        result["skipped"] += len(group_rows)
+                    else:
+                        result["synced"] += r["wrote"]
+                        result["skipped"] += (len(group_rows) - r["wrote"])
                 except Exception as e:
                     result["errors"].append({"key": group_key, "error": str(e)})
 
@@ -572,8 +581,11 @@ class SyncEngine:
                 result["skipped"] += 1
                 continue
             try:
-                did_write = self._sync_one_to_file(tpl, novel_id, novel_name, row, overwrite)
-                if did_write:
+                r = self._sync_one_to_file(tpl, novel_id, novel_name, row, overwrite)
+                if r.get("conflict"):
+                    result["conflicts"].append(r["conflict"])
+                    result["skipped"] += 1
+                elif r["wrote"]:
                     result["synced"] += 1
                 else:
                     result["skipped"] += 1
@@ -597,6 +609,12 @@ class SyncEngine:
             sql += f" ORDER BY {tpl.order_by}"
 
         return query(sql, tuple(params), fetch="all") or []
+
+    def _resolve_data_key(self, tpl: SyncTemplate, row: dict) -> str:
+        """构造唯一 data_key。对有 composite_id_fields 的模板用复合键。"""
+        if tpl.composite_id_fields:
+            return ":".join(str(row.get(f, "")) for f in tpl.composite_id_fields)
+        return str(row.get(tpl.id_field, ""))
 
     def _replace_category_file(self, tpl: SyncTemplate, text: str, row: dict) -> str:
         """统一替换 {category_file} 占位符。优先 category_file_map，回退内置映射。"""
@@ -646,7 +664,8 @@ class SyncEngine:
 
     def _cleanup_stale_files(self, tpl: SyncTemplate, novel_name: str,
                               groups: dict[str, list[dict]]) -> None:
-        """group_by 模式下，清理不再对应 DB 行的文件。"""
+        """group_by 模式下，清理不再对应 DB 行的文件。保护用户修改过的文件。"""
+        novel_id = self._resolve_novel_id(novel_name)
         base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
         per_entity = tpl.file_pattern and "{name}" in tpl.file_pattern
 
@@ -661,6 +680,15 @@ class SyncEngine:
 
             entity_names = {row.get("name", "") for row in group_rows}
 
+            def _is_user_modified(fpath: str, data_key: str) -> bool:
+                """检查文件是否被用户修改过（hash 与上次同步不同）。"""
+                stored = _get_hash_record(novel_id, tpl.name, data_key)
+                if not stored or not stored.get("last_sync_file_hash"):
+                    return False  # 没有同步记录，不算用户修改
+                with open(fpath, "r", encoding="utf-8") as f:
+                    current_hash = _compute_hash(f.read())
+                return current_hash != stored["last_sync_file_hash"]
+
             if per_entity:
                 # 逐实体模式：保留 {name}.md 对应的文件，删除不在 entity_names 中的
                 for f in os.listdir(group_dir):
@@ -668,7 +696,16 @@ class SyncEngine:
                         continue
                     stem = f[:-3]
                     if stem not in entity_names:
-                        os.remove(os.path.join(group_dir, f))
+                        fpath = os.path.join(group_dir, f)
+                        # 复合键：category:name（匹配 _resolve_data_key 格式）
+                        composite_key = f"{group_key}:{stem}" if tpl.composite_id_fields else stem
+                        if not _is_user_modified(fpath, composite_key):
+                            os.remove(fpath)
+                # 清理空目录（所有 .md 都被清理后）
+                if os.path.isdir(group_dir):
+                    remaining = [f for f in os.listdir(group_dir) if f.endswith(".md")]
+                    if not remaining:
+                        os.rmdir(group_dir)
             else:
                 # 聚合模式：保留分组标签文件，删除旧的单独实体文件
                 _CATEGORY_LABELS = {
@@ -686,12 +723,18 @@ class SyncEngine:
                         continue
                     stem = f[:-3]
                     if stem in entity_names:
-                        os.remove(os.path.join(group_dir, f))
+                        fpath = os.path.join(group_dir, f)
+                        if not _is_user_modified(fpath, stem):
+                            os.remove(fpath)
 
     def _sync_group_to_file(self, tpl: SyncTemplate, novel_id: int,
                              novel_name: str, group_key: str,
-                             rows: list[dict], overwrite: bool) -> int:
-        """将同一分组的所有条目合并写入一个文件。返回写入的条目数。"""
+                             rows: list[dict], overwrite: bool) -> dict:
+        """将同一分组的所有条目合并写入一个文件。
+
+        Returns:
+            {"wrote": int, "conflict": None | dict}
+        """
         # 确定文件路径：用第一个 row 解析 category_file 目录，文件名用分组标签
         sample_row = rows[0]
         cat_file = ""
@@ -720,6 +763,26 @@ class SyncEngine:
 
         base = os.path.join(_NOVELS_BASE, novel_name, tpl.file_dir)
         fpath = os.path.join(base, cat_file, f"{label}.md")
+
+        # 冲突检测
+        if not overwrite and os.path.exists(fpath):
+            stored = _get_hash_record(novel_id, tpl.name, group_key)
+            with open(fpath, "r", encoding="utf-8") as f:
+                current_file_hash = _compute_hash(f.read())
+            status = _detect_conflict(stored, current_file_hash)
+            if status in ("file_newer", "conflict"):
+                return {
+                    "wrote": 0,
+                    "conflict": {
+                        "type": tpl.name,
+                        "key": group_key,
+                        "conflict_type": status,
+                        "file_path": fpath,
+                    },
+                }
+            if status == "skip":
+                return {"wrote": 0, "conflict": None}
+
         os.makedirs(os.path.dirname(fpath), exist_ok=True)
 
         # 渲染所有条目
@@ -742,18 +805,44 @@ class SyncEngine:
         with open(fpath, "w", encoding="utf-8") as f:
             f.write(full_content)
 
+        file_hash = _compute_hash(full_content)
         _record_file_hash(novel_id, tpl.name, group_key, full_content)
-        return len(rows)
+        _snapshot_sync_hashes(novel_id, tpl.name, group_key, "", file_hash)
+        return {"wrote": len(rows), "conflict": None}
 
     def _sync_one_to_file(self, tpl: SyncTemplate, novel_id: int,
-                          novel_name: str, row: dict, overwrite: bool) -> bool:
-        """将一行DB数据同步到文件。返回是否实际写入了文件。"""
+                          novel_name: str, row: dict, overwrite: bool) -> dict:
+        """将一行DB数据同步到文件。
+
+        Returns:
+            {"wrote": bool, "conflict": None | dict}
+        """
         fpath = self._resolve_filepath(tpl, novel_name, row)
+        data_key = self._resolve_data_key(tpl, row)
 
         # 跳过已有文件
         if os.path.exists(fpath) and tpl.skip_existing and not overwrite:
-            _record_file_hash(novel_id, tpl.name, str(row.get(tpl.id_field, "")), "")
-            return False
+            _record_file_hash(novel_id, tpl.name, data_key, "")
+            return {"wrote": False, "conflict": None}
+
+        # 冲突检测：写入前检查文件是否被用户修改过
+        if not overwrite and os.path.exists(fpath):
+            stored = _get_hash_record(novel_id, tpl.name, data_key)
+            with open(fpath, "r", encoding="utf-8") as f:
+                current_file_hash = _compute_hash(f.read())
+            status = _detect_conflict(stored, current_file_hash)
+            if status in ("file_newer", "conflict"):
+                return {
+                    "wrote": False,
+                    "conflict": {
+                        "type": tpl.name,
+                        "key": data_key,
+                        "conflict_type": status,
+                        "file_path": fpath,
+                    },
+                }
+            if status == "skip":
+                return {"wrote": False, "conflict": None}
 
         # 渲染所有段落
         content_lines = []
@@ -793,12 +882,19 @@ class SyncEngine:
         with open(fpath, "w", encoding="utf-8") as f:
             f.write(full_content)
 
-        _record_file_hash(novel_id, tpl.name, str(row.get(tpl.id_field, "")), full_content)
-        return True
+        db_hash = _compute_hash(_db_row_to_hashable(dict(row)))
+        file_hash = _compute_hash(full_content)
+        _record_file_hash(novel_id, tpl.name, data_key, full_content)
+        _snapshot_sync_hashes(novel_id, tpl.name, data_key, db_hash, file_hash)
+        return {"wrote": True, "conflict": None}
 
     def _merge_section(self, tpl: SyncTemplate, fpath: str,
                        new_content: str, row: dict) -> str:
-        """section_replace模式：替换文件中的匹配段落或追加。"""
+        """section_replace模式：替换文件中的匹配段落或追加。
+
+        只匹配行首的 section_marker（用 \n 前缀或文件开头定位），
+        避免 marker 出现在用户正文中时误匹配。
+        """
         if not tpl.section_marker:
             return new_content
 
@@ -810,12 +906,24 @@ class SyncEngine:
             if val is not None and f"{{{col}}}" in marker:
                 marker = marker.replace(f"{{{col}}}", str(val))
 
-        if marker in existing:
-            start = existing.index(marker)
-            next_h2 = existing.find("\n## ", start + len(marker))
+        # 只匹配行首: marker 前面是 \n 或文件开头
+        match_pos = -1
+        search_from = 0
+        while search_from < len(existing):
+            idx = existing.find(marker, search_from)
+            if idx == -1:
+                break
+            # 行首 = idx==0 或前面是 \n
+            if idx == 0 or existing[idx - 1] == "\n":
+                match_pos = idx
+                break
+            search_from = idx + 1
+
+        if match_pos >= 0:
+            next_h2 = existing.find("\n## ", match_pos + len(marker))
             if next_h2 == -1:
                 next_h2 = len(existing)
-            return existing[:start] + new_content + existing[next_h2:]
+            return existing[:match_pos] + new_content + existing[next_h2:]
         else:
             return existing + "\n" + new_content
 
@@ -1032,7 +1140,7 @@ class SyncEngine:
                     continue
                 row["novel_id"] = novel_id
                 self._upsert_row(tpl, row)
-                key = str(row.get(tpl.id_field, fname))
+                key = self._resolve_data_key(tpl, row) or fname
                 _record_db_hash(novel_id, tpl.name, key, content)
                 result["synced"] += 1
                 result["details"].append({"file": fname, "key": key, "fields": len(row)})
@@ -1331,6 +1439,7 @@ class SyncEngine:
         通用 upsert: 按 id_field（或 composite_id_fields）查找，
         存在则 UPDATE，不存在则 INSERT。
         """
+        from .db import transaction
         # 确定主键字段列表
         if tpl.composite_id_fields:
             pk_fields = tpl.composite_id_fields
@@ -1349,61 +1458,62 @@ class SyncEngine:
         where_clause = " AND ".join(where_parts)
         where_params = [row["novel_id"]] + pk_vals
 
-        # 检查是否已存在
-        existing = query(
-            f"SELECT id FROM {tpl.db_table} WHERE {where_clause}",
-            tuple(where_params), fetch="one"
-        )
+        with transaction():
+            # 检查是否已存在
+            existing = query(
+                f"SELECT id FROM {tpl.db_table} WHERE {where_clause}",
+                tuple(where_params), fetch="one"
+            )
 
-        # 收集 SET/INSERT 列（排除主键和 novel_id）
-        exclude_cols = {"novel_id", "id"} | set(pk_fields)
-        set_cols = []
-        set_vals = []
-        for col, val in row.items():
-            if col in exclude_cols:
-                continue
-            if not col or not col.strip():
-                continue
-            if col == "data" and tpl.name == "world":
-                val = json.dumps(clean_data_for_storage(
-                    json.loads(val) if isinstance(val, str) else val
-                ), ensure_ascii=False)
-            set_cols.append(col)
-            set_vals.append(val if val is not None else None)
+            # 收集 SET/INSERT 列（排除主键和 novel_id）
+            exclude_cols = {"novel_id", "id"} | set(pk_fields)
+            set_cols = []
+            set_vals = []
+            for col, val in row.items():
+                if col in exclude_cols:
+                    continue
+                if not col or not col.strip():
+                    continue
+                if col == "data" and tpl.name == "world":
+                    val = json.dumps(clean_data_for_storage(
+                        json.loads(val) if isinstance(val, str) else val
+                    ), ensure_ascii=False)
+                set_cols.append(col)
+                set_vals.append(val if val is not None else None)
 
-        if not set_cols:
-            return
+            if not set_cols:
+                return
 
-        table_cols = self._get_table_columns(tpl.db_table)
-        has_updated_at = "updated_at" in table_cols
-        has_created_at = "created_at" in table_cols
+            table_cols = self._get_table_columns(tpl.db_table)
+            has_updated_at = "updated_at" in table_cols
+            has_created_at = "created_at" in table_cols
 
-        if existing:
-            # UPDATE
-            set_clause = ", ".join(f"{c} = ?" for c in set_cols)
-            if has_updated_at:
-                sql = f"UPDATE {tpl.db_table} SET {set_clause}, updated_at = datetime('now') WHERE id = ?"
+            if existing:
+                # UPDATE
+                set_clause = ", ".join(f"{c} = ?" for c in set_cols)
+                if has_updated_at:
+                    sql = f"UPDATE {tpl.db_table} SET {set_clause}, updated_at = datetime('now') WHERE id = ?"
+                else:
+                    sql = f"UPDATE {tpl.db_table} SET {set_clause} WHERE id = ?"
+                params = set_vals + [existing["id"]]
             else:
-                sql = f"UPDATE {tpl.db_table} SET {set_clause} WHERE id = ?"
-            params = set_vals + [existing["id"]]
-        else:
-            # INSERT
-            insert_cols = ["novel_id"] + pk_fields + set_cols
-            insert_vals = [row["novel_id"]] + pk_vals + set_vals
-            extra_cols = []
-            extra_vals = []
-            if has_created_at:
-                extra_cols.append("created_at")
-                extra_vals.append("datetime('now')")
-            if has_updated_at:
-                extra_cols.append("updated_at")
-                extra_vals.append("datetime('now')")
-            cols_str = ", ".join(insert_cols + extra_cols)
-            placeholders = ", ".join(["?"] * len(insert_vals) + extra_vals)
-            sql = f"INSERT INTO {tpl.db_table} ({cols_str}) VALUES ({placeholders})"
-            params = insert_vals
+                # INSERT
+                insert_cols = ["novel_id"] + pk_fields + set_cols
+                insert_vals = [row["novel_id"]] + pk_vals + set_vals
+                extra_cols = []
+                extra_vals = []
+                if has_created_at:
+                    extra_cols.append("created_at")
+                    extra_vals.append("datetime('now')")
+                if has_updated_at:
+                    extra_cols.append("updated_at")
+                    extra_vals.append("datetime('now')")
+                cols_str = ", ".join(insert_cols + extra_cols)
+                placeholders = ", ".join(["?"] * len(insert_vals) + extra_vals)
+                sql = f"INSERT INTO {tpl.db_table} ({cols_str}) VALUES ({placeholders})"
+                params = insert_vals
 
-        query(sql, tuple(params), fetch="none")
+            query(sql, tuple(params), fetch="none")
 
     # ── 双向对比 ────────────────────────────────────────────────
 
@@ -1413,9 +1523,8 @@ class SyncEngine:
 
         Returns:
             {"db_only": [], "file_only": [], "conflict": [], "consistent": []}
+            conflict items include "source": "both_changed" | "file_changed" | "db_changed"
         """
-        from .sync import _compute_hash, _db_row_to_hashable
-
         tpl = self.get(entity_type)
         novel_id = self._resolve_novel_id(novel_name)
         rows = self._query_entities(tpl, novel_id)
@@ -1433,9 +1542,23 @@ class SyncEngine:
                 with open(fpath, "r", encoding="utf-8") as f:
                     file_hash = _compute_hash(f.read())
                 if db_hash != file_hash:
+                    # 用 stored hash 判断谁改了
+                    stored = _get_hash_record(novel_id, tpl.name, key)
+                    if stored and stored.get("last_sync_hash") and stored.get("last_sync_file_hash"):
+                        db_changed = db_hash != stored["last_sync_hash"]
+                        file_changed = file_hash != stored["last_sync_file_hash"]
+                        if db_changed and file_changed:
+                            source = "both_changed"
+                        elif file_changed:
+                            source = "file_changed"
+                        else:
+                            source = "db_changed"
+                    else:
+                        source = "unknown"
                     results["conflict"].append({
                         "type": entity_type, "key": key,
-                        "resolution": "DB→file" if tpl.authority == "db" else "file→DB"
+                        "resolution": "DB→file" if tpl.authority == "db" else "file→DB",
+                        "source": source,
                     })
                 else:
                     results["consistent"].append({"type": entity_type, "key": key})
@@ -1453,6 +1576,38 @@ class SyncEngine:
                     results["file_only"].append({"type": entity_type, "key": fkey})
 
         return results
+
+    def resolve_conflict(self, novel_name: str, entity_type: str,
+                         entity_key: str, strategy: str) -> dict:
+        """解决单个冲突。
+
+        Args:
+            strategy: "overwrite" (强制DB→文件) | "skip" (保留文件) | "reverse" (文件→DB)
+        """
+        tpl = self.get(entity_type)
+        novel_id = self._resolve_novel_id(novel_name)
+
+        if strategy == "overwrite":
+            return self.db_to_files(novel_name, entity_type,
+                                    entity_key=entity_key, overwrite=True)
+        elif strategy == "skip":
+            # 不写入，但更新 snapshot hash 使当前状态成为"已同步"
+            rows = self._query_entities(tpl, novel_id, entity_key)
+            if not rows:
+                return {"error": f"实体不存在: {entity_key}"}
+            row = rows[0]
+            data_key = str(row.get(tpl.id_field, ""))
+            fpath = self._resolve_filepath(tpl, novel_name, row)
+            db_hash = _compute_hash(_db_row_to_hashable(dict(row)))
+            if os.path.exists(fpath):
+                with open(fpath, "r", encoding="utf-8") as f:
+                    file_hash = _compute_hash(f.read())
+                _snapshot_sync_hashes(novel_id, tpl.name, data_key, db_hash, file_hash)
+            return {"resolved": entity_key, "strategy": "skip"}
+        elif strategy == "reverse":
+            return self.files_to_db(novel_name, entity_type)
+        else:
+            return {"error": f"未知策略: {strategy}。可选: overwrite/skip/reverse"}
 
     # ── 内部工具 ────────────────────────────────────────────────
 

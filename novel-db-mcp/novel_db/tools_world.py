@@ -7,7 +7,7 @@ from .db import mcp, query, transaction
 from .resolvers import _resolve_novel_id, _UNSET, _resolve_entity
 from .errors import NotFoundError, mcp_tool
 from .sql_utils import build_update_sql
-from .sync import _record_db_hash, _NOVELS_BASE
+from .sync import _record_db_hash, _auto_sync_to_files, _NOVELS_BASE
 from .md_parser import split_sections, parse_bullet_fields
 
 logger = logging.getLogger(__name__)
@@ -192,7 +192,11 @@ def _world_upsert(novel_name: str, category: str, name: str, data: dict,
             mark_dirty(novel_id, "world_setting", ws_id)
         except NotFoundError:
             pass
-    return json.dumps({"ok": True, "category": category, "name": name}, ensure_ascii=False)
+    _sync_warning = _auto_sync_to_files(novel_name, "world", f"{category}:{name}")
+    result = {"ok": True, "category": category, "name": name}
+    if _sync_warning:
+        result["auto_sync"] = json.loads(_sync_warning)
+    return json.dumps(result, ensure_ascii=False)
 
 
 def _world_query(novel_name: str, category: str = "", name: str = "",
@@ -408,6 +412,19 @@ def _world_deactivate(novel_name: str, category: str, name: str, reason: str = "
         "id = ?", [ws_id]
     )
     query(sql, params, fetch="none")
+
+    # 即时清理同步文件（不等下次全量 sync）
+    try:
+        from .sync_engine import engine as _sync_engine
+        tpl = _sync_engine.get("world")
+        sample_row = {"category": category, "name": name}
+        fpath = _sync_engine._resolve_filepath(tpl, novel_name, sample_row)
+        if fpath and os.path.exists(fpath):
+            os.remove(fpath)
+            log.info(f"deactivate 清理文件: {fpath}")
+    except Exception as e:
+        log.warning(f"deactivate 文件清理失败 {category}:{name}: {e}")
+
     return json.dumps({"ok": True, "category": category, "name": name, "status": "inactive", "reason": reason}, ensure_ascii=False)
 
 

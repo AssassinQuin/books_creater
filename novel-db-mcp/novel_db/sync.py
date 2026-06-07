@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 
 from .db import query, PROJECT_ROOT
 from .resolvers import _resolve_novel_id
@@ -14,26 +15,40 @@ _NOVELS_BASE = os.path.join(PROJECT_ROOT, "novels")
 
 
 _hashes_table_ensured = False
+_hashes_table_lock = threading.Lock()
 
 
 def _ensure_data_hashes_table():
     global _hashes_table_ensured
-    if _hashes_table_ensured:
-        return
-    query("""
-        CREATE TABLE IF NOT EXISTS data_hashes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            novel_id INTEGER NOT NULL,
-            data_type TEXT NOT NULL,
-            data_key TEXT NOT NULL,
-            db_hash TEXT NOT NULL DEFAULT '',
-            file_hash TEXT NOT NULL DEFAULT '',
-            db_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            file_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(novel_id, data_type, data_key)
+    with _hashes_table_lock:
+        if _hashes_table_ensured:
+            return
+        query(
+            "CREATE TABLE IF NOT EXISTS data_hashes ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "novel_id INTEGER NOT NULL, "
+            "data_type TEXT NOT NULL, "
+            "data_key TEXT NOT NULL, "
+            "db_hash TEXT NOT NULL DEFAULT '', "
+            "file_hash TEXT NOT NULL DEFAULT '', "
+            "db_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+            "file_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+            "UNIQUE(novel_id, data_type, data_key)"
+            ")",
+            fetch="none",
         )
-    """, fetch="none")
-    _hashes_table_ensured = True
+        _migrate_hashes_table()
+        _hashes_table_ensured = True
+
+
+def _migrate_hashes_table():
+    """Add last_sync_hash and last_sync_file_hash columns if missing."""
+    cols = query("PRAGMA table_info(data_hashes)", fetch="all")
+    existing = {c["name"] for c in cols} if cols else set()
+    if "last_sync_hash" not in existing:
+        query("ALTER TABLE data_hashes ADD COLUMN last_sync_hash TEXT NOT NULL DEFAULT ''", fetch="none")
+    if "last_sync_file_hash" not in existing:
+        query("ALTER TABLE data_hashes ADD COLUMN last_sync_file_hash TEXT NOT NULL DEFAULT ''", fetch="none")
 
 
 def _compute_hash(content: str) -> str:
@@ -88,6 +103,90 @@ def _record_file_hash(novel_id: int, data_type: str, data_key: str, content: str
     h = _compute_hash(content)
     _upsert_hash(novel_id, data_type, data_key, file_hash=h)
 
+
+def _get_hash_record(novel_id: int, data_type: str, data_key: str) -> dict | None:
+    """Read all hash columns for an entity from data_hashes."""
+    _ensure_data_hashes_table()
+    rows = query(
+        "SELECT db_hash, file_hash, last_sync_hash, last_sync_file_hash, "
+        "db_updated_at, file_updated_at "
+        "FROM data_hashes WHERE novel_id=? AND data_type=? AND data_key=?",
+        (novel_id, data_type, data_key), fetch="all"
+    )
+    return rows[0] if rows else None
+
+
+def _detect_conflict(stored: dict | None, current_file_hash: str) -> str:
+    """Determine sync conflict state.
+
+    Returns one of:
+      'safe'       — file unchanged since last sync, DB changed → safe to overwrite
+      'db_newer'   — same as safe (DB changed, file didn't)
+      'file_newer' — file was modified by user, DB didn't change → needs user decision
+      'conflict'   — both file and DB changed since last sync → needs user decision
+      'no_record'  — no previous sync record → first sync is safe
+      'skip'       — neither changed → nothing to do
+    """
+    if stored is None:
+        return "no_record"
+
+    last_file = stored.get("last_sync_file_hash", "")
+    last_db = stored.get("last_sync_hash", "")
+    stored_db = stored.get("db_hash", "")
+
+    # No previous sync — safe
+    if not last_file and not last_db:
+        return "no_record"
+
+    file_changed = current_file_hash != last_file if last_file else bool(current_file_hash)
+    db_changed = stored_db != last_db if last_db else bool(stored_db)
+
+    if file_changed and db_changed:
+        return "conflict"
+    if file_changed:
+        return "file_newer"
+    if db_changed:
+        return "db_newer"
+    return "skip"
+
+
+def _snapshot_sync_hashes(novel_id: int, data_type: str, data_key: str,
+                           db_hash: str, file_hash: str):
+    """After successful sync, record last_sync_hash and last_sync_file_hash."""
+    _ensure_data_hashes_table()
+    query(
+        "UPDATE data_hashes SET last_sync_hash=?, last_sync_file_hash=? "
+        "WHERE novel_id=? AND data_type=? AND data_key=?",
+        (db_hash, file_hash, novel_id, data_type, data_key), fetch="none"
+    )
+
+
+def _auto_sync_to_files(novel_name: str, data_type: str,
+                         data_key: str | None = None,
+                         novel_id: int | None = None) -> str | None:
+    """DB 修改后自动同步到文件。有冲突时返回冲突报告 JSON，否则返回 None。
+
+    供各 MCP 工具在 DB 写入后调用。优先使用 novel_id 避免反向查询。
+    """
+    from .sync_engine import engine as _sync_engine
+    try:
+        # 如果有 novel_id 但没有 novel_name，先解析
+        if novel_id and not novel_name:
+            row = query("SELECT name FROM novels WHERE id = ?", (novel_id,), fetch="one")
+            if not row:
+                return None
+            novel_name = row["name"]
+        result = _sync_engine.db_to_files(novel_name, data_type,
+                                          entity_key=data_key, overwrite=False)
+        conflicts = result.get("conflicts", [])
+        if conflicts:
+            return json.dumps({
+                "auto_sync_conflicts": conflicts,
+                "message": "文件被修改过，请选择处理方式: sync(action='resolve', resolutions=[...])"
+            }, ensure_ascii=False)
+        return None
+    except Exception as e:
+        return json.dumps({"auto_sync_warning": str(e)}, ensure_ascii=False)
 
 def _db_row_to_hashable(row: dict) -> str:
     parts = []

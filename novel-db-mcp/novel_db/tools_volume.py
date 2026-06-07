@@ -2,6 +2,7 @@ import json
 
 from .db import mcp, query, transaction
 from .errors import mcp_tool
+from .sync import _record_db_hash, _auto_sync_to_files
 from .resolvers import _resolve_novel_id, _UNSET
 from .sql_utils import build_update_sql
 
@@ -33,7 +34,12 @@ def volume_create(novel_name: str, number: int, title: str = "",
         "DO UPDATE SET title = ?, main_plotlines = ?, notes = ?, updated_at = datetime('now')",
         (novel_id, number, title, mp, notes, title, mp, notes), fetch="insert"
     )
-    return json.dumps({"ok": True, "id": r, "number": number}, ensure_ascii=False)
+    _record_db_hash(novel_id, "volume", str(number), mp)
+    _sync_warning = _auto_sync_to_files(novel_name, "volume", str(number))
+    result = {"ok": True, "id": r, "number": number}
+    if _sync_warning:
+        result["auto_sync"] = json.loads(_sync_warning)
+    return json.dumps(result, ensure_ascii=False)
 
 
 @mcp.tool
@@ -87,6 +93,14 @@ def _volume_update_by_id(volume_id: int, novel_id: int = 0, **kwargs) -> str:
     if novel_id:
         from .hooks import fire_and_report
         fire_and_report(novel_id, "volume", volume_id)
+        vol_row = query("SELECT number FROM volumes WHERE id = ?", (volume_id,), fetch="one")
+        if vol_row:
+            _record_db_hash(novel_id, "volume", str(vol_row["number"]), json.dumps(fields, ensure_ascii=False))
+            novel_name_row = query("SELECT name FROM novels WHERE id = ?", (novel_id,), fetch="one")
+            if novel_name_row:
+                _sync_warning = _auto_sync_to_files(novel_name_row["name"], "volume", str(vol_row["number"]))
+                if _sync_warning:
+                    return json.dumps({"ok": True, "auto_sync": json.loads(_sync_warning)}, ensure_ascii=False)
     return json.dumps({"ok": True}, ensure_ascii=False)
 
 

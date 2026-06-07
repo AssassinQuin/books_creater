@@ -4,7 +4,7 @@ from .db import mcp, query, transaction
 from .resolvers import _resolve_novel_id, _resolve_chapter_id, _UNSET, _resolve_entity
 from .errors import NotFoundError, mcp_tool
 from .sql_utils import build_update_sql, safe_json_loads
-from .sync import _record_db_hash
+from .sync import _record_db_hash, _auto_sync_to_files
 
 
 @mcp.tool
@@ -72,6 +72,11 @@ def character_create(novel_name: str, name: str, role: str = "npc",
         fire_and_report(novel_id, "character", r["id"])
         from .embedding import mark_dirty
         mark_dirty(novel_id, "character", r["id"])
+    _sync_warning = _auto_sync_to_files(novel_name, "character", name)
+    result = {"ok": True, "id": r["id"], "name": name}
+    if _sync_warning:
+        result["auto_sync"] = json.loads(_sync_warning)
+    return json.dumps(result, ensure_ascii=False)
 
 
 def _character_update_by_id(character_id: int, name=_UNSET, role=_UNSET, faction_id=_UNSET,
@@ -114,6 +119,7 @@ def _character_update_by_id(character_id: int, name=_UNSET, role=_UNSET, faction
     if distillation_tracked is not _UNSET: fields["distillation_tracked"] = distillation_tracked
     if not fields:
         return json.dumps({"ok": False, "error": "no valid fields"}, ensure_ascii=False)
+    _sync_warning = None
     with transaction():
         sql, params = build_update_sql("characters", fields, "id = ?", (character_id,))
         query(sql, params, fetch="none")
@@ -124,7 +130,11 @@ def _character_update_by_id(character_id: int, name=_UNSET, role=_UNSET, faction
             fire_and_report(char["novel_id"], "character", character_id)
             from .embedding import mark_dirty
             mark_dirty(char["novel_id"], "character", character_id)
-    return json.dumps({"ok": True}, ensure_ascii=False)
+            _sync_warning = _auto_sync_to_files("", "character", char["name"], novel_id=char["novel_id"])
+    result = {"ok": True}
+    if _sync_warning:
+        result["auto_sync"] = json.loads(_sync_warning)
+    return json.dumps(result, ensure_ascii=False)
 
 
 @mcp.tool
@@ -697,22 +707,41 @@ def character_batch_detail(novel_name: str, character_names: list) -> str:
         f"SELECT * FROM characters WHERE novel_id = ? AND is_active = 1 AND name IN ({placeholders})",
         (novel_id, *character_names)
     )
-    result = []
-    for row in rows:
-        char = dict(row)
-        rels = query(
+
+    # Batch fetch all relations in one query instead of N+1
+    char_ids = [row["id"] for row in rows]
+    char_map = {row["id"]: dict(row) for row in rows}
+
+    if char_ids:
+        id_placeholders = ",".join(["?"] * len(char_ids))
+        all_rels = query(
             "SELECT cr.relation_type, cr.description, cr.intensity, cr.subtext_design, "
+            "cr.from_character_id, cr.to_character_id, "
             "c1.name as from_name, c2.name as to_name "
             "FROM character_relations cr "
             "JOIN characters c1 ON cr.from_character_id = c1.id "
             "JOIN characters c2 ON cr.to_character_id = c2.id "
-            "WHERE cr.novel_id = ? AND (cr.from_character_id = ? OR cr.to_character_id = ?) "
+            "WHERE cr.novel_id = ? "
+            f"AND (cr.from_character_id IN ({id_placeholders}) OR cr.to_character_id IN ({id_placeholders})) "
             "AND cr.status = 'active' ORDER BY cr.intensity DESC",
-            (novel_id, char["id"], char["id"])
+            (novel_id, *char_ids, *char_ids)
         )
-        char["relations"] = [dict(r) for r in rels]
-        result.append(char)
-    return json.dumps(result, ensure_ascii=False, default=str)
+        # Group relations by character id
+        rels_by_id: dict[int, list] = {cid: [] for cid in char_ids}
+        for rel in all_rels:
+            rid = rel["from_character_id"]
+            if rid in rels_by_id:
+                rels_by_id[rid].append(dict(rel))
+            rid = rel["to_character_id"]
+            if rid in rels_by_id:
+                rels_by_id[rid].append(dict(rel))
+        for cid in char_ids:
+            char_map[cid]["relations"] = rels_by_id[cid]
+    else:
+        for cid in char_map:
+            char_map[cid]["relations"] = []
+
+    return json.dumps(list(char_map.values()), ensure_ascii=False, default=str)
 
 
 # ═══════════════════════════════════════════════════════

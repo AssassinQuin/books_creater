@@ -6,6 +6,7 @@ file_dir: "设定/世界观"
 authority: db
 merge_mode: overwrite
 group_by: category
+query_extra: "AND (status IS NULL OR status = 'active')"
 section_marker: "## {category}: {name}"
 file_pattern: "{category_file}/{name}.md"
 file_title: "{name}"

@@ -507,7 +507,7 @@ def _sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fa
       sync_db_to_files(novel_name="这次不一样了", overwrite=True)     # 强制全量覆盖
     注: file→DB方向请使用 sync_files_to_db()
     """
-    results = {"synced": [], "skipped": [], "errors": []}
+    results = {"synced": [], "skipped": [], "errors": [], "conflicts": []}
     types_to_sync = [data_type] if data_type else _sync_engine.available_types
 
     for etype in types_to_sync:
@@ -518,10 +518,12 @@ def _sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fa
             r = _sync_engine.db_to_files(novel_name, etype, overwrite=overwrite)
             for item in r.get("errors", []):
                 results["errors"].append(item)
+            for item in r.get("conflicts", []):
+                results["conflicts"].append(item)
             for _ in range(r.get("synced", 0)):
                 results["synced"].append({"type": etype, "direction": "DB→file"})
             for _ in range(r.get("skipped", 0)):
-                results["skipped"].append({"type": etype, "direction": "跳过（skip_existing）"})
+                results["skipped"].append({"type": etype, "direction": "跳过"})
         except Exception as e:
             results["errors"].append({"type": etype, "error": str(e)})
 
@@ -530,8 +532,10 @@ def _sync_db_to_files(novel_name: str, data_type: str = "", overwrite: bool = Fa
         "engine_types": _sync_engine.available_types,
         "synced_count": len(results["synced"]),
         "skipped_count": len(results["skipped"]),
+        "conflict_count": len(results["conflicts"]),
         "error_count": len(results["errors"]),
         "synced": results["synced"],
+        "conflicts": results["conflicts"],
         "errors": results["errors"],
     }
     return json.dumps(summary, ensure_ascii=False, default=str)
@@ -612,7 +616,8 @@ def engine(action: str = "list", engine_type: str = "", scene_types: list = None
 
 @mcp.tool
 @mcp_tool
-def sync(novel_name: str, action: str = "startup", data_type: str = "", overwrite: bool = False) -> str:
+def sync(novel_name: str, action: str = "startup", data_type: str = "", overwrite: bool = False,
+         resolutions: list = None) -> str:
     """数据同步工具。DB↔文件双向同步。
 
     Actions:
@@ -620,12 +625,14 @@ def sync(novel_name: str, action: str = "startup", data_type: str = "", overwrit
     - db_to_files: DB→文件同步。可选 data_type 过滤(world/character/foreshadow/volume/echo)。
     - files_to_db: 文件→DB同步。可选 data_type 过滤。
     - lorebook: 从设定/世界观/目录同步MD文件到DB。
+    - resolve: 解决同步冲突。需 resolutions 参数。
 
     参数:
       novel_name: 小说名称
-      action: startup|db_to_files|files_to_db|lorebook (默认startup)
+      action: startup|db_to_files|files_to_db|lorebook|resolve (默认startup)
       data_type: 同步范围(空=全部)，可选 world/character/foreshadow/volume/echo
       overwrite: 是否强制覆盖(仅db_to_files)
+      resolutions: 冲突解决列表(仅resolve)，每项 {"type": "实体类型", "key": "实体标识", "strategy": "overwrite|skip|reverse"}
     """
     if action == "startup":
         return _sync_startup(novel_name, data_type)
@@ -636,8 +643,25 @@ def sync(novel_name: str, action: str = "startup", data_type: str = "", overwrit
     elif action == "lorebook":
         from .tools_world import _sync_lorebook
         return _sync_lorebook(novel_name)
+    elif action == "resolve":
+        if not resolutions:
+            return json.dumps({"error": "resolve 需要 resolutions 参数"}, ensure_ascii=False)
+        results = []
+        for r in resolutions:
+            etype = r.get("type", "")
+            key = r.get("key", "")
+            strategy = r.get("strategy", "overwrite")
+            if etype not in _sync_engine.available_types:
+                results.append({"type": etype, "key": key, "error": f"未注册的同步类型: {etype}"})
+                continue
+            try:
+                res = _sync_engine.resolve_conflict(novel_name, etype, key, strategy)
+                results.append({"type": etype, "key": key, "strategy": strategy, "result": res})
+            except Exception as e:
+                results.append({"type": etype, "key": key, "error": str(e)})
+        return json.dumps({"resolved": results}, ensure_ascii=False, default=str)
     else:
-        return json.dumps({"error": f"Unknown action: {action}. Use startup/db_to_files/files_to_db/lorebook."}, ensure_ascii=False)
+        return json.dumps({"error": f"Unknown action: {action}. Use startup/db_to_files/files_to_db/lorebook/resolve."}, ensure_ascii=False)
 
 
 @mcp.tool

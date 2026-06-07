@@ -6,7 +6,7 @@ from .resolvers import _resolve_novel_id, _resolve_chapter_id, _UNSET
 from .tools_chapter import _save_chapter_summary_internal
 from .constraints import validate_chapter_text, _get_constraints, _enrichment_level, validate_with_db_rules
 from .prompts import _build_event_checklist
-from .sync import _record_db_hash
+from .sync import _record_db_hash, _auto_sync_to_files
 from .errors import ValidationError, NotFoundError, mcp_tool
 from .sql_utils import build_update_sql
 
@@ -227,7 +227,11 @@ def _writing_rule_upsert(novel_name: str, rule_type: str, name: str, category: s
             }
             sql, params = build_update_sql("writing_rules", update_fields, "id = ?", [existing["id"]])
             query(sql, params, fetch="none")
-            return json.dumps({"ok": True, "action": "updated", "name": name}, ensure_ascii=False)
+            _sync_warning = _auto_sync_to_files(novel_name, "writing_rule", name)
+            result = {"ok": True, "action": "updated", "name": name}
+            if _sync_warning:
+                result["auto_sync"] = json.loads(_sync_warning)
+            return json.dumps(result, ensure_ascii=False)
         else:
             query(
                 "INSERT INTO writing_rules (novel_id, rule_type, category, name, pattern, replacement, "
@@ -239,7 +243,11 @@ def _writing_rule_upsert(novel_name: str, rule_type: str, name: str, category: s
                  context_pattern, context_range, active_int, priority),
                 fetch="none"
             )
-            return json.dumps({"ok": True, "action": "created", "name": name}, ensure_ascii=False)
+            _sync_warning = _auto_sync_to_files(novel_name, "writing_rule", name)
+            result = {"ok": True, "action": "created", "name": name}
+            if _sync_warning:
+                result["auto_sync"] = json.loads(_sync_warning)
+            return json.dumps(result, ensure_ascii=False)
 
 
 def _writing_rule_list(novel_name: str, category: str = "", is_active: bool = True) -> str:
@@ -465,7 +473,11 @@ def _foreshadow_plant(novel_name: str, description: str,
         _record_db_hash(novel_id, "foreshadow", str(r["id"]), json.dumps({"description": description, "importance": importance}, ensure_ascii=False))
         from .hooks import fire_and_report
         fire_and_report(novel_id, "foreshadow", r["id"])
-    return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
+    _sync_warning = _auto_sync_to_files(novel_name, "foreshadow", str(r["id"]))
+    result = {"ok": True, "id": r["id"]}
+    if _sync_warning:
+        result["auto_sync"] = json.loads(_sync_warning)
+    return json.dumps(result, ensure_ascii=False)
 
 
 def _foreshadow_recall_internal(novel_id: int, foreshadow_id: int, chapter_id: int) -> dict:
@@ -481,6 +493,11 @@ def _foreshadow_recall_internal(novel_id: int, foreshadow_id: int, chapter_id: i
         )
         from .hooks import fire_and_report
         fire_and_report(novel_id, "foreshadow", foreshadow_id)
+    novel_row = query("SELECT name FROM novels WHERE id = ?", (novel_id,), fetch="one")
+    if novel_row:
+        _sync_warning = _auto_sync_to_files(novel_row["name"], "foreshadow", str(foreshadow_id))
+        if _sync_warning:
+            return {"ok": True, "auto_sync": json.loads(_sync_warning)}
     return {"ok": True}
 
 
@@ -552,8 +569,11 @@ def _foreshadow_update(novel_name: str, foreshadow_id: int,
     sql, params = build_update_sql("foreshadows", fields, "id = ?", [foreshadow_id])
     query(sql, params, fetch="none")
     _record_db_hash(novel_id, "foreshadow", str(foreshadow_id), json.dumps(fields, ensure_ascii=False))
-    return json.dumps({"ok": True, "foreshadow_id": foreshadow_id, "updated_fields": list(fields.keys()), "reason": reason},
-                      ensure_ascii=False)
+    _sync_warning = _auto_sync_to_files(novel_name, "foreshadow", str(foreshadow_id))
+    result = {"ok": True, "foreshadow_id": foreshadow_id, "updated_fields": list(fields.keys()), "reason": reason}
+    if _sync_warning:
+        result["auto_sync"] = json.loads(_sync_warning)
+    return json.dumps(result, ensure_ascii=False)
 
 
 # ─── Echoes（回响 — 大事件余波的自然回溯）──────────────────
@@ -599,7 +619,11 @@ def _echo_create(novel_name: str, source_chapter_id: int, echo_chapter_id: int,
                         json.dumps({"source_event": source_event, "echo_type": echo_type}, ensure_ascii=False))
     from .hooks import fire_and_report
     fire_and_report(novel_id, "echo", r["id"])
-    return json.dumps({"ok": True, "id": r["id"]}, ensure_ascii=False)
+    _sync_warning = _auto_sync_to_files(novel_name, "echo", str(r["id"]))
+    result = {"ok": True, "id": r["id"]}
+    if _sync_warning:
+        result["auto_sync"] = json.loads(_sync_warning)
+    return json.dumps(result, ensure_ascii=False)
 
 
 def _echo_list(novel_name: str, volume_id: int = 0, echo_chapter_id: int = 0,

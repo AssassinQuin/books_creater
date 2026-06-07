@@ -5,6 +5,7 @@ from .db import mcp, query, transaction
 from .resolvers import _resolve_novel_id, _resolve_chapter_id, _UNSET, _resolve_entity
 from .errors import NotFoundError, mcp_tool
 from .sql_utils import build_update_sql
+from .sync import _auto_sync_to_files
 
 
 def _resolve_chapter_id_by_number(novel_id: int, number: int) -> int:
@@ -56,7 +57,11 @@ def chapter_plan(novel_name: str, number: int, title: str = "",
         (novel_id, number, title, outline, chapter_type, volume_id,
          title, outline, chapter_type, volume_id), fetch="insert"
     )
-    return json.dumps({"ok": True, "id": r["id"], "number": number}, ensure_ascii=False)
+    _sync_warning = _auto_sync_to_files(novel_name, "chapter", str(number))
+    result = {"ok": True, "id": r["id"], "number": number}
+    if _sync_warning:
+        result["auto_sync"] = json.loads(_sync_warning)
+    return json.dumps(result, ensure_ascii=False)
 
 
 @mcp.tool
@@ -107,7 +112,11 @@ def chapter_save_summary(novel_name: str, chapter_number: int, summary: str,
     nf = new_foreshadows or []
     rf = resolved_foreshadows or []
     _save_chapter_summary_internal(chapter_id, summary, ke, ci, nf, rf, ds)
-    return json.dumps({"ok": True}, ensure_ascii=False)
+    _sync_warning = _auto_sync_to_files(novel_name, "chapter", str(chapter_number))
+    result = {"ok": True}
+    if _sync_warning:
+        result["auto_sync"] = json.loads(_sync_warning)
+    return json.dumps(result, ensure_ascii=False)
 
 
 @mcp.tool
