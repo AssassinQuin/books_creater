@@ -51,6 +51,78 @@
 
 审计步骤：写完 borrowable 后逐条检查以上三点，修改后再输出。
 
+## 三重验证质量门（V1V2V3，强制自检）
+
+**借鉴 cangjie-skill 的 Triple Verification**。每条 borrowable 提取后，在写入前必须通过以下三项（不通过的降级到 `{work_dir}/rejected/{dim}.json` 而非丢弃）：
+
+### V1 — 跨域（cross_domain）
+该技法在原作**至少 2 个独立场景/章节**出现？
+- ✗ 同一案例换说法算两处（作弊）
+- ✓ 不同章节 + 不同对象 + 不同结论
+- **字段**：`quality.v1_cross_domain.passed` (bool) + `evidence` (数组，每条注明章节)
+
+### V2 — 预测力（predictive_power）
+能用 adaptation_map 处理一个**原作没写过的场景**吗？
+- ✗ 只能复述原作案例 → 描述而非方法
+- ✓ 能推导出非平庸结论
+- **字段**：`quality.v2_predictive_power.passed` (bool) + `novel_question` + `derived_answer`
+
+### V3 — 独特性（exclusivity）
+不是"任何小说都有的套路"吗？
+- ✗ "主角要有动机" / "冲突推动剧情" 这种常识
+- ✓ 作者独特的反直觉手法 / 独特术语体系
+- **字段**：`quality.v3_exclusivity.passed` (bool) + `why_not_common`
+
+**判定规则**：三项全过 → 进入 borrowable；任一不通过 → 移入 `rejected/{dim}.json`，附 `failed_at` (V1/V2/V3) + `reason`。
+
+### 反例（V3 不通过的常识型 borrowable）
+```
+✗ name: "主角动机"
+   description: "主角需要有清晰的行动动机"
+   → V3 不通过：任何小说都有，无需 skill 承载
+```
+### 正例（V3 通过的独特 borrowable）
+```
+✓ name: "暗线钩子延迟回收"
+   description: "暖色弧里埋一个看似无关的细节，5-8章后冷色弧兑现"
+   → V3 通过：反直觉（暖色弧应该纯粹温暖），作者独特手法
+```
+
+## Trigger Signals 字段（强制，3-5 条）
+
+**借鉴 cangjie-skill 的 A2 (Future Trigger)**。每条 borrowable 必须标注"用户写作时说什么话应命中本条"：
+
+```json
+"trigger_signals": [
+  "主角刚经历 X，想让他休息一下",
+  "想给读者喘口气",
+  "节奏太紧了需要缓和"
+]
+```
+
+要求：
+- 3-5 条用户实际会说的措辞（不要写"用户需要节奏控制时"这种抽象描述）
+- 区分相邻 borrowable（暖色弧 vs 冷色弧的 trigger_signals 不能重叠）
+- 写完检查：trigger_signals 之间是否互斥？如果两条 borrowable 的 signals 高度重叠，合并或重新拆分
+
+## Related 字段（可选，Zettelkasten 关系图）
+
+**借鉴 cangjie-skill 的 Zettelkasten**。同作品 borrowable 间三类关系：
+
+```json
+"related": [
+  {"slug": "另一个borrowable的name", "relation": "composes-with"},
+  {"slug": "...", "relation": "contrasts-with"},
+  {"slug": "...", "relation": "depends-on"}
+]
+```
+
+- **composes-with**：经常配合使用（如"暖色弧" composes-with "暗线钩子"）
+- **contrasts-with**：二选一（如"暖色弧" contrasts-with "冷色弧"）
+- **depends-on**：使用前提（如"小胜利" depends-on "暖色弧"）
+
+节制原则：不要硬造关系。无真正关系的 borrowable 留空数组 `[]`。
+
 ## 输出格式（强制）
 1. 使用 Write 工具将 JSON 写入 {work_dir}/{维度}.json
    （ctx_execute 仅用于分析，sandbox 内文件不持久化）
@@ -71,7 +143,14 @@
          "adaptation_map": [{"aspect":"...","original":"...","abstract_role":"...","replacement_guide":"..."}],  ← 必须是数组
          "project_relevance": {
            "{active_project}": {"score": 1-5, "reason": "为何对目标项目有用/无用"}
-         }
+         },
+         "trigger_signals": ["用户写作时的语言信号1", "信号2", "信号3"],  ← 3-5条，强制
+         "quality": {                                   ← V1V2V3 三重验证，强制
+           "v1_cross_domain": {"passed": true/false, "evidence": ["章节A", "章节B"]},
+           "v2_predictive_power": {"passed": true/false, "novel_question": "...", "derived_answer": "..."},
+           "v3_exclusivity": {"passed": true/false, "why_not_common": "..."}
+         },
+         "related": [{"slug":"...", "relation":"composes-with|contrasts-with|depends-on"}]  ← 可选，无关系留 []
        }
      ],
      "metadata": {"distilled_at": "...", "chapters_covered": "..."}
@@ -86,6 +165,33 @@
 3. 写入完成后打印 "DISTILL_COMPLETE: {维度}"
 4. 只返回摘要（≤500字）
 ```
+
+## Rejected 落盘（V1V2V3 失败处理）
+
+子 agent 自检 V1V2V3 时，**任何一项不通过的 borrowable**，不要直接丢弃，必须写入：
+
+```
+{work_dir}/rejected/{dim}.json
+```
+
+格式：
+```json
+{
+  "dimension": "{dim}",
+  "rejected": [
+    {
+      "name": "候选名称",
+      "description": "一句话描述",
+      "failed_at": "V1|V2|V3",
+      "reason": "为什么不通过（具体）",
+      "source_chapters": "...",
+      "salvage_hint": "如果未来深化蒸馏时想捞回，需要补充什么"
+    }
+  ]
+}
+```
+
+主 agent Phase 2b.7 会扫描 `rejected/` 目录，作为审计轨迹保留，不进入 DB。
 
 ## 维度 elements 差异化结构
 

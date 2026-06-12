@@ -126,6 +126,35 @@ def normalize_borrowable(b, dim, idx):
             b["adaptation_map"] = arr
             fixes.append("adaptation_map: dict→array")
 
+    # trigger_signals: 缺失或格式错误 → 从 description 提取候选
+    ts = b.get("trigger_signals")
+    if not ts or not isinstance(ts, list) or len(ts) == 0:
+        desc = b.get("description", "")
+        name = b.get("name", "")
+        candidates = []
+        if desc:
+            candidates.append(f"用户在寻找{desc[:30]}相关的处理方式时")
+        if name:
+            candidates.append(f"用户提到'{name}'或类似概念时")
+        candidates.append(f"用户在写{dim}相关场景需要参考时")
+        b["trigger_signals"] = candidates[:3]
+        fixes.append("trigger_signals ← auto-extracted(需人工校核)")
+
+    # quality (V1V2V3): 缺失 → 默认结构（标记 NEEDS_MANUAL_REVIEW）
+    q = b.get("quality")
+    if not q or not isinstance(q, dict):
+        b["quality"] = {
+            "v1_cross_domain": {"passed": None, "evidence": [], "_note": "NEEDS_MANUAL_REVIEW"},
+            "v2_predictive_power": {"passed": None, "novel_question": "", "derived_answer": "", "_note": "NEEDS_MANUAL_REVIEW"},
+            "v3_exclusivity": {"passed": None, "why_not_common": "", "_note": "NEEDS_MANUAL_REVIEW"}
+        }
+        fixes.append("quality ← default-pending-review")
+
+    # related: 缺失 → 空数组
+    if "related" not in b or not isinstance(b.get("related"), list):
+        b["related"] = []
+        fixes.append("related ← []")
+
     # elements: string → array 转换
     el = b.get("elements")
     if isinstance(el, str):

@@ -1,0 +1,81 @@
+{
+  "_description": "检索精度回归测试集（v6.0）。对 project_relevance=high 的 borrowable 跑三类测试。should_trigger=该命中时是否命中；should_not_trigger=诱饵，看似相关但实际不该命中；edge_case=边界模糊场景。",
+  "_pass_criteria": {
+    "should_trigger_min": 0.8,
+    "should_not_trigger_min": 1.0,
+    "notes": "诱饵容错为 0——只测 positive case 会掩盖乱激活问题"
+  },
+  "test_cases": [
+    {
+      "id": "ST-001",
+      "type": "should_trigger",
+      "borrowable_dim": "rhythm",
+      "borrowable_pattern": "暖色弧",
+      "prompt": "主角刚经历了一场恶战，我想让他到一个小镇休息几章，给读者喘口气",
+      "expected": "命中'暖色弧'相关 borrowable（如 暖色弧构造 / 暗线钩子埋设）",
+      "language_signals_expected": ["休息", "喘口气", "节奏太紧"]
+    },
+    {
+      "id": "ST-002",
+      "type": "should_trigger",
+      "borrowable_dim": "narrative",
+      "borrowable_pattern": "不可逆死亡",
+      "prompt": "我想写死一个重要配角，但担心读者不接受，这种处理在其他作品里是怎么做的",
+      "expected": "命中'不可逆死亡/代价感'相关 borrowable"
+    },
+    {
+      "id": "ST-003",
+      "type": "should_trigger",
+      "borrowable_dim": "world",
+      "borrowable_pattern": "旅行揭示世界",
+      "prompt": "主角要去不同地方，希望通过他的旅行把世界观逐步展现给读者",
+      "expected": "命中'旅行揭示世界/地理分层揭示'相关 borrowable"
+    },
+    {
+      "id": "SNT-001",
+      "type": "should_not_trigger",
+      "borrowable_dim": "rhythm",
+      "borrowable_pattern": "（诱饵）",
+      "prompt": "帮我查一下这次不一样项目里有哪些势力",
+      "expected": "不应命中 rhythm 维度的暖色弧/冷色弧——纯信息查询",
+      "decoy_type": "非节奏场景的纯查询"
+    },
+    {
+      "id": "SNT-002",
+      "type": "should_not_trigger",
+      "borrowable_dim": "characters",
+      "borrowable_pattern": "（诱饵）",
+      "prompt": "主角晚饭吃什么",
+      "expected": "不应命中任何 borrowable——日常琐事，字面虽含'主角'但不涉及技法",
+      "decoy_type": "字面相关但实际无关"
+    },
+    {
+      "id": "SNT-003",
+      "type": "should_not_trigger",
+      "borrowable_dim": "ability",
+      "borrowable_pattern": "（诱饵）",
+      "prompt": "帮我看一下这段代码的 bug",
+      "expected": "不应命中任何 borrowable——编程问题，与小说创作完全无关",
+      "decoy_type": "完全跨域"
+    },
+    {
+      "id": "EC-001",
+      "type": "edge_case",
+      "borrowable_dim": "rhythm",
+      "borrowable_pattern": "暖色弧 vs 冷色弧 边界",
+      "prompt": "主角在小镇休息时听说附近的异常——这算暖色弧还是冷色弧起点",
+      "expected": "应命中暖色弧（埋暗线钩子是暖色弧的组成），并提示与冷色弧的边界",
+      "edge_reason": "暖色弧内嵌暗线钩子是合法组合，不应误判为冷色弧"
+    },
+    {
+      "id": "EC-002",
+      "type": "edge_case",
+      "borrowable_dim": "narrative",
+      "borrowable_pattern": "伏笔回收 vs 即时揭示",
+      "prompt": "我在第3章埋了一个细节，第5章就揭示了——这算伏笔吗",
+      "expected": "命中'伏笔回收'但提示跨度<5章不算长伏笔，建议挪到'即时揭示'或扩展跨度",
+      "edge_reason": "伏笔的最短跨度判定模糊"
+    }
+  ],
+  "_usage": "python3 scripts/retrieval-test.py {work_name} --active-project {project}，会读取本文件并对所有 project_relevance.{project}.score>=4 的 borrowable 跑本测试集"
+}

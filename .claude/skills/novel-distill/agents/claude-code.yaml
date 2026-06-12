@@ -1,0 +1,105 @@
+interface:
+  display_name: "Novel Distill"
+  short_description: "把已出版小说蒸馏成可检索 borrowable 数据库"
+  trigger_words:
+    - 蒸馏
+    - 分析小说
+    - 拆解小说
+    - 蒸馏参考
+    - 导入蒸馏
+    - 深化蒸馏
+  default_prompt: "Use novel-distill to extract borrowable patterns from a reference novel into the _参考库 DB."
+
+agents:
+  - role: orchestrator
+    model: sonnet
+    description: |
+      主编排器。负责 Phase 0-3 全流程：
+      输入确认/类型检测/调度子agent/三层后处理/报告生成/INDEX.md 生成。
+      不亲自做维度蒸馏，所有维度交给 dim-* agent。
+
+  - role: dim-world
+    model: sonnet
+    description: |
+      世界观维度蒸馏 agent。加载 agents/dim-world.md prompt 模块。
+      识别：地理/势力/历史/经济/日常/物品等世界构件的可借鉴模式。
+      元 skill 参考：novel-setup/worldbuilding。
+
+  - role: dim-ability
+    model: sonnet
+    description: |
+      能力体系维度蒸馏 agent。加载 agents/dim-ability.md。
+      识别：能力分类/进阶机制/代价约束/开发路径等可借鉴模式。
+      元 skill 参考：abilitycraft/ability-design。
+
+  - role: dim-characters
+    model: sonnet
+    description: |
+      人物维度蒸馏 agent。加载 agents/dim-characters.md（注意复数）。
+      识别：人物原型/驱动逻辑/关系网/成长弧线等可借鉴模式。
+      元 skill 参考：novel-character/character-design。
+
+  - role: dim-narrative
+    model: sonnet
+    description: |
+      叙事维度蒸馏 agent。加载 agents/dim-narrative.md。
+      识别：POV/钩子类型/伏笔结构/视角切换/信息投放等可借鉴模式。
+      元 skill 参考：story-architecture/narrative。
+
+  - role: dim-rhythm
+    model: sonnet
+    description: |
+      节奏维度蒸馏 agent。加载 agents/dim-rhythm.md。
+      识别：暖色弧/冷色弧/小胜利/暗线钩子/章节跨度等可借鉴模式。
+      元 skill 参考：novel-plan/rhythm。
+
+  - role: dim-highlight
+    model: sonnet
+    description: |
+      高光时刻蒸馏 agent。加载 agents/dim-highlight.md。
+      识别：标志性场面/读者爆点/创新手法/可复刻性与风险。
+      无元 skill 参考。
+
+  - role: retrieval-auditor
+    model: haiku
+    description: |
+      检索精度回归测试 agent（v6.0 新增）。
+      加载 evals/retrieval-cases.json，对高优 borrowable 跑 should_trigger/should_not_trigger/edge_case 三类测试。
+      通过标准：should_trigger >= 80%, should_not_trigger = 100%。
+
+workflow:
+  - step: phase0-input-confirm
+    agent: orchestrator
+    output: 文件路径/章节估计/类型/项目方向/维度优先级
+
+  - step: phase1-coarse-extract
+    agent: orchestrator
+    output: 卷摘要/作品画像/写入 DB
+
+  - step: phase2b-parallel-distill
+    agent: dim-*  # 并行调度，按维度优先级
+    output: "{work_dir}/{dim}.json（含 trigger_signals + quality + related）"
+
+  - step: phase2b4-normalize
+    agent: orchestrator
+    output: 规范化 JSON（schema 修复 + trigger_signals/quality 自动填充）
+
+  - step: phase2b5-validate
+    agent: orchestrator
+    output: 校验报告（schema + V1V2V3 内容质量）
+
+  - step: phase2b6-rejected-archive
+    agent: orchestrator
+    output: "{work_dir}/rejected/{dim}.json（V1V2V3 失败项审计轨迹）"
+
+  - step: phase2c-batch-write
+    agent: orchestrator
+    output: DB ref_borrowable 批量入库
+
+  - step: phase3-report-index
+    agent: orchestrator
+    output: 蒸馏报告.md + INDEX.md（Zettelkasten 关系图）
+
+  - step: phase3.5-retrieval-regression
+    agent: retrieval-auditor
+    output: 检索精度回归报告（可选，高优 borrowable > 10 时强制）
