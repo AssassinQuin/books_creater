@@ -158,13 +158,86 @@ def validate_file(path):
 
     return errors, warnings
 
+def auto_reject_failed(work_dir, dims=None):
+    """--auto-reject 模式：将 V1V2V3 失败项自动移入 rejected/{dim}.json。
+    解决 audit 发现的 MEDIUM 风险：rejected 路由无脚本强制。"""
+    rejected_dir = os.path.join(work_dir, "rejected")
+    os.makedirs(rejected_dir, exist_ok=True)
+
+    files = glob.glob(os.path.join(work_dir, "*.json"))
+    if dims:
+        files = [f for f in files if any(d in os.path.basename(f) for d in dims)]
+
+    moved_count = 0
+    for f in sorted(files):
+        if "rejected" in f:
+            continue
+        try:
+            with open(f) as fp:
+                data = json.load(fp)
+        except (json.JSONDecodeError, IOError):
+            continue
+
+        dim = data.get("dimension", os.path.basename(f).replace(".json", ""))
+        borrowables = data.get("borrowable", [])
+        kept = []
+        rejected = []
+
+        for b in borrowables:
+            if not isinstance(b, dict):
+                kept.append(b)
+                continue
+            q = b.get("quality", {})
+            failed_at = []
+            for vk in ["v1_cross_domain", "v2_predictive_power", "v3_exclusivity"]:
+                v = q.get(vk, {})
+                if v.get("passed") is False:
+                    failed_at.append(vk.split("_")[0].upper())
+            if failed_at:
+                rejected.append({
+                    "name": b.get("name", "?"),
+                    "description": b.get("description", ""),
+                    "failed_at": "/".join(failed_at),
+                    "reason": "V1V2V3 自动检测不通过",
+                    "source_chapters": b.get("source_chapters", ""),
+                    "salvage_hint": f"补充 {failed_at} 的 evidence/novel_question/why_not_common 后可重新评估"
+                })
+            else:
+                kept.append(b)
+
+        if rejected:
+            data["borrowable"] = kept
+            with open(f, "w", encoding="utf-8") as fp:
+                json.dump(data, fp, ensure_ascii=False, indent=2)
+            rej_path = os.path.join(rejected_dir, f"{dim}.json")
+            existing = []
+            if os.path.exists(rej_path):
+                try:
+                    with open(rej_path) as rfp:
+                        existing = json.load(rfp).get("rejected", [])
+                except (json.JSONDecodeError, IOError):
+                    pass
+            existing.extend(rejected)
+            with open(rej_path, "w", encoding="utf-8") as rfp:
+                json.dump({"dimension": dim, "rejected": existing}, rfp, ensure_ascii=False, indent=2)
+            print(f"  → {dim}: 移除 {len(rejected)} 条到 rejected/{dim}.json")
+            moved_count += len(rejected)
+
+    return moved_count
+
 def main():
     if len(sys.argv) < 2:
-        print("用法: python3 validate-distill.py <work_dir> [dim1,dim2,...]")
+        print("用法: python3 validate-distill.py <work_dir> [dim1,dim2,...] [--auto-reject]")
+        print("  --auto-reject: V1V2V3 失败项自动移入 rejected/{dim}.json（强制执行 Phase 2b.6）")
         sys.exit(1)
 
-    work_dir = sys.argv[1]
-    dims = sys.argv[2].split(",") if len(sys.argv) > 2 else None
+    args = sys.argv[1:]
+    auto_reject = "--auto-reject" in args
+    if auto_reject:
+        args = [a for a in args if a != "--auto-reject"]
+
+    work_dir = args[0]
+    dims = args[1].split(",") if len(args) > 1 else None
 
     if not os.path.isdir(work_dir):
         print(f"目录不存在: {work_dir}")
@@ -196,6 +269,12 @@ def main():
             print(f"✓ {name}")
 
     print(f"\n总计: {len(files)} 文件, {total_errors} 错误, {total_warnings} 警告")
+
+    if auto_reject:
+        print("\n--- auto-reject 模式: 处理 V1V2V3 失败项 ---")
+        moved = auto_reject_failed(work_dir, dims)
+        print(f"总计移入 rejected/: {moved} 条")
+
     sys.exit(1 if total_errors > 0 else 0)
 
 if __name__ == "__main__":

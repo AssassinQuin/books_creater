@@ -48,21 +48,6 @@ version: "6.0.0"
 
 **中性化输出**：source_context / replacement_guide 禁止原作术语和具名替换。审计示例见 `references/agent-prompt.md`。
 
-## 核心概念
-
-**`_参考库`**：novel-db 特殊小说名，存储所有参考作品蒸馏数据，全局共享。
-
-**项目方向感知**：Phase 0 检测 CLAUDE.md 活跃项目品类，borrowable 含 `project_relevance` 字段。详见 `references/type-detection.md`。
-
-**批露式架构**：6维度各有独立 agent 模块（`agents/dim-{dim}.md`），prompt 模板见 `references/agent-prompt.md`。
-
-**文件管理**（v5.0 重构）：
-- 子agent 输出：`novels/_参考库/{作品名}/.distill-tmp/`（项目内持久化，Phase 3 保留供深化）
-- 最终归档：`novels/_参考库/{作品名}/` 单层目录
-- 校验脚本：`scripts/validate-distill.py`（Phase 2b 后处理）
-
-**中性化输出**：source_context / replacement_guide 禁止原作术语和具名替换。审计示例见 `references/agent-prompt.md`。
-
 ## 执行流程
 
 ### Phase 0：输入确认 + 项目方向检测
@@ -130,11 +115,13 @@ python3 scripts/normalize-distill.py {work_dir}
 
 **规范化后立即运行校验**，若仍有错误→返回子agent修复。
 
-#### 2b.5：脚本校验（v6.0 含 V1V2V3 质量门）
+#### 2b.5：脚本校验（v6.0 含 V1V2V3 质量门 + auto-reject）
 
 ```bash
-python3 scripts/validate-distill.py {work_dir}
+python3 scripts/validate-distill.py {work_dir} --auto-reject
 ```
+
+`--auto-reject` 标志**强制启用**（v6.0 audit 修复）：V1V2V3 失败项由脚本自动移入 `rejected/`，不依赖主 agent 手动执行（消除 silent-bypass 风险）。
 
 校验内容：
 - JSON 格式 / 必填字段（含 `trigger_signals` + `quality`）
@@ -142,30 +129,26 @@ python3 scripts/validate-distill.py {work_dir}
 - 中性化关键词扫描 / project_relevance 结构
 - **V1 跨域**：`quality.v1_cross_domain.passed=true` 时 evidence 必须 ≥2 条
 - **V2 预测力**：`passed=true` 时必须有 `novel_question` + `derived_answer`
-- **V3 独特性**：`passed=true` 时必须有 `why_not_common`；自动检测常识模式（黑名单）→ 命中即 error
+- **V3 独特性**：`passed=true` 时必须有 `why_not_common`；自动检测常识模式（关键词组合 + 指令性词）→ 命中即 error
 - **trigger_signals**：3-5条，非空，禁抽象描述
-- **V1V2V3 任一 `passed=false`**：error（应移入 rejected/）
+- **V1V2V3 任一 `passed=false`**：error + auto-reject 移入 `rejected/{dim}.json`
 
 **校验不通过→分流：**
 - schema 错误（缺字段/格式）→ 返回子agent修复后重跑
-- V1V2V3 不通过 → 进入 Phase 2b.6 rejected 归档，不返回子agent
+- V1V2V3 不通过 → auto-reject 已自动归档，主 agent 仅报告淘汰数量
 
-#### 2b.6：V1V2V3 失败分流 + Rejected 归档（v6.0 新增）
+#### 2b.6：Rejected 归档（v6.0，auto-reject 已自动完成）
 
-校验中标记 V1V2V3 失败的 borrowable，**不丢弃**，移入审计轨迹：
+`validate-distill.py --auto-reject` 已将 V1V2V3 失败项写入：
 
-```python
-# 主 agent 在 validate 输出后执行：
-FOR dim IN validated_dims:
-    FOR b IN borrowables[dim]:
-        IF any(v.failed for v in b.quality):
-            MOVE b TO {work_dir}/rejected/{dim}.json
-            RECORD b.failed_at + reason + salvage_hint
+```
+{work_dir}/rejected/{dim}.json
+  → {dimension, rejected: [{name, description, failed_at, reason, source_chapters, salvage_hint}]}
 ```
 
-输出：`{work_dir}/rejected/{dim}.json`，结构见 `references/agent-prompt.md`。
+**主 agent 仅需报告**："本作品 V1V2V3 淘汰 N 条候选（V1:x / V2:y / V3:z），已归档至 rejected/ 供后续捞回。"
 
-**主 agent 报告**："本作品 V1V2V3 淘汰 N 条候选（V1:x / V2:y / V3:z），已归档至 rejected/ 供后续捞回。"
+Phase 2.5 深化时优先扫描 `rejected/`，对失败项补充 evidence 后重新评估。
 
 #### 2b.7：文件验证（v5.0 → v6.0 编号调整）
 
@@ -257,7 +240,7 @@ adaptation_map 使用：先读 source_context → 再看 elements → 逐项 kee
 | 2000-10000 行 | 分段（800行/段，50行重叠） |
 | > 10000 行 | Phase 1 读首尾+卷首章，Phase 2 按维度精准读取 |
 
-## 约束（15条，v6.0 新增 3 条）
+## 约束（16条，v6.0 新增 3 条）
 
 1. **不编造**：只提取文本明确内容；Write 数据来源必须是 DB 查询
 2. **中性化**：source_context/elements/adaptation_map 禁止原作术语和具名替换
