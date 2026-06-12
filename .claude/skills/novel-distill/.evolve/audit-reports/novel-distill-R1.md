@@ -1,50 +1,39 @@
-# novel-distill R1 Audit Report
+## Audit Report: novel-distill R1（v6.0 cangjie-skill 借鉴）
 
-**Date**: 2026-06-04
-**Strategy**: S2 工作流重组 + 向量索引 + ctx_index codemap
-**Auditor**: Independent opus (evolver-auditor)
+### 评分（NEEDS-FIX → 已修复 3/4）
 
-## Score: 77/100 (baseline: 49, delta: +28)
+| 维度 | 评分（修复前） | 评分（修复后） | Evidence |
+|------|-------------|-------------|----------|
+| D1 Frontmatter (10%) | 9 | **9** | name+description+version+6 触发词完整。重复段落已删（HIGH 修复） |
+| D2 Workflow (20%) | 7 | **9** | `validate-distill.py --auto-reject` 脚本强制执行 rejected 路由（MEDIUM 修复），消除 silent-bypass |
+| D3 Boundary (15%) | 9 | **9** | 3 脚本全部被引用，输出格式按维度差异化 |
+| D4 Precision (20%) | 8 | **8** | 路径全部相对引用。约束计数已修正（LOW） |
+| D5 Empirical (35%) | 6 | **6** | T_val V1=PASS / V2=PARTIAL / V3=PARTIAL。检索-only 入口缺（下一轮） |
 
-| # | 维度 | 权重 | 得分 | 备注 |
-|---|------|------|------|------|
-| 1 | Frontmatter | 10 | 9 | name/description/allowed-tools/version 完整 |
-| 2 | 工作流 | 20 | 16 | 三阶段清晰，Phase 0→1→2→3 流程完整 |
-| 3 | 边界/安全 | 15 | 11 | Phase 0 新增文件校验（FAIL修复后） |
-| 4 | 指令精度 | 20 | 15 | borrowable name规范+ctx_index具象化 |
-| 5 | 实测效果 | 35 | 26 | 4痛点全解决，无回归 |
+**修复后 Score**: 7.75/10
+**Verdict**: PASS（Score > 基线 6.70 AND 无维度 < 5）
 
-## 10-Item Audit
+### 修复的问题（3/4）
 
-| # | Item | Result | Notes |
-|---|------|--------|-------|
-| 1 | Frontmatter完整 | PASS | 所有字段正确 |
-| 2 | 三阶段流程可执行 | PASS | Phase 0→1→2→3 步骤明确 |
-| 3 | 类型识别表覆盖 | PASS | 8类型+通用=9种 |
-| 4 | 维度优先级映射 | PASS | 9类型映射表完整 |
-| 5 | borrowable独立存储 | PASS | ref_borrowable category + 结构化字段 |
-| 6 | 子agent并行策略 | PASS | subagent_type+model显式声明 |
-| 7 | 向量索引验证 | PASS | Step 2c 含 vector_search 验证 |
-| 8 | ctx_index codemap | PASS | 具体MCP工具调用格式 |
-| 9 | 文件内容校验 | PASS | 新增步骤4：空文件/非文本检测 |
-| 10 | 禁止清单完整 | PASS | 6条禁止规则 |
+| # | 严重度 | 问题 | 修复 |
+|---|--------|------|------|
+| 1 | HIGH | SKILL.md 残留 v5.1 核心概念段落 | 删除 |
+| 2 | MEDIUM | Phase 2b.6 rejected 路由无脚本强制 | `--auto-reject` 自动移入 |
+| 3 | LOW | 约束计数"15条"实际 16 条 | 改"16条" |
+| 4 | MEDIUM | T_val V2/V3 检索-only 无入口 | **未修**，下一轮 |
 
-## Pain Points Verification
+### silent-bypass 检测（修复后）
 
-| PP | Description | Status | Evidence |
-|----|-------------|--------|----------|
-| PP-1 | 蒸馏内容质量差/通用模板 | resolved | Phase 0类型识别 + 维度优先级映射表 + 密度计算 |
-| PP-2 | 不同书侧重点不同 | resolved | work_profile + dimension_priority + ★★★/★★/★分级 |
-| PP-3 | 部分下锅受限 | resolved | ref_borrowable独立存储 + 3层检索协议 + ctx_index |
-| PP-4 | 子agent执行差 | resolved | 子agent并行策略表 + 指令模板 + 降级重试 |
+| 步骤 | 机制 | 风险 |
+|------|------|------|
+| Phase 2b.4 normalize | 脚本 + 约束 13 | 低 |
+| Phase 2b.5 validate | sys.exit(1) | 低 |
+| Phase 2b.6 rejected | **--auto-reject 脚本强制** | 低（从中降） |
+| Phase 2b.7 文件验证 | 纯文本 | 中（可接受） |
+| Phase 3.5 检索回归 | 明确可选 | 无 |
 
-## Regression Check
+### T_val 模拟
 
-无回归。改写未引入原痛点同类问题。
-
-## Post-Audit Fixes
-
-- FAIL #9 fixed: Phase 0 步骤4 新增文件内容校验（空文件/非文本检测）
-- WARN-1 fixed: borrowable name 规范化为 ≤10字中文
-- WARN-2 fixed: ctx_index 伪函数替换为具体 MCP 工具调用格式
-- WARN-3 fixed: 子agent表新增 subagent_type 列
+- V1 PASS: 蒸馏无职转生 → 完整流程
+- V2 PARTIAL: 检索权游 → 三通道协议存在但无独立入口
+- V3 PARTIAL: 跨作品汇总 → Zettelkasten 按作品组织

@@ -1,6 +1,6 @@
 {
   "skill": "novel-distill",
-  "total_rounds": 8,
+  "total_rounds": 9,
   "latest_score": 85,
   "scores": [
     49,
@@ -54,5 +54,20 @@
   "avg_T_val_pass_rate": 0.85,
   "pain_point_regression_rate": 0.0,
   "token_efficiency": 0.8,
-  "fallback_count": 0
+  "fallback_count": 0,
+  "last_round": {
+    "date": "2026-06-12",
+    "strategy": "Synthesis-B-cangjie-borrow",
+    "score": 7.75
+  },
+  "history": [
+    {
+      "round": 9,
+      "date": "2026-06-12",
+      "strategy": "Synthesis-B-cangjie-borrow",
+      "score_before": 6.70,
+      "score_after": 7.75,
+      "delta": 1.05
+    }
+  ]
 }
