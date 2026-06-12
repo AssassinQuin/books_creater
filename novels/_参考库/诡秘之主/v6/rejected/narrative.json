@@ -1,0 +1,45 @@
+{
+  "dimension": "narrative",
+  "rejected": [
+    {
+      "name": "双重身份的戏剧反讽螺旋",
+      "description": "角色在多身份间切换时，读者同时看到各层面的真相、推测和自我欺骗，形成递增的戏剧反讽",
+      "failed_at": "V3",
+      "reason": "V1V2V3 自动检测不通过",
+      "source_chapters": "V1-V7",
+      "salvage_hint": "补充 ['V3'] 的 evidence/novel_question/why_not_common 后可重新评估"
+    },
+    {
+      "name": "内心独白vs外在表现的张力反差",
+      "description": "通过多角色内心独白与外在行为的不一致制造喜剧/紧张张力，一个细节同时展示多个角色性格",
+      "failed_at": "V3",
+      "reason": "V1V2V3 自动检测不通过",
+      "source_chapters": "V1-V7",
+      "salvage_hint": "补充 ['V3'] 的 evidence/novel_question/why_not_common 后可重新评估"
+    },
+    {
+      "name": "碎片化历史文本的信息投放系统",
+      "description": "通过散落的古代文献/日记/铭文等碎片化文本，渐进式揭示世界观、历史隐秘和情感共鸣，同时驱动收集任务",
+      "failed_at": "V3",
+      "reason": "V1V2V3 自动检测不通过",
+      "source_chapters": "V1-V7",
+      "salvage_hint": "补充 ['V3'] 的 evidence/novel_question/why_not_common 后可重新评估"
+    },
+    {
+      "name": "跨卷伏笔的长弧回收机制",
+      "description": "伏笔在不同节奏模式下跨越多个卷/阶段回收：即时回收（同卷兑现）、延迟回收（多卷后兑现）、长弧回收（全书后期揭示时改变前期事件的意义）",
+      "failed_at": "V3",
+      "reason": "V1V2V3 自动检测不通过",
+      "source_chapters": "V1-V7",
+      "salvage_hint": "补充 ['V3'] 的 evidence/novel_question/why_not_common 后可重新评估"
+    },
+    {
+      "name": "限知视角的信息过滤与逆向利用",
+      "description": "利用视角角色的信息不完整制造'一起猜'的推理体验，角色基于不完整信息做出错误判断反而增强代入感",
+      "failed_at": "V3",
+      "reason": "V1V2V3 自动检测不通过",
+      "source_chapters": "V1-V7",
+      "salvage_hint": "补充 ['V3'] 的 evidence/novel_question/why_not_common 后可重新评估"
+    }
+  ]
+}

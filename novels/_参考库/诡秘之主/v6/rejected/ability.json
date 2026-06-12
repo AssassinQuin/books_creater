@@ -1,0 +1,13 @@
+{
+  "dimension": "ability",
+  "rejected": [
+    {
+      "name": "能力进阶中存在质变分界线",
+      "description": "能力进阶中存在质变分界线",
+      "failed_at": "V1/V2/V3",
+      "reason": "V1V2V3 自动检测不通过",
+      "source_chapters": "V1-V7",
+      "salvage_hint": "补充 ['V1', 'V2', 'V3'] 的 evidence/novel_question/why_not_common 后可重新评估"
+    }
+  ]
+}
