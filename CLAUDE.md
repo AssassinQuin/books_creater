@@ -40,6 +40,7 @@
 | 世界观/设定 | `novels/{小说名}/设定/世界观/` |
 | 人物档案 | `novels/{小说名}/设定/人物/` |
 | 卷级大纲 | `novels/{小说名}/设定/大纲/` |
+| 线索/伏笔链 | `novels/{小说名}/设定/大纲/线索/` |
 | 章节正文 | `novels/{小说名}/正文/` |
 | 参考蒸馏 | `novels/_参考库/` |
 
@@ -64,6 +65,7 @@
 | **novel-setup** | A | 新建小说/建世界观/加设定/加物品 | 项目创建、基调锚、氛围DNA |
 | **novel-distill** | A | 蒸馏XX/分析小说/拆解小说/蒸馏参考 | 参考作品蒸馏，结构化存入_参考库 |
 | **novel-character** | A | 设计人物/加人物/改人物/人物卡 | 角色蒸馏7步、外观、对话 |
+| **novel-plotcraft** | B | 讨论剧情/设计线索/伏笔规划/推演剧情/what if | 人机协作剧情讨论，实时世界观约束校验 |
 | **novel-plan** | B | 规划大纲/设计卷/全书框架 | 全书框架 + 单卷大纲 |
 | **novel-write** | B | 写第N章/继续写/写一章 | 单章正文生成 |
 | **novel-review** | C | 审阅/检查/诊断/OOC | 5种审查模式 |
@@ -134,8 +136,14 @@
 
 ### Phase B: 大纲 + 写作
 
-写作管线：
+**推荐流程**：`novel-plotcraft`（剧情讨论）→ `novel-plan`（大纲生成）→ `novel-write`（正文生成）
 
+剧情讨论管线（novel-plotcraft）：
+```
+加载世界观+线索+角色 → 选择模式 → 交互式讨论（实时约束校验）→ 线索/伏笔入库 → 输出到 novel-plan
+```
+
+写作管线（novel-plan → novel-write）：
 ```
 get_chapter_context → 创意决策(用户确认) → resolve_engines → 逐场面生成+自检 → validate → writing_finish
 ```
