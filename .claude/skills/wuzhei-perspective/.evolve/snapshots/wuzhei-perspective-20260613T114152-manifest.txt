@@ -1,0 +1,7 @@
+      67     3515 references/research/01-narrative-structure.md
+     101     5301 references/research/02-worldview-system.md
+      91     4887 references/research/03-character-craft.md
+      70     3380 references/research/04-foreshadowing-design.md
+     143     8392 references/research/05-author-craft-notes.md
+     101     5222 references/research/06-timeline.md
+     343    21450 SKILL.md
