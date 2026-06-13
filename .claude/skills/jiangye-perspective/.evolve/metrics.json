@@ -1,0 +1,18 @@
+{
+  "total_rounds": 1,
+  "history": [
+    {
+      "round": 1,
+      "date": "2026-06-13",
+      "strategy": "内容中性重构-QuickFix",
+      "score_before": 4.9,
+      "score_after": 9.18,
+      "delta": 4.28
+    }
+  ],
+  "last_round": {
+    "date": "2026-06-13",
+    "strategy": "内容中性重构-QuickFix",
+    "score": 9.18
+  }
+}
