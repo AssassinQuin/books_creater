@@ -19,6 +19,15 @@ Thumbs.db
 # 本地配置（含绝对路径的权限白名单）
 .claude/settings.local.json
 
+# story-setup 瞬态标记（下个会话由 session-start.sh 自动清除）
+.claude/.agents-pending-restart
+
+# novel-workflow 本地配置（含本机绝对路径；config.example.toml 是入库模板）
+.novel-workflow/config.toml
+
+# spec-workflow 运行时 session（PID/端口/时间戳，瞬态）
+.spec-workflow/session.json
+
 # SQLite 数据库文件（二进制，不入库）
 novel-db-mcp/novel.db
 data/novel.db

@@ -65,8 +65,10 @@
 | **novel-setup** | A | 新建小说/建世界观/加设定/加物品 | 项目创建、基调锚、氛围DNA |
 | **novel-distill** | A | 蒸馏XX/分析小说/拆解小说/蒸馏参考 | 参考作品蒸馏，结构化存入_参考库 |
 | **novel-character** | A | 设计人物/加人物/改人物/人物卡 | 角色蒸馏7步、外观、对话 |
-| **novel-plotcraft** | B | 讨论剧情/设计线索/伏笔规划/推演剧情/what if | 人机协作剧情讨论，实时世界观约束校验 |
+| **novel-plotcraft** | B | 讨论剧情/这个反派怎么写/这条线怎么埋/帮我想剧情/剧情卡住了/设计线索/伏笔规划/推演剧情/what if | 剧情工坊v2·披露式：张力挖掘→前因回溯→双关(约束+重量)，调度wuzhei/jiangye元skill，突破安全牌+挡突兀 |
 | **novel-plan** | B | 规划大纲/设计卷/全书框架 | 全书框架 + 单卷大纲 |
+| **wuzhei-perspective** | 辅助 | 用乌贼的视角/乌贼会怎么看/诡秘作者怎么想 | 爱潜水的乌贼·创作思维OS+长篇结构工具箱（7思维模型+6结构工具，内容中性铁律）。被 plotcraft 披露式调度 |
+| **jiangye-perspective** | 辅助 | 用猫腻的视角/猫腻会怎么处理/将夜式框架 | 猫腻·创作思维方法（7方法+表达DNA，内容中性）。被 plotcraft 调度做重量/扎根评判 |
 | **novel-write** | B | 写第N章/继续写/写一章 | 单章正文生成 |
 | **novel-review** | C | 审阅/检查/诊断/OOC | 5种审查模式 |
 | **novel-fix** | C | 修复/润色/改文/去重 | 3种修复模式 |
@@ -194,3 +196,51 @@ A1/A2/A3/B1/B3: {description}    # milestone
 ch{N}: {标题}                      # 章节
 更新: {description}                # 其他
 ```
+
+<!-- BEGIN story-setup managed block (story-toolkit). 下文为 story-* 网文工具集，与上方 novel-* 创作引擎并存；/story-setup 再次运行时只替换本标记块，请勿手动编辑此处内容。 -->
+
+## Skill 路由表（story-* 工具集）
+
+| 命令 | Skill | 说明 |
+|------|-------|------|
+| `/story-long-write`、`/写长篇` | story-long-write | 长篇网文写作（逐章推进） |
+| `/story-short-write`、`/写短篇` | story-short-write | 短篇网文写作（情绪驱动） |
+| `/story-long-analyze`、`/长篇拆文` | story-long-analyze | 长篇小说深度拆解 |
+| `/story-short-analyze`、`/短篇拆文` | story-short-analyze | 短篇小说拆文分析 |
+| `/story-long-scan`、`/长篇扫描` | story-long-scan | 长篇小说批量扫描 |
+| `/story-short-scan`、`/短篇扫描` | story-short-scan | 短篇小说批量扫描 |
+| `/story-deslop`、`/去AI味` | story-deslop | 去除 AI 写作痕迹 |
+| `/story-cover`、`/封面` | story-cover | 生成封面图 |
+| `/story-review`、`/审查` | story-review | 多视角对抗式审查 |
+| `/story-import`、`/导入` | story-import | 逆向导入已有小说到项目结构 |
+| `/story`、`/网文` | story | 工具箱路由 · 模糊意图自动分发 |
+| `/story-setup`、`/准备写书` | story-setup | 环境部署 · hooks/rules/agents 一键部署 |
+| `/browser-cdp` | browser-cdp | 浏览器 CDP 工具 |
+
+## 文件结构（story-* 工具集）
+
+- `拆文库/` — 拆文分析结果存放目录
+- `{书名}/正文/` — 长篇小说正文章节
+- `{书名}/设定/` — 角色设定、世界设定
+- `{书名}/大纲/` — 卷纲、细纲
+- `{书名}/追踪/` — 上下文.md（写作上下文）、伏笔.md
+- `{书名}/对标/` — 对标作品分析
+
+> 注：本仓库实际长篇项目位于 `novels/{小说名}/`（novel-* 引擎结构，见上方 File Organization）。story-* 的 `{书名}/` 结构用于 story-* 工具集新建/导入的项目，两套目录约定相互独立。
+
+## 协作规则
+
+Agent 间的协调关系由各 Agent 定义文件的职责边界描述，不需要独立协调规则文件。
+
+## Compact 后恢复上下文
+
+此部分在 compact 后自动生效。CLAUDE.md 在每次 compact 后会被重新加载。
+写作中的关键上下文：
+1. 当前写作项目名称和进度
+2. 最近讨论的角色设定变更
+3. 未完成的伏笔列表
+4. 当前章节的情绪/节奏目标
+
+如果存在 {书名}/追踪/上下文.md，compact 后首先读取恢复上下文。
+
+<!-- END story-setup managed block -->

@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "skills": {
+    "browser-cdp": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "46366533707368e9f451a8bb790db40766d7cd9f89a11b8eff68aa461cb567d8"
+    },
+    "story": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "7ef1c931933a86dc91c7fe0475f4955ffd679c9b1fc8a7a005134d991fd086d6"
+    },
+    "story-cover": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "67be2e99f05da0c6443e07742176f06da5b4e3441025896234e7bbbe3813594c"
+    },
+    "story-deslop": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "aa8658bd39d5a450ed7ce11e47d1a19b253490c1370237820706e44db042ee63"
+    },
+    "story-import": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "a5ba71a8f9623543d42aa8635e7b3f77d65814bdabe631eb9e66361792417a19"
+    },
+    "story-long-analyze": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "4559036ad762d0725d34d60360bbde224d1004612cca92d866b930d159814fc0"
+    },
+    "story-long-scan": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "fbeaf9d353605b7040594cda2f5894d76c54a38e44cd477a0986f57ee39986be"
+    },
+    "story-long-write": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "28333b0df887ee8736d62db776cd252df41173078411886fd5cff809fb8a659e"
+    },
+    "story-review": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "093887e37080c85e940fc47db8e072816e27a8eb4f78209dc3f75580ccd97f7a"
+    },
+    "story-setup": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "805c83c2f46f1d7b774a5a83c5e7393f989ce93adb3b378642229849215f4dd3"
+    },
+    "story-short-analyze": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "74fc5c7bc96962ba0ad59a2e97e725aeefcb5ec5babce5d64bf6d014a4b05edc"
+    },
+    "story-short-scan": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "f9f002fc67937ebb29d665e3291d6ef6ebf89a1120f8f1d7202591bdeb6a837f"
+    },
+    "story-short-write": {
+      "source": "D:\\迅雷下载\\oh-story-claudecode-main",
+      "sourceType": "local",
+      "computedHash": "4399588147dad90523300cccb7d583b1d278037b2583d5a6962198eb07e6969a"
+    }
+  }
+}
