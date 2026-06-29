@@ -1,1 +1,0 @@
-/Users/ganjie/code/personal/bywork/books_creater/.claude/skills/wuzhei-perspective/.evolve/snapshots/wuzhei-perspective-20260613T114152.md

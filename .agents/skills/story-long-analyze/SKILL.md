@@ -247,6 +247,10 @@ Agent(
 - `grep -hoE '基调：[^ |]+'` 去重后 ⊆ {紧张, 轻松, 悲伤, 热血, 爽, 甜, 温馨, 恐怖, 压抑, 其他}
 - `grep -hoE '主题标签[：]?[^ |]+'` 去重（去 `主题标签`/冒号前缀后）⊆ {爱情, 亲情, 友情, 权力, 金钱, 成长, 复仇, 悬念, 搞笑, 热血, 日常, 其他}（出现 `主题标签：` 带冒号、或值为基调词均判失败）
 
+**枚举越界先行脚本兜底（省 sonnet）**：基调/主题标签枚举越界是 haiku 最高发的质量失败（实测第4-9章 6 章里 5 章命中），且是纯机械问题（R5：确定性逻辑不交模型）。落盘跑完上方硬检查后，若仅命中枚举越界（基调/主题标签值不在合法集、或 `主题标签：` 带冒号），**先跑 `scripts/normalize-enums.js` 原地修正**（确定性映射：好奇/期待/震撼 等自创近义→合法基调；紧张/恐怖/日常 等跨类误填→合法主题标签；未知值→"其他"并 ⚠️ 告警），再重跑硬检查；枚举类问题经脚本修复后**无需 sonnet 重试**。仅当仍存在非枚举类问题（情节点 < 10、原文引用缺失、类型标签越界、概要非因果链等）才升级 sonnet。
+
+调用：`node scripts/normalize-enums.js 章节/`（原地修正 + 报告每处改动与未知值）或 `--check`（只报告不改）。
+
 **升级重试调用方式**（主线程在校验失败后执行）：
 
 ```python
@@ -268,7 +272,7 @@ Agent(
 
 以下任一情况，Stage 2 自动退回串行模式，由主线程按 chapter-extractor 方法论逐章处理（结果同样套 output-templates.md 的章节摘要模板，质量不受影响，只是改为串行、速度略慢）：
 
-- **agent 未部署**：`.claude/agents/chapter-extractor.md` 不存在。`.claude/agents/` 通常不随仓库提交，由 `/story-setup` 部署；模板源在 `skills/story-setup/references/templates/agents/chapter-extractor.md`，必要时可手动复制部署。
+- **agent 未部署**：agent 目录（优先 `.claude/agents/`，其次 `.opencode/agents/`）下的 `chapter-extractor.md` 不存在。`.claude/agents/` 通常不随仓库提交，由 `/story-setup` 部署；模板源在 `skills/story-setup/references/templates/agents/chapter-extractor.md`，必要时可手动复制部署。
 - **环境不支持 spawn 子代理**：本 skill 正运行在某个子代理上下文中，无法再起下一层 agent。
 
 ### Stage 2 收尾：合并章节摘要（_章节摘要汇总.md）
