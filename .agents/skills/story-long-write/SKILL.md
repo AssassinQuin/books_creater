@@ -242,6 +242,10 @@ story-architect 属于高层级结构设计 agent。轻量题材定位优先由�
 
 大纲搭建阶段优先由主会话产出卷纲+首批细纲；只有结构复杂、反转链多或主会话方案不稳定时，才调用 story-architect agent。若项目已部署 story-architect agent（检查 `.claude/agents/story-architect.md` 是否存在），可 spawn `Agent(subagent_type: "story-architect", prompt: "项目目录：{dir}\n任务类型：大纲搭建\n查询参数：卷级结构+细纲+钩子/反转/情绪弧线设计")` 辅助大纲排布、钩子/反转/情绪弧线设计。如 agent 不可用，由主线程直接执行。
 
+#### 情节诊断（可选）：plot-methodology
+
+卷纲 + 首批细纲建完后，可选激活 plot-methodology skill（`.agents/skills/plot-methodology/SKILL.md`）做情节诊断，补方法论深度（工程模板不替代诊断镜片）。走其 Step 1（人物/经历/悬念/冲突/上下文 5 环）+ Step 3 网文适配层，薄弱环节按其「薄弱→症状→修复模板」映射表回写到细纲的钩子/爽点/悬念/冲突字段，诊断报告写入 `追踪/情节诊断_第X卷.md`。触发条件：结构复杂/反转链多/开新卷/用户喊「审一下大纲」。简单题材可跳过。
+
 ---
 
 ### Phase 4：正文写作辅助
@@ -444,6 +448,10 @@ story-architect 属于高层级结构设计 agent。轻量题材定位优先由�
 #### Agent 调用：narrative-writer（去AI味审查）
 
 质量检查阶段，如果项目已部署 narrative-writer agent（优先检查 `.claude/agents/` 下的 `narrative-writer.md` 是否存在；不存在时再检查 `.opencode/agents/`），可 spawn `Agent(subagent_type: "narrative-writer", prompt: "项目目录：{dir}\n任务描述：审查+去AI味\n检查范围：{本次写作的章节}\n必须检查：先否定再肯定的翻转句式；发现后直接改成后项或动作细节")` 执行文字质量审查和去AI味检查。如 agent 不可用，由主线程直接执行。
+
+#### 情节诊断（可选）：plot-methodology
+
+质检除一致性（consistency-checker）与去AI味（narrative-writer）外，可选激活 plot-methodology 做情节层诊断：走其 Step 1（5 环）+ Step 4 卡文/追读下降排查链，重点查章末钩子是否失效、爽点密度是否达标、长主线悬念是否断线，报告写入 `追踪/情节诊断_第X卷.md` 或 `追踪/情节诊断_卡文排查.md`。触发条件：追读下降/用户喊「卡文」/卷尾复盘。日常日更不强制。
 
 检查后更新追踪文件：
 - 更新 `追踪/伏笔.md` 中的过期伏笔和回收状态
