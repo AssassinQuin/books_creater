@@ -1,5 +1,7 @@
 #!/bin/bash
-# validate-story-commit.sh — 在 git commit 时检查格式问题（WARNING only, no BLOCKING）
+# validate-story-commit.sh — 在 git commit 时检查格式问题
+# 默认 WARNING only（写作流程不能被 hook 卡住）。唯一阻断例外：追踪/伏笔.md 的 schema 校验——
+# 违规 exit 1 阻断提交（InkOS 式坏数据拒绝）。伏笔是全书连贯性骨架，坏数据滚雪球代价大。
 set -euo pipefail
 
 source "$(dirname "$0")/lib/common.sh"
@@ -168,6 +170,13 @@ export LC_ALL=C
 ROOT=$(project_root)
 GIT_ROOT=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "$ROOT")
 WARNINGS=""
+FORESHADOW_ERRORS=""
+
+# 探测可用 python（伏笔 schema 校验用；与 is_git_commit_command 内探测同构，避开 Microsoft Store 占位）
+PYBIN=""
+for c in python3 python py; do
+  if "$c" -c "" >/dev/null 2>&1; then PYBIN="$c"; break; fi
+done
 
 # 获取即将 commit 的文件列表（使用 -z null 分隔避免空格路径问题）
 while IFS= read -r -d '' file; do
@@ -203,6 +212,20 @@ while IFS= read -r -d '' file; do
       fi
       ;;
   esac
+
+  # 检查伏笔台账 schema（强制：违规阻断提交。表头驱动，兼容 v3/旧版两套 schema）
+  case "$file" in
+    */追踪/伏笔.md|伏笔.md|*/伏笔.md)
+      if [ -f "$FULL_PATH" ] && [ -n "$PYBIN" ]; then
+        SCHEMA_LIB="$(dirname "$0")/lib/foreshadow_schema.py"
+        if [ -f "$SCHEMA_LIB" ]; then
+          if ! OUT=$("$PYBIN" "$SCHEMA_LIB" "$FULL_PATH" 2>&1); then
+            FORESHADOW_ERRORS="${FORESHADOW_ERRORS}⚠ $file:\n${OUT}\n"
+          fi
+        fi
+      fi
+      ;;
+  esac
 done < <(git -C "$ROOT" -c core.quotepath=false diff --cached --relative --name-only --diff-filter=ACM -z -- . 2>/dev/null || true)
 
 if [ -n "$WARNINGS" ]; then
@@ -211,5 +234,14 @@ if [ -n "$WARNINGS" ]; then
   echo "=== End Warnings ==="
 fi
 
-# Always exit 0 — 写作流程不能被 hook 卡住
+# 伏笔 schema 违规 → 阻断提交（唯一阻断项；其余检查仍 advisory）
+if [ -n "$FORESHADOW_ERRORS" ]; then
+  echo "=== 伏笔 Schema 校验失败（阻断提交）===" >&2
+  printf '%b\n' "$FORESHADOW_ERRORS" >&2
+  echo "伏笔是全书连贯性骨架，schema 违规不予放行，修复后重试 commit。" >&2
+  echo "状态合法集: 未埋/待埋设/已埋/已回收；编号需 F 开头+数字（如 F1/F001）。" >&2
+  exit 1
+fi
+
+# 无伏笔违规 — advisory 警告已上方打印，写作流程不被卡
 exit 0

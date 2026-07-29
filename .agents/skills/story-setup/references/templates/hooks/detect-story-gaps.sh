@@ -49,17 +49,21 @@ for BOOK_DIR in "${BOOK_DIRS[@]}"; do
 
   # 4. 过期或异常伏笔线索
   if [ -f "$BOOK_DIR/追踪/伏笔.md" ]; then
-    # 仅检查表格数据行中的状态列。正常开放状态（未埋/已埋）不报警，
+    # 仅检查表格数据行中的状态列。正常开放状态（待埋设/已埋）不报警，
     # 避免长篇项目每次 SessionStart 都触发全量伏笔审计。
+    # 列映射（行首 | 使 $1 为空，列序后移一位）：$2=F编号 / $5=计划揭示 / $6=状态 / $7=分层 / $8=真实答案
+    # 状态合法集：未埋(旧) / 待埋设(v3) / 已埋 / 已回收——兼容多版本 schema，只对真非法值(空/已过期/乱写)报警。
     # 行为回归脚本：scripts/check-hook-regex-sync.sh（区域设置健壮性由 export LC_ALL=C 保证）
     ABNORMAL_FORESHADOW=$(awk -F'|' '
       # 含全角空格 U+3000：LC_ALL=C 下 [[:space:]] 只认 ASCII 空白，单元格用全角空格补白时
       # 会留在 status 里被误判为异常；用交替补上全角空格（不能进字符组，否则触发跨区域 bug）。
       function trim(s) { gsub(/^([[:space:]]|　)+|([[:space:]]|　)+$/, "", s); return s }
       /^\|/ && $0 !~ /^\|[-[:space:]|]+$/ {
-        status=trim($6)
+        fnum=trim($2); status=trim($6)
         if (status == "" || status == "状态" || status ~ /^状态\{/) next
-        if (status == "已过期" || (status != "未埋" && status != "已埋" && status != "已回收")) print
+        # 预留位豁免：# 列含「预留」或整行占位（状态为 —，如 F2 待定位）
+        if (fnum ~ /预留/ || status == "—") next
+        if (status == "已过期" || (status != "未埋" && status != "待埋设" && status != "已埋" && status != "已回收")) print
       }
     ' "$BOOK_DIR/追踪/伏笔.md" 2>/dev/null || true)
     if [ -n "$ABNORMAL_FORESHADOW" ]; then
