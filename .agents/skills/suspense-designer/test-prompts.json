@@ -1,0 +1,52 @@
+{
+  "skill": "suspense-designer",
+  "version": "0.1.0",
+  "source_book": "《The Plot Thickens》(Noah Lukeman, 2002)",
+  "darwin_compatible": true,
+  "test_cases": [
+    {
+      "id": "suspense-designer-st01",
+      "type": "should_trigger",
+      "prompt": "刚写完第七章，自己读了一遍感觉太平了，读者读完这章完全有理由放下书去干别的，章末也没什么让人想翻下一章的钩子，怎么整啊",
+      "expected_behavior": "应激活 suspense-designer, 诊断场景张力缺口类型(缺预期/缺渴望/缺阻碍), 从12式选1-3个注入, 并设计章末钩子+对比喘息段约束",
+      "notes": "典型正面场景: 章末无钩子+太平+放不下"
+    },
+    {
+      "id": "suspense-designer-st02",
+      "type": "should_trigger",
+      "prompt": "女主一个人在地下室那段，我本来想写得紧张点，结果自己回头读发现一点都不紧张，怎么才能让人喘不过气来",
+      "expected_behavior": "应激活 suspense-designer, 单人独处无对抗场景的张力注入(优先滴答时钟/无能为力/未知), 区分检验后排除conflict-designer",
+      "notes": "典型正面场景: 独处场景=无对抗, 必然走suspense而非conflict"
+    },
+    {
+      "id": "suspense-designer-st03",
+      "type": "should_trigger",
+      "prompt": "最近后台数据说读者大量卡在第八章弃书，但我自己看那段又没什么大问题，能不能帮我看看是哪里没张力",
+      "expected_behavior": "应激活 suspense-designer, 定位弃书点的张力缺口类型并给出修复方案",
+      "notes": "典型正面场景: 弃书点诊断+没张力"
+    },
+    {
+      "id": "suspense-designer-nt01",
+      "type": "should_not_trigger",
+      "prompt": "我书里这两个配角每次见面都和和气气的，剧情没引擎，需要让他们之间有点对抗",
+      "expected_behavior": "不应激活本skill, 应激活 conflict-designer",
+      "notes": "跨skill混淆诱饵: 用户明确说'人物之间''对抗''和气'→conflict-designer的语言信号, 不是suspense的'未知/预期'"
+    },
+    {
+      "id": "suspense-designer-nt02",
+      "type": "should_not_trigger",
+      "prompt": "这段介绍魔法系统的设定写得太干了，像教科书一样，能不能改得有意思一点",
+      "expected_behavior": "不应激活本skill, 因为这是纯信息交代场景(世界观/规则介绍), 注入悬念会干扰理解清晰度",
+      "notes": "完全无关诱饵: 设定介绍场景, 非张力问题"
+    },
+    {
+      "id": "suspense-designer-eg01",
+      "type": "edge_case",
+      "prompt": "我想在每章末都留个'她其实在隐瞒什么'的悬念让读者追着读, 每章都来一个, 这么做行不行",
+      "expected_behavior": "可能调用 suspense-designer 但需触发 ce18 警告(秘密过度使用当万能补丁). 应判停并建议降低频率、用多层悬念中的其他机制替代而非纯粹秘密驱动. 若用户坚持每章堆秘密, 应明确说明会显得卖弄做作",
+      "notes": "边界: 秘密是12式之一但ce18警告每章堆叠会显得卖弄做作"
+    }
+  ],
+  "minimum_pass_rate": 0.8,
+  "notes": "3条should_trigger + 2条should_not_trigger + 1条edge_case. should_not_trigger全部必须通过(诱饵容错为0)."
+}

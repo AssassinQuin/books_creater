@@ -56,3 +56,6 @@ novel-db-mcp/data/
 # 本地嵌入模型（大文件，不入库）
 novel-db-mcp/models/
 *.db
+
+# 参考原书（版权材料·二进制·不入库）
+*.epub
