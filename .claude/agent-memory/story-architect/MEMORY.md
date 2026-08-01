@@ -1,0 +1,2 @@
+- [剧情线建设进度](project_storyline_buildout.md) — 这次不一样·4-大纲/剧情线/ 已落地与待建清单 + 建线纪律
+- [用户角色与工作方式](user_role_writer.md) — 网文创作者·结构化任务简报（必读/输出/纪律）·期望严咬合 schema 直接落盘
