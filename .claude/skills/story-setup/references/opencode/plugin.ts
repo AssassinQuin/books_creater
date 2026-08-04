@@ -2,14 +2,22 @@ import type { Plugin } from "@opencode-ai/plugin"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { execSync } from "node:child_process"
+import {
+  discoverActiveBook,
+  resolveTarget,
+  extractProseTargets,
+  extractPatchTargets,
+  proseBlockReason,
+  proseAfterWrite,
+} from "./lib/story_hook_core.js"
 
-interface StoryDeployed {
-  agents_version?: number
-  setup_skill_version?: string
-  target_cli?: string
-  resolver_strategy?: string
-  references_dir?: string
-}
+// 写正文守卫的检测逻辑（去 AI 味轻量确定性网、大纲/细纲守卫、字数/落盘/标题去重、
+// 正文写入目标抽取）与 ZCode hook 共享同一份 story_hook_core.js，随本插件一起部署到
+// .opencode/plugins/lib/story_hook_core.js（放 lib/ 子目录而非平铺：OpenCode 只单层扫描
+// .opencode/plugins/*.js 当插件加载，平铺会被误当成第二个插件导致加载失败；lib/ 子目录不在
+// 扫描范围内）。这里只保留 OpenCode 宿主相关的部分：项目根定位、
+// 事件模型（experimental.session.compacting / tool.execute.*）、以及把发现追加进写工具
+// 返回结果的输出信封。共享核以 bash hook 为 oracle，parity 由 test-prose-net-parity.sh 守卫。
 
 function projectRoot(): string {
   try {
@@ -23,93 +31,22 @@ function projectRoot(): string {
   }
 }
 
-function readSentinelField(root: string, field: string): string {
-  const sentinelPath = path.join(root, ".story-deployed")
-  if (!fs.existsSync(sentinelPath)) return ""
-  const content = fs.readFileSync(sentinelPath, "utf-8")
-  for (const line of content.split("\n")) {
-    const clean = line.replace(/\r$/, "")
-    const match = clean.match(new RegExp(`^${field}:\\s*(.+)`))
-    if (match) {
-      let val = match[1].trim()
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1)
-      }
-      return val
-    }
-  }
-  return ""
-}
-
-function readSentinel(root: string): StoryDeployed | null {
-  const sentinelPath = path.join(root, ".story-deployed")
-  if (!fs.existsSync(sentinelPath)) return null
-  const agentsVer = readSentinelField(root, "agents_version")
-  return {
-    agents_version: agentsVer ? parseInt(agentsVer, 10) : undefined,
-    setup_skill_version: readSentinelField(root, "setup_skill_version") || undefined,
-    target_cli: readSentinelField(root, "target_cli") || undefined,
-    resolver_strategy: readSentinelField(root, "resolver_strategy") || undefined,
-    references_dir: readSentinelField(root, "references_dir") || undefined,
-  }
-}
-
-function sentinelExists(root: string): boolean {
-  return fs.existsSync(path.join(root, ".story-deployed"))
-}
-
-function discoverActiveBook(root: string): string | null {
-  const activeBookPath = path.join(root, ".active-book")
-  if (fs.existsSync(activeBookPath)) {
-    const active = fs.readFileSync(activeBookPath, "utf-8").split("\n")[0].trim()
-    if (active) {
-      const resolved = path.resolve(root, active)
-      const normalizedRoot = path.resolve(root)
-      if (resolved.startsWith(normalizedRoot + path.sep) && fs.existsSync(resolved)) return resolved
-    }
-  }
-
-  const firstTrackDir = findFirstDir(root, "追踪", 4)
-  if (firstTrackDir) return path.dirname(firstTrackDir)
-
-  const bodyDir = findFirstBodyDir(root, 4)
-  if (bodyDir) return bodyDir
-
-  return null
-}
-
-function findFirstDir(base: string, name: string, maxDepth: number): string | null {
-  if (maxDepth <= 0) return null
+function targetBase(root: string, args?: Record<string, unknown>): string {
+  const raw = args?.workdir || args?.cwd
+  if (typeof raw !== "string" || !raw.trim()) return root
+  let candidate = path.resolve(root, raw)
+  let canonicalRoot = path.resolve(root)
   try {
-    for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
-      if (!entry.isDirectory() || entry.name.startsWith(".")) continue
-      const full = path.join(base, entry.name)
-      if (entry.name === name) return full
-      const found = findFirstDir(full, name, maxDepth - 1)
-      if (found) return found
-    }
-  } catch {}
-  return null
-}
-
-function findFirstBodyDir(base: string, maxDepth: number): string | null {
-  if (maxDepth <= 0) return null
-  try {
-    for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
-      if (!entry.isDirectory() || entry.name.startsWith(".")) continue
-      const full = path.join(base, entry.name)
-      if (entry.name === "正文") return path.dirname(full)
-      const found = findFirstBodyDir(full, maxDepth - 1)
-      if (found) return found
-    }
-    for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
-      if (entry.isFile() && entry.name === "正文.md") return base
-    }
-  } catch {}
-  return null
+    if (!fs.statSync(candidate).isDirectory()) return root
+    candidate = fs.realpathSync(candidate)
+    canonicalRoot = fs.realpathSync(root)
+  } catch {
+    return root
+  }
+  const relative = path.relative(canonicalRoot, candidate)
+  return relative && (relative === ".." || relative.startsWith(`..${path.sep}`))
+    ? root
+    : candidate
 }
 
 function tryGit(root: string, args: string): string {
@@ -155,73 +92,6 @@ function preCompactOutput(): string {
   return lines.join("\n")
 }
 
-// 相对路径按项目根解析（对齐 guard-outline-before-prose.sh 的 $ROOT/$TARGET）
-function resolveTarget(root: string, target: string): string {
-  const normalized = target.replace(/\\/g, "/")
-  return path.isAbsolute(normalized) ? normalized : path.resolve(root, normalized)
-}
-
-// 从 bash 命令里提取可能的「正文」写入目标，用于防止绕过 write/edit 守卫
-function extractProseTargets(cmd: string): string[] {
-  const out: string[] = []
-  const re = /[^\s'"<>|;&()]*正文[^\s'"<>|;&()]*/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(cmd)) !== null) {
-    if (m[0]) out.push(m[0])
-  }
-  return out
-}
-
-// 按目标文件判断是否拦截写正文，逐字对齐 Claude hook guard-outline-before-prose.sh：
-// 只拦「首次创建正文文件且缺对应大纲/细纲」，已存在正文（续写/改稿/去AI味）一律放行，
-// 解析不到、非正文目标、story-import 迁移一律放行（宁可漏拦不可误伤）。
-// 返回拦截原因；返回 null 表示放行。
-function proseBlockReason(root: string, abs: string): string | null {
-  const base = path.basename(abs)
-  const parent = path.basename(path.dirname(abs))
-
-  // 短篇单文件正文：{书}/正文.md
-  if (base === "正文.md") {
-    if (fs.existsSync(abs)) return null // 已存在 → 续写/改稿放行
-    const bookDir = path.dirname(abs)
-    // story-import 迁移：已有 拆文库/{书名}/ 分析源时，正文先于小节大纲迁移属正常流程
-    if (fs.existsSync(path.join(root, "拆文库", path.basename(bookDir)))) return null
-    // 仅在确为短篇工程时拦截（有 设定.md 信号），避免误伤 docs/正文.md 等非作品文件
-    if (!fs.existsSync(path.join(bookDir, "设定.md"))) return null
-    if (!fs.existsSync(path.join(bookDir, "小节大纲.md"))) {
-      return `⛔ 写正文被拦截：${path.relative(root, abs) || abs} 缺少同目录 小节大纲.md。先按 story-short-write 完成「小节大纲.md」再写正文。`
-    }
-    return null
-  }
-
-  // 长篇分章正文：{书}/正文/第N章*.md
-  if (parent !== "正文") return null
-  if (!/^第.*章.*\.md$/.test(base)) return null
-  if (fs.existsSync(abs)) return null // 已存在 → 续写/改稿放行
-  const m = base.match(/^第0*(\d+)章/)
-  if (!m) return null
-  const num = m[1]
-  const bookDir = path.dirname(path.dirname(abs))
-  // story-import 迁移：已有 拆文库/{书名}/ 分析源时放行（细纲由章节摘要反推、晚于正文迁移）
-  if (fs.existsSync(path.join(root, "拆文库", path.basename(bookDir)))) return null
-  // 容忍补零差异与标题后缀：按整数章号匹配 大纲/细纲_第*章*.md
-  const outlineDir = path.join(bookDir, "大纲")
-  let found = false
-  try {
-    for (const f of fs.readdirSync(outlineDir)) {
-      const fm = f.match(/^细纲_第0*(\d+)章.*\.md$/)
-      if (fm && fm[1] === num) {
-        found = true
-        break
-      }
-    }
-  } catch {}
-  if (!found) {
-    return `⛔ 写正文被拦截：第 ${num} 章缺少细纲（${path.relative(root, outlineDir)}/细纲_第${num}章.md）。先按 story-long-write 单章流程补建细纲再写正文。`
-  }
-  return null
-}
-
 export default (async () => {
   return {
     "experimental.session.compacting": async (
@@ -239,24 +109,72 @@ export default (async () => {
       input: { tool: string; args?: Record<string, unknown> },
       output: { args?: Record<string, unknown> }
     ) => {
-      const root = projectRoot()
       const targets: string[] = []
 
       if (input.tool === "write" || input.tool === "edit") {
         const filePath = (output.args?.filePath as string) || ""
-        if (filePath) targets.push(resolveTarget(root, filePath))
+        if (filePath) targets.push(filePath)
+      } else if (input.tool === "apply_patch") {
+        // apply_patch 是 OpenCode 的 edit 类工具（upstream permission 与 write/edit 同组），
+        // 且 gpt-5 系模型只暴露它、隐藏 write/edit——不接这个分支等于守卫整场失效。
+        // 目标抽取（*** Add/Update File: 与 *** Move to: 的目的地）复用共享核，与 ZCode/Codex
+        // adapter 同一份判据；Move 必须走目的地，否则搬家式补丁能把无细纲草稿搬进 正文/。
+        const patchText = (output.args?.patchText as string) || ""
+        for (const t of extractPatchTargets(patchText)) targets.push(t)
       } else if (input.tool === "bash") {
         const cmd = (output.args?.command as string) || ""
-        for (const t of extractProseTargets(cmd)) targets.push(resolveTarget(root, t))
+        for (const t of extractProseTargets(cmd)) targets.push(t)
       } else {
         return
       }
 
-      for (const abs of targets) {
-        const reason = proseBlockReason(root, abs)
+      // 非写类工具（read/grep/glob/list/…）已在上面 return：projectRoot() 是同步 execSync，
+      // 插件常驻在 OpenCode 服务进程里，只有确认有目标要查时才 fork git。
+      if (targets.length === 0) return
+
+      const root = projectRoot()
+      const base = targetBase(root, output.args || input.args)
+      for (const target of [...new Set(targets)]) {
+        const reason = proseBlockReason(root, resolveTarget(root, target, base))
         if (reason) {
           throw new Error(`${reason}（此操作无法通过 Bash/命令行绕过。）`)
         }
+      }
+    },
+
+    // 正文落盘兜底：写正文后跑轻量确定性网（截断/拒绝语/工程词/复读 + 落盘/字数/标题去重），
+    // 把发现追加进写工具的返回结果让模型读到。非正文文件、无发现一律不动结果（静默放行）。
+    // OpenCode 无 PostToolUse，tool.execute.after 是写后唯一可向模型回话的钩子。
+    "tool.execute.after": async (
+      input: { tool: string; args?: Record<string, unknown> },
+      output: { output?: string }
+    ) => {
+      const targets: string[] = []
+      if (input.tool === "write" || input.tool === "edit") {
+        const filePath = (input.args?.filePath as string) || ""
+        if (filePath) targets.push(filePath)
+      } else if (input.tool === "apply_patch") {
+        // 与 before 同一套目标抽取（含 *** Move to: 的目的地——搬进 正文/ 的章节要被扫的是
+        // 目的地，源已不存在）：gpt-5 系模型只有 apply_patch，不接就等于整场没有落盘兜底。
+        const patchText = (input.args?.patchText as string) || ""
+        for (const t of extractPatchTargets(patchText)) targets.push(t)
+      } else {
+        return
+      }
+      if (targets.length === 0) return
+      const root = projectRoot()
+      const base = targetBase(root, input.args)
+      try {
+        const notes: string[] = []
+        for (const target of [...new Set(targets)]) {
+          const note = proseAfterWrite(root, resolveTarget(root, target, base))
+          if (note) notes.push(note)
+        }
+        if (notes.length && typeof output.output === "string") {
+          output.output += `\n\n${notes.join("\n\n")}`
+        }
+      } catch {
+        // 兜底不能反过来卡流程：解析失败一律放行
       }
     },
   }
