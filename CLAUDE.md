@@ -12,7 +12,9 @@
 | `/story-short-scan`、`/短篇扫描` | story-short-scan | 短篇小说批量扫描 |
 | `/story-deslop`、`/去AI味` | story-deslop | 去除 AI 写作痕迹 |
 | `/story-cover`、`/封面` | story-cover | 生成封面图 |
-| `/story-review`、`/审查` | story-review | 多视角对抗式审查 |
+| `/story-review`、`/审查` | story-review | 多视角对抗式审查（正文质量） |
+| `/story-audit`、`/大纲诊断` | story-audit | 大纲多维度诊断（结构/人物/伏笔/市场/主题 5路并行） |
+| `/story-plot-audit`、`/布局审计` | story-plot-audit | 布局逻辑审计（角色视角/伏笔暗线/因果链/信息差 4路并行） |
 | `/story-import`、`/导入` | story-import | 逆向导入已有小说到项目结构 |
 | `/story`、`/网文` | story | 工具箱路由 · 模糊意图自动分发 |
 | `/story-setup`、`/准备写书` | story-setup | 环境部署 · hooks/rules/agents 一键部署 |
