@@ -1,5 +1,3 @@
-# 章节正文（敏感内容不入库）
-
 # OS
 .DS_Store
 Thumbs.db
@@ -22,12 +20,8 @@ Thumbs.db
 # story-setup 瞬态标记（下个会话由 session-start.sh 自动清除）
 .claude/.agents-pending-restart
 
-# SQLite 数据库文件（二进制，不入库）
-novel-db-mcp/novel.db
-data/novel.db
-data/novel.db-shm
-data/novel.db-wal
-mydatabase.db
+# 数据库文件（二进制，不入库）
+*.db
 
 # Python
 __pycache__/
@@ -35,25 +29,12 @@ __pycache__/
 *$py.class
 *.so
 
-# 临时测试脚本（根目录级别，novel-db-mcp/tests/ 目录下的正式测试除外）
+# 临时测试脚本（根目录级别）
 test_*.py
 start*.bat
-!novel-db-mcp/tests/test_*.py
 
-# 下载/临时文件（与项目无关）
+# 下载/临时文件
 download/
-
-# 嵌套仓库（本机开发残留）
-books_creater/
-hs_analysis/
 
 # Agent 工作日志（本地调试用，不入库）
 worklog.md
-
-# 测试临时目录/文件
-novel-db-mcp/data/
-
-# 本地嵌入模型（大文件，不入库）
-novel-db-mcp/models/
-*.db
-

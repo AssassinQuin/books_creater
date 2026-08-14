@@ -112,18 +112,21 @@ case "$BASE" in
     BOOK_DIR="$(dirname "$(dirname "$ABS")")"
     # story-import 迁移：已有 拆文库/{书名}/ 分析源时放行（细纲由章节摘要反推、晚于正文迁移）
     [ -d "$ROOT/拆文库/$(basename "$BOOK_DIR")" ] && exit 0
-    OUTLINE_DIR="$BOOK_DIR/大纲"
     FOUND=""
-    if [ -d "$OUTLINE_DIR" ]; then
-      # 容忍补零差异与标题后缀：按整数章号匹配 大纲/细纲_第*章*.md
-      for f in "$OUTLINE_DIR"/细纲_第*章*.md; do
+    # 细纲双目录查找：先 大纲/细纲_第*章*.md（标准结构），再 细纲/细纲_*第*章*.md
+    # （兼容 细纲_L1-0_第N章.md 这类带单元中缀的命名——2026-08-14 支持独立 细纲/ 目录）
+    for OUTLINE_DIR in "$BOOK_DIR/大纲" "$BOOK_DIR/细纲"; do
+      [ -d "$OUTLINE_DIR" ] || continue
+      # 容忍补零差异、标题后缀与单元中缀：按整数章号匹配
+      for f in "$OUTLINE_DIR"/细纲_*第*章*.md; do
         [ -e "$f" ] || continue
-        fnum="$(basename "$f" | sed -n 's/^细纲_第0*\([0-9][0-9]*\)章.*/\1/p')"
-        if [ "$fnum" = "$NUM" ]; then FOUND="$f"; break; fi
+        fnum="$(basename "$f" | sed -n 's/^细纲_.*第0*\([0-9][0-9]*\)章.*/\1/p')"
+        [ -z "$fnum" ] && fnum="$(basename "$f" | sed -n 's/^细纲_第0*\([0-9][0-9]*\)章.*/\1/p')"
+        if [ "$fnum" = "$NUM" ]; then FOUND="$f"; break 2; fi
       done
-    fi
+    done
     if [ -z "$FOUND" ]; then
-      printf '%s\n' "⛔ 写正文被拦截：第 ${NUM} 章缺少细纲（${OUTLINE_DIR#$ROOT/}/细纲_第${NUM}章.md）。" >&2
+      printf '%s\n' "⛔ 写正文被拦截：第 ${NUM} 章缺少细纲（${BOOK_DIR#$ROOT/}/大纲/细纲_第${NUM}章.md 或 ${BOOK_DIR#$ROOT/}/细纲/细纲_*第${NUM}章*.md）。" >&2
       printf '%s\n' "   按 story-long-write 单章流程先补建细纲，再写正文（不允许跳过细纲直接写作）。" >&2
       printf '%s\n' "   如确需先起草，请先补建对应细纲文件。" >&2
       exit 2

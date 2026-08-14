@@ -226,16 +226,21 @@ function proseBlockReason(root, absolute) {
   // 是否“像一本书”不能作为放行条件；相对路径误判应在宿主 adapter 按 cwd 正确解析，而不是
   // 让核心守卫 fail open。
   if (fs.existsSync(path.join(root, "拆文库", path.basename(book)))) return null
-  const outlineDir = path.join(book, "大纲")
+  // 细纲双目录：先 大纲/（标准），再 细纲/（独立目录，兼容 细纲_L1-0_第N章.md 单元中缀命名）
+  const outlineDirs = [path.join(book, "大纲"), path.join(book, "细纲")]
   let found = false
-  try {
-    found = fs.readdirSync(outlineDir).some((file) => {
-      const candidate = file.match(/^细纲_第0*(\d+)章.*\.md$/)
-      return candidate && candidate[1] === chapter
-    })
-  } catch {}
+  for (const dir of outlineDirs) {
+    try {
+      found = fs.readdirSync(dir).some((file) => {
+        let candidate = file.match(/^细纲_第0*(\d+)章.*\.md$/)
+        if (!candidate) candidate = file.match(/^细纲_.*第0*(\d+)章.*\.md$/)
+        return candidate && candidate[1] === chapter
+      })
+    } catch {}
+    if (found) break
+  }
   if (!found) {
-    return `⛔ 写正文被拦截：第 ${chapter} 章缺少细纲（${safeRelative(root, outlineDir)}/细纲_第${chapter}章.md）。先按 story-long-write 单章流程补建细纲再写正文。`
+    return `⛔ 写正文被拦截：第 ${chapter} 章缺少细纲（${safeRelative(root, path.join(book, "大纲"))}/细纲_第${chapter}章.md 或 ${safeRelative(root, path.join(book, "细纲"))}/细纲_*第${chapter}章*.md）。先按 story-long-write 单章流程补建细纲再写正文。`
   }
   // 欠账门（无状态）：写第 N 章（首建）前，上一章有未清毒句式且未标「去味:跳过」豁免时先清再写。
   // 判据现算自上一章文件本身，不落任何状态文件；找不到上一章/读取失败一律放行（宁可漏拦不可误伤）。
@@ -473,18 +478,23 @@ function wordcountFinding(absolute, text) {
   const match = path.basename(absolute).match(/^第0*(\d+)章/)
   if (!match) return null
   const chapter = match[1]
-  const outlineDir = path.join(path.dirname(path.dirname(absolute)), "大纲")
+  const book = path.dirname(path.dirname(absolute))
   let target = null
-  try {
-    for (const file of fs.readdirSync(outlineDir)) {
-      const fileMatch = file.match(/^细纲_第0*(\d+)章.*\.md$/)
-      if (!fileMatch || fileMatch[1] !== chapter) continue
-      const content = fs.readFileSync(path.join(outlineDir, file), "utf8")
-      const targetMatch = content.match(/字数目标[^0-9]{0,6}(\d{3,6})/)
-      if (targetMatch) target = Number(targetMatch[1])
-      break
-    }
-  } catch {}
+  for (const dirName of ["大纲", "细纲"]) {
+    const outlineDir = path.join(book, dirName)
+    try {
+      for (const file of fs.readdirSync(outlineDir)) {
+        let fileMatch = file.match(/^细纲_第0*(\d+)章.*\.md$/)
+        if (!fileMatch) fileMatch = file.match(/^细纲_.*第0*(\d+)章.*\.md$/)
+        if (!fileMatch || fileMatch[1] !== chapter) continue
+        const content = fs.readFileSync(path.join(outlineDir, file), "utf8")
+        const targetMatch = content.match(/字数目标[^0-9]{0,6}(\d{3,6})/)
+        if (targetMatch) target = Number(targetMatch[1])
+        break
+      }
+    } catch {}
+    if (target) break
+  }
   if (!target) return null
   const actual = Array.from(text).length
   return actual < target * 0.9
