@@ -68,11 +68,11 @@ if sentinel_exists "$ROOT/.story-deployed"; then
       HAS_CONTENT=true
       ;;
     *)
-      if [ "$AGENTS_VERSION" -lt 22 ]; then
-        OUTPUT+="[WARN] story-setup agents_version=$AGENTS_VERSION 低于 v22。重新运行 /story-setup 刷新 hooks、agents 和 references（部署后需新开会话）。${NL}${NL}"
+      if [ "$AGENTS_VERSION" -lt 25 ]; then
+        OUTPUT+="[WARN] story-setup agents_version=$AGENTS_VERSION 低于 v25。重新运行 /story-setup 刷新 hooks、agents 和 references（部署后需新开会话）。${NL}${NL}"
         HAS_CONTENT=true
-      elif [ "$AGENTS_VERSION" -gt 22 ]; then
-        OUTPUT+="[WARN] story-setup agents_version=$AGENTS_VERSION 高于本 hook 支持的 v22。不要降级覆盖；请先更新 oh-story-claudecode。${NL}${NL}"
+      elif [ "$AGENTS_VERSION" -gt 25 ]; then
+        OUTPUT+="[WARN] story-setup agents_version=$AGENTS_VERSION 高于本 hook 支持的 v25。不要降级覆盖；请先更新 oh-story-claudecode。${NL}${NL}"
         HAS_CONTENT=true
       fi
       ;;
@@ -88,11 +88,24 @@ if sentinel_exists "$ROOT/.story-deployed"; then
     fi
   done
 
+  # 多端部署时 references_dir 是逗号分隔的多条路径，逐条查；整串当一个路径查会必然查不到，
+  # 每次开会话都误报「参考资料包缺失」。
   REFERENCES_DIR=$(read_sentinel_field references_dir "$ROOT/.story-deployed")
   if [ -n "$REFERENCES_DIR" ]; then
-    REFERENCES_PATH=$(resolve_project_path "$REFERENCES_DIR")
-    if [ ! -d "$REFERENCES_PATH" ] || ! find "$REFERENCES_PATH" -maxdepth 1 -type f -name "*.md" -print -quit 2>/dev/null | grep -q .; then
-      OUTPUT+="[WARN] story-setup 参考资料包缺失或为空：${REFERENCES_DIR}。重新运行 /story-setup。${NL}${NL}"
+    MISSING_REFS=""
+    OLD_IFS=$IFS
+    IFS=','
+    for REF_ENTRY in $REFERENCES_DIR; do
+      REF_ENTRY=$(printf '%s' "$REF_ENTRY" | LC_ALL=C sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      [ -n "$REF_ENTRY" ] || continue
+      REFERENCES_PATH=$(resolve_project_path "$REF_ENTRY")
+      if [ ! -d "$REFERENCES_PATH" ] || ! find "$REFERENCES_PATH" -maxdepth 1 -type f -name "*.md" -print -quit 2>/dev/null | grep -q .; then
+        MISSING_REFS="${MISSING_REFS}${MISSING_REFS:+, }${REF_ENTRY}"
+      fi
+    done
+    IFS=$OLD_IFS
+    if [ -n "$MISSING_REFS" ]; then
+      OUTPUT+="[WARN] story-setup 参考资料包缺失或为空：${MISSING_REFS}。重新运行 /story-setup；若重跑后仍报这条，是 skill 包本身没装全，按你的安装方式重装 oh-story-claudecode（npx skills add 或 marketplace 面板）再部署。${NL}${NL}"
       HAS_CONTENT=true
     fi
   fi
@@ -114,13 +127,13 @@ if [ -n "$BRANCH" ]; then
   HAS_CONTENT=true
 fi
 
-# 上下文.md 摘要（只看当前位置部分，前 10 行）
+# 上下文.md 摘要（只看当前位置部分；新模板前 7 行是标题与说明，取 18 行才覆盖到 ## 当前位置 整块（≤8 字段 + 注释行））
 BOOK_DIR=$(discover_active_book)
 if [ -n "$BOOK_DIR" ] && [ -f "$BOOK_DIR/追踪/上下文.md" ]; then
   OUTPUT+="--- 当前位置 ---${NL}"
   # `2>/dev/null || true` 不能省：[ -f ] 对「存在但读不到」也为真，此时 head 退非零，
   # set -e 会就地终止脚本——OUTPUT 到文末才 flush，上面所有 [WARN] 会连同 stderr 一起丢光。
-  SNAPSHOT=$(head -10 "$BOOK_DIR/追踪/上下文.md" 2>/dev/null || true)
+  SNAPSHOT=$(head -18 "$BOOK_DIR/追踪/上下文.md" 2>/dev/null || true)
   OUTPUT+="${SNAPSHOT}${NL}---${NL}${NL}"
   HAS_CONTENT=true
 fi

@@ -103,6 +103,39 @@ def safe_rel(root: Path, path: Path) -> str:
         return str(path)
 
 
+def _walk_project_entries(root: Path, max_depth: int = 4):
+    """Yield non-ignored entries below project directories up to max_depth.
+
+    ``max_depth`` matches ``find -maxdepth``: root children are depth 1, entries at
+    depth 4 are visible, and depth 5 is not.
+    Hidden directories, node_modules and directory symlinks are pruned before descent.
+    """
+
+    def walk(base: Path, remaining: int):
+        if remaining <= 0:
+            return
+        try:
+            entries = sorted(base.iterdir(), key=lambda item: item.name)
+        except OSError:
+            return
+        visible = [
+            entry
+            for entry in entries
+            if not entry.name.startswith(".") and entry.name != "node_modules"
+        ]
+        yield from visible
+        if remaining == 1:
+            return
+        for entry in visible:
+            try:
+                if entry.is_dir() and not entry.is_symlink():
+                    yield from walk(entry, remaining - 1)
+            except OSError:
+                continue
+
+    yield from walk(root, max_depth)
+
+
 def read_active_book(root: Path) -> Path | None:
     active_file = root / ".active-book"
     if active_file.exists():
@@ -117,20 +150,16 @@ def read_active_book(root: Path) -> Path | None:
                 candidate.relative_to(root.resolve())
             except Exception:
                 candidate = None  # type: ignore[assignment]
-            if candidate and candidate.exists():
+            if candidate and candidate.is_dir():
                 return candidate
-    for track in root.glob("**/追踪"):
-        if any(part.startswith(".") for part in track.relative_to(root).parts):
-            continue
-        return track.parent
-    for body in root.glob("**/正文"):
-        if any(part.startswith(".") for part in body.relative_to(root).parts):
-            continue
-        return body.parent
-    for body_file in root.glob("**/正文.md"):
-        if any(part.startswith(".") for part in body_file.relative_to(root).parts):
-            continue
-        return body_file.parent
+    entries = list(_walk_project_entries(root))
+    for marker in ("追踪", "正文"):
+        for entry in entries:
+            if entry.name == marker and entry.is_dir() and not entry.is_symlink():
+                return entry.parent
+    for entry in entries:
+        if entry.name == "正文.md" and entry.is_file() and not entry.is_symlink():
+            return entry.parent
     return None
 
 
@@ -409,7 +438,7 @@ def _wordcount_finding(abs_path: Path, text: str) -> str | None:
         break
     if not target:
         return None
-    actual = len(text)
+    actual = len(text.replace("\r\n", "\n").replace("\r", "\n"))
     if actual < target * 0.9:
         return (f"字数：第{num}章 实际 {actual} 字 < 目标 {target} 的 90%（{int(target*0.9)}）。"
                 f"对照细纲字数预算定位欠账的密点、一次性重写到配额，别挤牙膏回炉。")
@@ -419,20 +448,80 @@ def _wordcount_finding(abs_path: Path, text: str) -> str | None:
 def _discover_all_books(root: Path) -> list[Path]:
     books: list[Path] = []
     seen: set[str] = set()
-    for pattern in ("**/追踪", "**/正文", "**/正文.md"):
-        for hit in root.glob(pattern):
-            if any(part.startswith(".") for part in hit.relative_to(root).parts):
-                continue
-            book = hit.parent
-            key = str(book.resolve())
-            if key not in seen:
-                seen.add(key)
-                books.append(book)
+    for hit in _walk_project_entries(root):
+        try:
+            is_marker = (
+                hit.name in {"追踪", "正文"}
+                and hit.is_dir()
+                and not hit.is_symlink()
+            )
+            is_body_file = (
+                hit.name == "正文.md" and hit.is_file() and not hit.is_symlink()
+            )
+        except OSError:
+            continue
+        if not is_marker and not is_body_file:
+            continue
+        book = hit.parent
+        key = str(book.resolve())
+        if key not in seen:
+            seen.add(key)
+            books.append(book)
     return books
 
 
+def tracking_checkpoint_issue(
+    book: Path,
+    *,
+    require_state: bool = False,
+    expected_last_committed: int | None = None,
+) -> str | None:
+    state = book / "追踪" / "_tracking-state.json"
+    if not state.exists():
+        if require_state:
+            return "追踪/_tracking-state.json 缺失；已有正文项目走 /story-import 的「旧追踪项目迁移」重建追踪（不必重跑全书拆解），新书先用 tracking_commit.py init 初始化"
+        return None
+    try:
+        document = json.loads(state.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return "追踪/_tracking-state.json 无法解析；停止写正文并重新 /story-import，不能猜测或手补状态"
+    if not isinstance(document, dict) or document.get("schema_version") != 4:
+        return "追踪/_tracking-state.json 不是当前 schema_version=4；停止写正文并重新 /story-import，不保留旧结构兼容路径"
+    revision = document.get("state_revision")
+    if type(revision) is not int:
+        return "追踪/_tracking-state.json 缺少整数 state_revision；停止写正文并重新 /story-import"
+    context = book / "追踪" / "上下文.md"
+    context_revision = None
+    try:
+        match = re.search(r"状态修订：(\d+)", context.read_text(encoding="utf-8"))
+        if match:
+            context_revision = int(match.group(1))
+    except (OSError, UnicodeError):
+        pass
+    if context_revision != revision:
+        shown = "缺失" if context_revision is None else str(context_revision)
+        return (
+            f"追踪/上下文.md 状态修订 {shown} 与 _tracking-state.json 的 {revision} 不一致；"
+            "重新提交该章的 mode=revision 事务重建派生视图（expected_state_revision 取 追踪/_tracking-state.json 的 state_revision 字段（check 失败时不输出 JSON））"
+        )
+    if expected_last_committed is not None:
+        last_committed = document.get("last_committed_chapter")
+        if type(last_committed) is not int:
+            return "追踪/_tracking-state.json 缺少整数 last_committed_chapter；停止写正文并重新 /story-import"
+        # 章号已在追踪范围内 = 回炉/改名/留原稿备份，不是首建新章：文件名新但章节早已提交过，
+        # 顺序校验对它恒为假（workflow-revision 的「备份原稿」步骤必然命中），跳过。
+        if expected_last_committed < last_committed:
+            return None
+        if last_committed != expected_last_committed:
+            return (
+                f"追踪已提交到第{last_committed}章，首建第{expected_last_committed + 1}章前"
+                f"必须先提交第{expected_last_committed}章追踪事务"
+            )
+    return None
+
+
 def continuity_findings(root: Path) -> list[str]:
-    """跨批连续性兜底：① 追踪 staleness（写了章但 上下文.md 没跟上 → 续写会断线）；
+    """跨批连续性兜底：① 追踪 staleness（写了章但 续写状态卡没跟上）；
     ② 章节标题去重（两章同名多半是误复制）。模型无关，回合/会话边界提醒，无问题则静默。
     扫描范围 repo-wide（与缺口检测一致），非活跃书也提醒——有意为之，不按 .active-book 收窄；
     staleness 用 mtime +1 秒容差，是启发式 advisory（checkout / 带 -p 拷贝可能偏差）。"""
@@ -442,6 +531,9 @@ def continuity_findings(root: Path) -> list[str]:
         chapters = sorted(body_dir.glob("第*章*.md")) if body_dir.is_dir() else []
         # ① 追踪 staleness（仅长篇：有 追踪/上下文.md）
         ctx = book / "追踪" / "上下文.md"
+        checkpoint_issue = tracking_checkpoint_issue(book, require_state=bool(chapters))
+        if checkpoint_issue:
+            msgs.append(f"[continuity] {safe_rel(root, book)}：{checkpoint_issue}。")
         if chapters and ctx.exists():
             newest = max((c.stat().st_mtime for c in chapters), default=0)
             try:
@@ -450,7 +542,16 @@ def continuity_findings(root: Path) -> list[str]:
                 ctx_m = 0
             if newest > ctx_m + 1:
                 latest = max(chapters, key=lambda c: c.stat().st_mtime).name
-                msgs.append(f"[continuity] {safe_rel(root, book)}：正文已更新到「{latest}」但 追踪/上下文.md 更早，续写会断线——补更 上下文.md/伏笔.md 再继续。")
+                msgs.append(f"[continuity] {safe_rel(root, book)}：正文已更新到「{latest}」但续写状态卡更早——为该章提交 tracking_commit.py 事务、check 通过后再续写，禁止分别手改 上下文.md/伏笔.md。")
+        # ①b 续写状态卡预算：上下文.md 由事务工具整份重建，硬上限 12288 字节。
+        # 若不处理，每章读取量会随章节数增长，最终达到 O(N^2)。这里只提醒、不阻止；应把超出规定的区块移到 追踪/逐章记录/。
+        if ctx.exists():
+            try:
+                ctx_size = ctx.stat().st_size
+            except Exception:
+                ctx_size = 0
+            if ctx_size > 12288:
+                msgs.append(f"[continuity] {safe_rel(root, book)}：追踪/上下文.md 已 {ctx_size} 字节，超出续写状态卡预算 12288 字节——提交一份 mode=revision 事务让 tracking_commit.py 整份重建，不要手改也不要继续追加。")
         # ② 标题去重（按文件名 第N章_标题 的标题部分）
         titles: dict[str, list[str]] = {}
         for c in chapters:
@@ -502,7 +603,18 @@ def _shell_words(segment: str) -> list[str]:
     current = ""
     started = False
     quote = ""
+    escaped = False
     for ch in segment:
+        if escaped:
+            current += ch
+            escaped = False
+            started = True
+            continue
+        if ch == "\\" and quote != "'":
+            current += ch
+            escaped = True
+            started = True
+            continue
         if quote:
             if ch == quote:
                 quote = ""
@@ -531,7 +643,16 @@ def _shell_segments(command: str) -> list[str]:
     segments: list[str] = []
     current = ""
     quote = ""
+    escaped = False
     for ch in command:
+        if escaped:
+            current += ch
+            escaped = False
+            continue
+        if ch == "\\" and quote != "'":
+            current += ch
+            escaped = True
+            continue
         if quote:
             current += ch
             if ch == quote:
@@ -556,7 +677,16 @@ def _before_shell_redirection(segment: str) -> str:
     """去掉首个引号外重定向及其后内容；2> 里的 fd 数字也一并去掉。"""
     current = ""
     quote = ""
+    escaped = False
     for ch in segment:
+        if escaped:
+            current += ch
+            escaped = False
+            continue
+        if ch == "\\" and quote != "'":
+            current += ch
+            escaped = True
+            continue
         if quote:
             current += ch
             if ch == quote:
@@ -572,38 +702,461 @@ def _before_shell_redirection(segment: str) -> str:
     return current
 
 
-def extract_prose_targets_from_command(command: str) -> list[str]:
+def _read_shell_word(value: str, start: int) -> tuple[str, int]:
+    word = ""
+    quote = ""
+    escaped = False
+    started = False
+    index = start
+    while index < len(value):
+        ch = value[index]
+        if escaped:
+            word += ch
+            escaped = False
+            started = True
+            index += 1
+            continue
+        if ch == "\\" and quote != "'":
+            word += ch
+            escaped = True
+            started = True
+            index += 1
+            continue
+        if quote:
+            if ch == quote:
+                quote = ""
+            else:
+                word += ch
+            started = True
+            index += 1
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            started = True
+            index += 1
+            continue
+        if ch in (" ", "\t", "\r", "\n", ";", "&", "|", "<", ">", "(", ")"):
+            break
+        word += ch
+        started = True
+        index += 1
+    return (word if started else "", index)
+
+
+def _read_heredoc_delimiter(value: str, start: int) -> tuple[str, int]:
+    word = ""
+    quote = ""
+    escaped = False
+    started = False
+    index = start
+    while index < len(value):
+        ch = value[index]
+        if escaped:
+            word += ch
+            escaped = False
+            started = True
+            index += 1
+            continue
+        if ch == "\\" and quote != "'":
+            next_char = value[index + 1:index + 2]
+            if quote == '"' and next_char not in ("$", "`", '"', "\\", "\n"):
+                word += ch
+            else:
+                escaped = True
+            started = True
+            index += 1
+            continue
+        if quote:
+            if ch == quote:
+                quote = ""
+            else:
+                word += ch
+            started = True
+            index += 1
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            started = True
+            index += 1
+            continue
+        if ch in (" ", "\t", "\r", "\n", ";", "&", "|", "<", ">", "(", ")"):
+            break
+        word += ch
+        started = True
+        index += 1
+    return (word if started else "", index)
+
+
+def _heredoc_declarations(line: str) -> list[tuple[str, bool]]:
+    declarations: list[tuple[str, bool]] = []
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(line):
+        ch = line[index]
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if ch == "\\" and quote != "'":
+            escaped = True
+            index += 1
+            continue
+        if quote:
+            if ch == quote:
+                quote = ""
+            index += 1
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            index += 1
+            continue
+        if not (
+            ch == "<"
+            and index + 1 < len(line)
+            and line[index + 1] == "<"
+            and (index == 0 or line[index - 1] != "<")
+            and (index + 2 >= len(line) or line[index + 2] != "<")
+        ):
+            index += 1
+            continue
+        cursor = index + 2
+        strip_tabs = False
+        if cursor < len(line) and line[cursor] == "-":
+            strip_tabs = True
+            cursor += 1
+        while cursor < len(line) and line[cursor] in (" ", "\t"):
+            cursor += 1
+        delimiter, cursor = _read_heredoc_delimiter(line, cursor)
+        if delimiter:
+            declarations.append((delimiter, strip_tabs))
+        index = max(index + 1, cursor)
+    return declarations
+
+
+def _mask_heredoc_bodies(command: str) -> str:
+    pending: list[tuple[str, bool]] = []
+    output: list[str] = []
+    for line in command.split("\n"):
+        if pending:
+            delimiter, strip_tabs = pending[0]
+            comparable = re.sub(r"^\t+", "", line) if strip_tabs else line
+            if comparable == delimiter:
+                pending.pop(0)
+                output.append(line)
+            else:
+                output.append(" " * len(line))
+            continue
+        pending.extend(_heredoc_declarations(line))
+        output.append(line)
+    return "\n".join(output)
+
+
+def _command_word_index(words: list[str]) -> int:
+    index = 0
+    while index < len(words):
+        while index < len(words) and (
+            re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", words[index])
+            or words[index] == "noglob"
+        ):
+            index += 1
+        if index < len(words) and words[index] == "command":
+            index += 1
+            while index < len(words):
+                option = words[index]
+                if option == "--":
+                    index += 1
+                    break
+                if option in ("-v", "-V") or re.match(r"^-[p]*[vV]", option):
+                    return len(words)
+                if option == "-p" or re.match(r"^-p+$", option):
+                    index += 1
+                    continue
+                break
+            continue
+        if index < len(words) and words[index] == "env":
+            index += 1
+            while index < len(words):
+                option = words[index]
+                if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", option) or option in (
+                    "-i",
+                    "--ignore-environment",
+                ):
+                    index += 1
+                    continue
+                if option in ("-u", "--unset"):
+                    index += 2
+                    continue
+                if option.startswith("--unset=") or (re.match(r"^-u.+", option) and option != "-u"):
+                    index += 1
+                    continue
+                if option == "--":
+                    index += 1
+                break
+            continue
+        break
+    return index
+
+
+def _nested_shell_command(args: list[str]) -> str:
+    value_options = {"-o", "+o", "-O", "+O"}
+    index = 0
+    while index < len(args):
+        option = args[index]
+        if option == "--":
+            return ""
+        if option == "-c" or (re.match(r"^-[^-]+$", option) and "c" in option[1:]):
+            return args[index + 1] if index + 1 < len(args) else ""
+        if option in value_options:
+            index += 2
+            continue
+        if not option.startswith(("-", "+")):
+            break
+        index += 1
+    return ""
+
+
+def _command_substitutions(command: str) -> list[str]:
+    substitutions: list[str] = []
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(command):
+        ch = command[index]
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if ch == "\\" and quote != "'":
+            escaped = True
+            index += 1
+            continue
+        if quote == "'":
+            if ch == "'":
+                quote = ""
+            index += 1
+            continue
+        if ch == '"':
+            quote = "" if quote == '"' else '"'
+            index += 1
+            continue
+        if not quote and ch == "'":
+            quote = "'"
+            index += 1
+            continue
+        if ch == "$" and command[index + 1:index + 2] == "(" and command[index + 2:index + 3] != "(":
+            depth = 1
+            inner_quote = ""
+            inner_escaped = False
+            end = index + 2
+            while end < len(command):
+                inner = command[end]
+                if inner_escaped:
+                    inner_escaped = False
+                    end += 1
+                    continue
+                if inner == "\\" and inner_quote != "'":
+                    inner_escaped = True
+                    end += 1
+                    continue
+                if inner_quote:
+                    if inner == inner_quote:
+                        inner_quote = ""
+                    end += 1
+                    continue
+                if inner in ('"', "'"):
+                    inner_quote = inner
+                elif inner == "(":
+                    depth += 1
+                elif inner == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                end += 1
+            if depth == 0:
+                substitutions.append(command[index + 2:end])
+                index = end + 1
+                continue
+        if ch == "`":
+            end = index + 1
+            tick_escaped = False
+            while end < len(command):
+                inner = command[end]
+                if tick_escaped:
+                    tick_escaped = False
+                elif inner == "\\":
+                    tick_escaped = True
+                elif inner == "`":
+                    break
+                end += 1
+            if end < len(command):
+                substitutions.append(command[index + 1:end])
+                index = end + 1
+                continue
+        index += 1
+    return substitutions
+
+
+def _redirect_targets(command: str) -> list[str]:
+    targets: list[str] = []
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(command):
+        ch = command[index]
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if ch == "\\" and quote != "'":
+            escaped = True
+            index += 1
+            continue
+        if quote:
+            if ch == quote:
+                quote = ""
+            index += 1
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            index += 1
+            continue
+        if ch != ">":
+            index += 1
+            continue
+        cursor = index + (2 if command[index + 1:index + 2] == ">" else 1)
+        if command[cursor:cursor + 1] in ("|", "&"):
+            cursor += 1
+        while command[cursor:cursor + 1] in (" ", "\t"):
+            cursor += 1
+        target, cursor = _read_shell_word(command, cursor)
+        if "正文" in target:
+            targets.append(target)
+        index = max(index + 1, cursor)
+    return targets
+
+
+def _write_operands(command: str, args: list[str]) -> list[str]:
+    operands: list[str] = []
+    value_options = (
+        {"-d", "--date", "-r", "--reference", "-t", "--time"}
+        if command == "touch"
+        else set()
+    )
+    options = True
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if options and arg == "--":
+            options = False
+            index += 1
+            continue
+        if options and arg in value_options:
+            index += 2
+            continue
+        if options and any(
+            option.startswith("--") and arg.startswith(option + "=")
+            for option in value_options
+        ):
+            index += 1
+            continue
+        if options and arg.startswith("-") and arg != "-":
+            index += 1
+            continue
+        operands.append(arg)
+        index += 1
+    return operands
+
+
+def _command_basename(value: str) -> str:
+    return re.split(r"[\\/]", value or "")[-1]
+
+
+def _join_posix(directory: str, name: str) -> str:
+    """目录形态目标一律用 "/" 拼：Path 在 Windows 产出反斜杠，会破坏三端 parity 的逐字比较。"""
+    return re.sub(r"[\\/]+$", "", directory) + "/" + name
+
+
+def _copy_like_targets(command: str, args: list[str]) -> list[str]:
+    positionals: list[str] = []
+    target_directory = ""
+    directory_only = False
+    options = True
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if options and arg == "--":
+            options = False
+            index += 1
+            continue
+        if options and arg in ("-t", "--target-directory"):
+            target_directory = args[index + 1] if index + 1 < len(args) else ""
+            index += 2
+            continue
+        if options and arg.startswith("--target-directory="):
+            target_directory = arg[len("--target-directory="):]
+            index += 1
+            continue
+        if options and command == "install" and arg in ("-d", "--directory"):
+            directory_only = True
+            index += 1
+            continue
+        if options and arg.startswith("-") and arg != "-":
+            index += 1
+            continue
+        positionals.append(arg)
+        index += 1
+    if directory_only or not positionals:
+        return []
+    if target_directory:
+        return [_join_posix(target_directory, _command_basename(source)) for source in positionals]
+    if len(positionals) < 2:
+        return []
+    destination = positionals[-1]
+    normalized = destination.replace("\\", "/")
+    if normalized.endswith("/") or normalized.rsplit("/", 1)[-1] == "正文":
+        return [_join_posix(destination, _command_basename(source)) for source in positionals[:-1]]
+    return [destination]
+
+
+def extract_prose_targets_from_command(command: str, depth: int = 0) -> list[str]:
     # Only treat a 正文 path as a write target when it is the destination of an actual
     # write op (redirection / tee / touch / cp|mv dest). Scanning the whole command would
     # flag any heredoc body, doc string, or grep pattern that merely *mentions*
     # 正文/第N章.md and wrongly deny the edit.
-    # 目标 token 三形态（引号段优先）：双引号段 / 单引号段 / 裸词。此前只有一个把引号排除在字符类外
-    # 的裸词式，带空格的引号目标（> "my book/正文/第1章.md"）整条命令抽不到目标就静默放行。
-    # 裸词类只排 ASCII 空白（空格/Tab/CR/LF，shell 真正的分词符）：\s 在 python 与 js 都含 U+3000，
-    # 而全角空格不分词，用 \s 会把「第003章　开局.md」截成「第003章」而漏拦（本项目章名分隔符
-    # [_\- 　] 自带全角空格）。反斜杠转义空格（my\ book）仍不认——resolve_target 把 \ 归一成路径
-    # 分隔符（Windows 路径），在此解转义会反过来毁掉 book\正文\第1章.md。
-    bare = "[^ \t\r\n\"'<>|;&()]"
-    token = "\"([^\"]*正文[^\"]*)\"|'([^']*正文[^']*)'|['\"]?(" + bare + "*正文" + bare + "*)['\"]?"
     targets: list[str] = []
-    for m in re.finditer(r">>?\s*(?:" + token + ")", command):  # > dest, >> dest, cat >dest
-        targets.append(m.group(1) or m.group(2) or m.group(3))
-    # Use an explicit start/separator class, not \b: \b is Unicode-aware in Python re but ASCII-only
-    # in JS, so an ASCII boundary keeps this identical to opencode plugin.ts (parity).
-    for m in re.finditer(r"(?:^|[\s;&|(){}<>])(?:tee(?:\s+-a)?|touch)\s+(?:" + token + ")", command):
-        targets.append(m.group(1) or m.group(2) or m.group(3))
+    scannable = _mask_heredoc_bodies(command)
+    if depth < 8:
+        for nested in _command_substitutions(scannable):
+            targets.extend(extract_prose_targets_from_command(nested, depth + 1))
+    targets.extend(_redirect_targets(scannable))
     # cp/mv: the write destination is the last positional arg of the segment. Parse it (regex can't
     # tell a 正文 source from a 正文 dest, and a trailing 2>/dev/null / >log / || breaks end-anchoring).
-    for raw_segment in _shell_segments(command):
+    for raw_segment in _shell_segments(scannable):
         seg = _before_shell_redirection(raw_segment)
         # 引号感知分词（同 JS 核 shellWords）：str.split() 会按 U+3000 和引号内空格切碎目标，
         # 末位取到 book/正文/第1章.md —— 判到另一本书上（那本有细纲就直接放行）。
         words = _shell_words(seg)
-        if len(words) >= 2 and words[0] in ("cp", "mv"):
-            positionals = [w for w in words[1:] if not w.startswith("-")]
-            if positionals and "正文" in positionals[-1]:
-                targets.append(positionals[-1])
-    return [t for t in targets if t]
+        command_index = _command_word_index(words)
+        command_name = _command_basename(words[command_index]) if command_index < len(words) else ""
+        command_args = words[command_index + 1:]
+        if command_name in ("sh", "bash", "dash", "ksh", "zsh"):
+            nested = _nested_shell_command(command_args)
+            if nested:
+                targets.extend(extract_prose_targets_from_command(nested, depth + 1))
+        if command_name in ("tee", "touch"):
+            targets.extend(
+                destination
+                for destination in _write_operands(command_name, command_args)
+                if "正文" in destination
+            )
+        if command_name in ("cp", "mv", "install"):
+            targets.extend(
+                destination
+                for destination in _copy_like_targets(command_name, command_args)
+                if "正文" in destination
+            )
+    return list(dict.fromkeys(target for target in targets if target))
 
 
 def extract_apply_patch_targets(command: str) -> list[str]:
@@ -686,8 +1239,6 @@ def prose_block_reason(root: Path, abs_path: Path) -> str | None:
         return None
     if not re.match(r"^第.*章.*\.md$", base):
         return None
-    if abs_path.exists():
-        return None
     m = re.match(r"^第0*(\d+)章", base)
     if not m:
         return None
@@ -695,18 +1246,32 @@ def prose_block_reason(root: Path, abs_path: Path) -> str | None:
     book_dir = abs_path.parent.parent
     # 新书可能在任何大纲/追踪/设定脚手架存在前就首建正文；核心守卫必须 fail closed。
     # 相对路径由 HOOK_CWD 解析，不能靠削弱这条 canonical guard 来掩盖 cwd 语义。
-    if (root / "拆文库" / book_dir.name).exists():
+    state = book_dir / "追踪" / "_tracking-state.json"
+    # story-import 在复制既有正文、尚未执行 tracking init 的窗口可以写；一旦 state 存在，
+    # 即进入当前追踪协议，不再因为保留了 拆文库/ 分析资产而永久绕过守卫。
+    if (root / "拆文库" / book_dir.name).exists() and not state.exists():
         return None
+    exists = abs_path.exists()
     outline_dir = book_dir / "大纲"
     found = False
-    if outline_dir.is_dir():
-        for candidate in outline_dir.iterdir():
-            fm = re.match(r"^细纲_第0*(\d+)章.*\.md$", candidate.name)
-            if fm and fm.group(1) == num:
-                found = True
-                break
-    if not found:
-        return f"⛔ 写正文被拦截：第 {num} 章缺少细纲（{safe_rel(root, outline_dir)}/细纲_第{num}章.md）。先按 story-long-write 单章流程补建细纲再写正文。"
+    if not exists:
+        if outline_dir.is_dir():
+            for candidate in outline_dir.iterdir():
+                fm = re.match(r"^细纲_第0*(\d+)章.*\.md$", candidate.name)
+                if fm and fm.group(1) == num:
+                    found = True
+                    break
+        if not found:
+            return f"⛔ 写正文被拦截：第 {num} 章缺少细纲（{safe_rel(root, outline_dir)}/细纲_第{num}章.md）。先按 story-long-write 单章流程补建细纲再写正文。"
+    checkpoint_issue = tracking_checkpoint_issue(
+        book_dir,
+        require_state=True,
+        expected_last_committed=None if exists else int(num) - 1,
+    )
+    if checkpoint_issue:
+        return f"⛔ 写正文被拦截：{safe_rel(root, book_dir)} 的{checkpoint_issue}。"
+    if exists:
+        return None
     # 欠账门（无状态）：写第 N 章（首建）前，上一章有未清毒句式且未标「去味:跳过」豁免时先清再写。
     # 判据现算自上一章文件本身，不落任何状态文件；找不到上一章/读取失败一律放行（宁可漏拦不可误伤）。
     # js↔py 文案由 check-hook-regex-sync.sh 锁同步，判定由 test-prose-net-parity.sh Part E 锁 parity。
@@ -714,11 +1279,16 @@ def prose_block_reason(root: Path, abs_path: Path) -> str | None:
     if prev_num >= 1:
         prev_file = None
         try:
-            for candidate in abs_path.parent.iterdir():
-                pm = re.match(r"^第0*(\d+)章.*\.md$", candidate.name)
-                if pm and int(pm.group(1)) == prev_num:
-                    prev_file = candidate
-                    break
+            # iterdir 顺序在 ext4/overlayfs 上是哈希序：不排序就可能挑中同章号的原稿备份
+            # （workflow-revision 的「备份原稿」产物），拿早已被改写掉的旧文本报欠账。
+            # 显式排除 _原稿_ 备份并排序，保证四端与各文件系统上取到同一个「上一章」。
+            candidates = sorted(
+                c for c in abs_path.parent.iterdir()
+                if re.match(r"^第0*(\d+)章.*\.md$", c.name)
+                and int(re.match(r"^第0*(\d+)章", c.name).group(1)) == prev_num
+                and "_原稿_" not in c.name
+            )
+            prev_file = candidates[0] if candidates else None
         except OSError:
             prev_file = None
         if prev_file is not None:

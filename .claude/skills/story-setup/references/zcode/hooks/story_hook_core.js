@@ -37,7 +37,8 @@ function firstLine(file) {
 }
 
 function findFirst(base, maxDepth, predicate) {
-  if (maxDepth < 0) return null
+  // maxDepth 与 `find -maxdepth N` 一致：root 的直属条目深度为 1，深度 N 的条目可见，N+1 不可见。
+  if (maxDepth <= 0) return null
   let entries = []
   try {
     entries = fs.readdirSync(base, { withFileTypes: true })
@@ -49,7 +50,7 @@ function findFirst(base, maxDepth, predicate) {
     const full = path.join(base, entry.name)
     if (predicate(full, entry)) return full
   }
-  if (maxDepth === 0) return null
+  if (maxDepth === 1) return null
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name.startsWith(".") || entry.name === "node_modules") continue
     const found = findFirst(path.join(base, entry.name), maxDepth - 1, predicate)
@@ -61,9 +62,15 @@ function findFirst(base, maxDepth, predicate) {
 function discoverActiveBook(root) {
   const declared = firstLine(path.join(root, ".active-book"))
   if (declared) {
-    const candidate = resolveTarget(root, declared)
-    const rel = path.relative(root, candidate)
-    if (!rel.startsWith("..") && existingDir(candidate)) return candidate
+    const candidate = existingDir(resolveTarget(root, declared))
+    if (candidate) {
+      // root 也要按 realpath 比：existingDir 已把 candidate 解到真实路径，若这里用未解析的
+      // root，项目根位于 symlink 下（macOS /tmp、/var，或软链的家目录/工作目录）时 rel 会
+      // 假性以 ".." 开头，合法的 .active-book 被静默丢弃。bash 用 pwd -P、python 用
+      // root.resolve()，此处对齐两端。
+      const rel = path.relative(existingDir(root) || path.resolve(root), candidate)
+      if (!rel.startsWith("..") && !path.isAbsolute(rel)) return candidate
+    }
   }
   const tracking = findFirst(root, 4, (_full, entry) => entry.isDirectory() && entry.name === "追踪")
   if (tracking) return path.dirname(tracking)
@@ -76,7 +83,7 @@ function discoverActiveBook(root) {
 function discoverAllBooks(root) {
   const books = new Map()
   function walk(base, depth) {
-    if (depth < 0) return
+    if (depth <= 0) return
     let entries = []
     try { entries = fs.readdirSync(base, { withFileTypes: true }) } catch { return }
     for (const entry of entries) {
@@ -88,13 +95,57 @@ function discoverAllBooks(root) {
         books.set(path.dirname(full), path.dirname(full))
       }
     }
+    if (depth === 1) return
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith(".") || entry.name === "node_modules") continue
       walk(path.join(base, entry.name), depth - 1)
     }
   }
-  walk(root, 8)
+  walk(root, 4)
   return [...books.values()]
+}
+
+function trackingCheckpointIssue(book, requireState = false, expectedLastCommitted = null) {
+  const state = path.join(book, "追踪", "_tracking-state.json")
+  if (!fs.existsSync(state)) {
+    return requireState
+      ? `追踪/_tracking-state.json 缺失；已有正文项目走 /story-import 的「旧追踪项目迁移」重建追踪（不必重跑全书拆解），新书先用 tracking_commit.py init 初始化`
+      : null
+  }
+  let document
+  try {
+    document = JSON.parse(fs.readFileSync(state, "utf8"))
+  } catch {
+    return `追踪/_tracking-state.json 无法解析；停止写正文并重新 /story-import，不能猜测或手补状态`
+  }
+  if (!document || typeof document !== "object" || Array.isArray(document) || document.schema_version !== 4) {
+    return `追踪/_tracking-state.json 不是当前 schema_version=4；停止写正文并重新 /story-import，不保留旧结构兼容路径`
+  }
+  if (!Number.isInteger(document.state_revision)) {
+    return `追踪/_tracking-state.json 缺少整数 state_revision；停止写正文并重新 /story-import`
+  }
+  const context = path.join(book, "追踪", "上下文.md")
+  let contextRevision = null
+  try {
+    const match = fs.readFileSync(context, "utf8").match(/状态修订：(\d+)/)
+    if (match) contextRevision = Number(match[1])
+  } catch {}
+  if (contextRevision !== document.state_revision) {
+    const shown = contextRevision === null ? "缺失" : contextRevision
+    return `追踪/上下文.md 状态修订 ${shown} 与 _tracking-state.json 的 ${document.state_revision} 不一致；重新提交该章的 mode=revision 事务重建派生视图（expected_state_revision 取 追踪/_tracking-state.json 的 state_revision 字段（check 失败时不输出 JSON））`
+  }
+  if (expectedLastCommitted !== null) {
+    if (!Number.isInteger(document.last_committed_chapter)) {
+      return `追踪/_tracking-state.json 缺少整数 last_committed_chapter；停止写正文并重新 /story-import`
+    }
+    // 章号已在追踪范围内 = 回炉/改名/留原稿备份，不是首建新章：文件名新但章节早已提交过，
+    // 顺序校验对它恒为假（workflow-revision 的「备份原稿」步骤必然命中），跳过。
+    if (expectedLastCommitted < document.last_committed_chapter) return null
+    if (document.last_committed_chapter !== expectedLastCommitted) {
+      return `追踪已提交到第${document.last_committed_chapter}章，首建第${expectedLastCommitted + 1}章前必须先提交第${expectedLastCommitted}章追踪事务`
+    }
+  }
+  return null
 }
 
 function continuityFindings(root) {
@@ -109,13 +160,27 @@ function continuityFindings(root) {
     } catch {}
 
     const context = path.join(book, "追踪", "上下文.md")
+    const checkpointIssue = trackingCheckpointIssue(book, chapters.length > 0)
+    if (checkpointIssue) {
+      messages.push(`[continuity] ${safeRelative(root, book)}：${checkpointIssue}。`)
+    }
     if (chapters.length && fs.existsSync(context)) {
       try {
         const newest = Math.max(...chapters.map((file) => fs.statSync(file).mtimeMs))
         const contextTime = fs.statSync(context).mtimeMs
         if (newest > contextTime + 1000) {
           const latest = chapters.reduce((left, right) => fs.statSync(left).mtimeMs > fs.statSync(right).mtimeMs ? left : right)
-          messages.push(`[continuity] ${safeRelative(root, book)}：正文已更新到「${path.basename(latest)}」但 追踪/上下文.md 更早，续写会断线——补更 上下文.md/伏笔.md 再继续。`)
+          messages.push(`[continuity] ${safeRelative(root, book)}：正文已更新到「${path.basename(latest)}」但续写状态卡更早——为该章提交 tracking_commit.py 事务、check 通过后再续写，禁止分别手改 上下文.md/伏笔.md。`)
+        }
+      } catch {}
+    }
+
+    // 续写状态卡预算：上下文.md 由事务工具整份重建，硬上限 12288 字节。
+    if (fs.existsSync(context)) {
+      try {
+        const contextSize = fs.statSync(context).size
+        if (contextSize > 12288) {
+          messages.push(`[continuity] ${safeRelative(root, book)}：追踪/上下文.md 已 ${contextSize} 字节，超出续写状态卡预算 12288 字节——提交一份 mode=revision 事务让 tracking_commit.py 整份重建，不要手改也不要继续追加。`)
         }
       } catch {}
     }
@@ -136,36 +201,397 @@ function continuityFindings(root) {
   return messages
 }
 
-function extractProseTargets(command) {
-  const targets = []
-  // 目标 token 三形态（引号段优先）：双引号段 / 单引号段 / 裸词。此前只有一个把引号排除在字符类外
-  // 的裸词式，带空格的引号目标（> "my book/正文/第1章.md"）整条命令抽不到目标就静默放行。
-  // 裸词类只排 ASCII 空白（空格/Tab/CR/LF，shell 真正的分词符）：\s 在 js 与 python 都含 U+3000，
-  // 而全角空格不分词，用 \s 会把「第003章　开局.md」截成「第003章」而漏拦（本项目章名分隔符
-  // [_\- 　] 自带全角空格）。反斜杠转义空格（my\ book）仍不认——resolveTarget 把 \ 归一成路径
-  // 分隔符（Windows 路径），在此解转义会反过来毁掉 book\正文\第1章.md。
-  const bare = `[^ \\t\\r\\n"'<>|;&()]`
-  const token = `"([^"]*正文[^"]*)"|'([^']*正文[^']*)'|["']?(${bare}*正文${bare}*)["']?`
-  for (const source of [`>>?\\s*(?:${token})`, `(?:^|[\\s;&|(){}<>])(?:tee(?:\\s+-a)?|touch)\\s+(?:${token})`]) {
-    const regex = new RegExp(source, "gm")
-    let match
-    while ((match = regex.exec(command)) !== null) {
-      const target = match[1] || match[2] || match[3]
-      if (target) targets.push(target)
+function readShellWord(value, start) {
+  let word = ""
+  let quote = ""
+  let escaped = false
+  let started = false
+  let index = start
+  for (; index < value.length; index++) {
+    const ch = value[index]
+    if (escaped) {
+      word += ch
+      escaped = false
+      started = true
+      continue
+    }
+    if (ch === "\\" && quote !== "'") {
+      word += ch
+      escaped = true
+      started = true
+      continue
+    }
+    if (quote) {
+      if (ch === quote) quote = ""
+      else word += ch
+      started = true
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      started = true
+      continue
+    }
+    if ([" ", "\t", "\r", "\n", ";", "&", "|", "<", ">", "(", ")"].includes(ch)) break
+    word += ch
+    started = true
+  }
+  return { word: started ? word : "", next: index }
+}
+
+function readHeredocDelimiter(value, start) {
+  let word = ""
+  let quote = ""
+  let escaped = false
+  let started = false
+  let index = start
+  for (; index < value.length; index++) {
+    const ch = value[index]
+    if (escaped) {
+      word += ch
+      escaped = false
+      started = true
+      continue
+    }
+    if (ch === "\\" && quote !== "'") {
+      const next = value[index + 1] || ""
+      if (quote === '"' && !["$", "`", '"', "\\", "\n"].includes(next)) {
+        word += ch
+      } else {
+        escaped = true
+      }
+      started = true
+      continue
+    }
+    if (quote) {
+      if (ch === quote) quote = ""
+      else word += ch
+      started = true
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      started = true
+      continue
+    }
+    if ([" ", "\t", "\r", "\n", ";", "&", "|", "<", ">", "(", ")"].includes(ch)) break
+    word += ch
+    started = true
+  }
+  return { word: started ? word : "", next: index }
+}
+
+function heredocDeclarations(line) {
+  const declarations = []
+  let quote = ""
+  let escaped = false
+  for (let index = 0; index < line.length; index++) {
+    const ch = line[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (ch === "\\" && quote !== "'") {
+      escaped = true
+      continue
+    }
+    if (quote) {
+      if (ch === quote) quote = ""
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      continue
+    }
+    if (ch !== "<" || line[index + 1] !== "<" || line[index - 1] === "<" || line[index + 2] === "<") continue
+    let cursor = index + 2
+    let stripTabs = false
+    if (line[cursor] === "-") {
+      stripTabs = true
+      cursor++
+    }
+    while (line[cursor] === " " || line[cursor] === "\t") cursor++
+    const parsed = readHeredocDelimiter(line, cursor)
+    if (parsed.word) declarations.push({ delimiter: parsed.word, stripTabs })
+    index = Math.max(index, parsed.next - 1)
+  }
+  return declarations
+}
+
+function maskHeredocBodies(command) {
+  const pending = []
+  return String(command).split("\n").map((line) => {
+    if (pending.length) {
+      const current = pending[0]
+      const comparable = current.stripTabs ? line.replace(/^\t+/, "") : line
+      if (comparable === current.delimiter) {
+        pending.shift()
+        return line
+      }
+      return " ".repeat(line.length)
+    }
+    pending.push(...heredocDeclarations(line))
+    return line
+  }).join("\n")
+}
+
+function commandWordIndex(words) {
+  let index = 0
+  while (index < words.length) {
+    while (index < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index]) || words[index] === "noglob")) index++
+    if (words[index] === "command") {
+      index++
+      while (index < words.length) {
+        const option = words[index]
+        if (option === "--") { index++; break }
+        if (option === "-v" || option === "-V" || /^-[p]*[vV]/.test(option)) return words.length
+        if (option === "-p" || /^-p+$/.test(option)) { index++; continue }
+        break
+      }
+      continue
+    }
+    if (words[index] === "env") {
+      index++
+      while (index < words.length) {
+        const option = words[index]
+        if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(option) || ["-i", "--ignore-environment"].includes(option)) {
+          index++
+          continue
+        }
+        if (option === "-u" || option === "--unset") {
+          index += 2
+          continue
+        }
+        if (option.startsWith("--unset=") || (/^-u.+/.test(option) && option !== "-u")) {
+          index++
+          continue
+        }
+        if (option === "--") index++
+        break
+      }
+      continue
+    }
+    break
+  }
+  return index
+}
+
+function nestedShellCommand(args) {
+  const valueOptions = new Set(["-o", "+o", "-O", "+O"])
+  for (let index = 0; index < args.length; index++) {
+    const option = args[index]
+    if (option === "--") return ""
+    if (option === "-c" || (/^-[^-]+$/.test(option) && option.slice(1).includes("c"))) {
+      return args[index + 1] || ""
+    }
+    if (valueOptions.has(option)) {
+      index++
+      continue
+    }
+    if (!option.startsWith("-") && !option.startsWith("+")) break
+  }
+  return ""
+}
+
+function commandSubstitutions(command) {
+  const value = String(command)
+  const substitutions = []
+  let quote = ""
+  let escaped = false
+  for (let index = 0; index < value.length; index++) {
+    const ch = value[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (ch === "\\" && quote !== "'") {
+      escaped = true
+      continue
+    }
+    if (quote === "'") {
+      if (ch === "'") quote = ""
+      continue
+    }
+    if (ch === '"') {
+      quote = quote === '"' ? "" : '"'
+      continue
+    }
+    if (!quote && ch === "'") {
+      quote = "'"
+      continue
+    }
+    if (ch === "$" && value[index + 1] === "(" && value[index + 2] !== "(") {
+      let depth = 1
+      let innerQuote = ""
+      let innerEscaped = false
+      let end = index + 2
+      for (; end < value.length; end++) {
+        const inner = value[end]
+        if (innerEscaped) { innerEscaped = false; continue }
+        if (inner === "\\" && innerQuote !== "'") { innerEscaped = true; continue }
+        if (innerQuote) {
+          if (inner === innerQuote) innerQuote = ""
+          continue
+        }
+        if (inner === '"' || inner === "'") { innerQuote = inner; continue }
+        if (inner === "(") depth++
+        else if (inner === ")" && --depth === 0) break
+      }
+      if (depth === 0) {
+        substitutions.push(value.slice(index + 2, end))
+        index = end
+      }
+      continue
+    }
+    if (ch === "`") {
+      let end = index + 1
+      let tickEscaped = false
+      for (; end < value.length; end++) {
+        const inner = value[end]
+        if (tickEscaped) { tickEscaped = false; continue }
+        if (inner === "\\") { tickEscaped = true; continue }
+        if (inner === "`") break
+      }
+      if (end < value.length) {
+        substitutions.push(value.slice(index + 1, end))
+        index = end
+      }
     }
   }
-  for (const raw of shellSegments(command)) {
+  return substitutions
+}
+
+function redirectTargets(command) {
+  const value = String(command)
+  const targets = []
+  let quote = ""
+  let escaped = false
+  for (let index = 0; index < value.length; index++) {
+    const ch = value[index]
+    if (escaped) { escaped = false; continue }
+    if (ch === "\\" && quote !== "'") { escaped = true; continue }
+    if (quote) {
+      if (ch === quote) quote = ""
+      continue
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue }
+    if (ch !== ">") continue
+    let cursor = index + (value[index + 1] === ">" ? 2 : 1)
+    if (value[cursor] === "|" || value[cursor] === "&") cursor++
+    while (value[cursor] === " " || value[cursor] === "\t") cursor++
+    const parsed = readShellWord(value, cursor)
+    if (parsed.word.includes("正文")) targets.push(parsed.word)
+    index = Math.max(index, parsed.next - 1)
+  }
+  return targets
+}
+
+function writeOperands(command, args) {
+  const operands = []
+  const valueOptions = command === "touch"
+    ? new Set(["-d", "--date", "-r", "--reference", "-t", "--time"])
+    : new Set()
+  let options = true
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (options && arg === "--") {
+      options = false
+      continue
+    }
+    if (options && valueOptions.has(arg)) {
+      i++
+      continue
+    }
+    if (options && [...valueOptions].some((option) => option.startsWith("--") && arg.startsWith(`${option}=`))) continue
+    if (options && arg.startsWith("-") && arg !== "-") continue
+    operands.push(arg)
+  }
+  return operands
+}
+
+function commandBasename(value) {
+  const parts = String(value || "").split(/[\\/]/)
+  return parts[parts.length - 1]
+}
+
+// 目录形态的落盘目标一律用 "/" 拼：path.join 在 Windows 产出反斜杠，会让三端 parity 的
+// 逐字比较在 Windows 上错开（resolveTarget 之后也会把 \ 归一成 /，这里先统一即可）。
+function joinPosix(directory, name) {
+  return `${String(directory).replace(/[\\/]+$/, "")}/${name}`
+}
+
+function copyLikeTargets(command, args) {
+  const positionals = []
+  let targetDirectory = ""
+  let directoryOnly = false
+  let options = true
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (options && arg === "--") {
+      options = false
+      continue
+    }
+    if (options && (arg === "-t" || arg === "--target-directory")) {
+      targetDirectory = args[++i] || ""
+      continue
+    }
+    if (options && arg.startsWith("--target-directory=")) {
+      targetDirectory = arg.slice("--target-directory=".length)
+      continue
+    }
+    if (options && command === "install" && (arg === "-d" || arg === "--directory")) {
+      directoryOnly = true
+      continue
+    }
+    if (options && arg.startsWith("-") && arg !== "-") continue
+    positionals.push(arg)
+  }
+  if (directoryOnly || !positionals.length) return []
+  if (targetDirectory) {
+    return positionals.map((source) => joinPosix(targetDirectory, commandBasename(source)))
+  }
+  if (positionals.length < 2) return []
+  const destination = positionals[positionals.length - 1]
+  const normalized = destination.replace(/\\/g, "/")
+  if (normalized.endsWith("/") || normalized.split("/").pop() === "正文") {
+    return positionals.slice(0, -1).map((source) => joinPosix(destination, commandBasename(source)))
+  }
+  return [destination]
+}
+
+function extractProseTargets(command, depth = 0) {
+  const targets = []
+  const scannable = maskHeredocBodies(command)
+  if (depth < 8) {
+    for (const nested of commandSubstitutions(scannable)) {
+      targets.push(...extractProseTargets(nested, depth + 1))
+    }
+  }
+  targets.push(...redirectTargets(scannable))
+  for (const raw of shellSegments(scannable)) {
     const segment = beforeShellRedirection(raw)
     // 引号感知分词（同 shellWords）：/\s+/ 会把 cp draft.md "my book/正文/第1章.md" 的目标切碎，
     // 末位取到 book/正文/第1章.md —— 判到另一本书上（那本有细纲就直接放行）。
     const words = shellWords(segment)
-    if (words.length >= 2 && (words[0] === "cp" || words[0] === "mv")) {
-      const positional = words.slice(1).filter((word) => !word.startsWith("-"))
-      const destination = positional[positional.length - 1]
-      if (destination && destination.includes("正文")) targets.push(destination)
+    const commandIndex = commandWordIndex(words)
+    const commandName = commandBasename(words[commandIndex])
+    const commandArgs = words.slice(commandIndex + 1)
+    if (["sh", "bash", "dash", "ksh", "zsh"].includes(commandName)) {
+      const nested = nestedShellCommand(commandArgs)
+      if (nested) targets.push(...extractProseTargets(nested, depth + 1))
+    }
+    if (commandName === "tee" || commandName === "touch") {
+      for (const destination of writeOperands(commandName, commandArgs)) {
+        if (destination.includes("正文")) targets.push(destination)
+      }
+    }
+    if (commandName === "cp" || commandName === "mv" || commandName === "install") {
+      for (const destination of copyLikeTargets(commandName, commandArgs)) {
+        if (destination.includes("正文")) targets.push(destination)
+      }
     }
   }
-  return targets
+  return [...new Set(targets.filter(Boolean))]
 }
 
 // apply_patch 目标抽取。只认 Add/Update 会漏掉 `*** Move to:`——它是 Update File 段的子指令
@@ -217,31 +643,37 @@ function proseBlockReason(root, absolute) {
     }
     return null
   }
-  if (parent !== "正文" || !/^第.*章.*\.md$/.test(base) || fs.existsSync(absolute)) return null
+  if (parent !== "正文" || !/^第.*章.*\.md$/.test(base)) return null
   const match = base.match(/^第0*(\d+)章/)
   if (!match) return null
   const chapter = match[1]
   const book = path.dirname(path.dirname(absolute))
+  const state = path.join(book, "追踪", "_tracking-state.json")
   // 这是守卫的 canonical case：agent 可能在任何脚手架存在前就首建 {书}/正文/第N章.md。
   // 是否“像一本书”不能作为放行条件；相对路径误判应在宿主 adapter 按 cwd 正确解析，而不是
   // 让核心守卫 fail open。
-  if (fs.existsSync(path.join(root, "拆文库", path.basename(book)))) return null
-  // 细纲双目录：先 大纲/（标准），再 细纲/（独立目录，兼容 细纲_L1-0_第N章.md 单元中缀命名）
-  const outlineDirs = [path.join(book, "大纲"), path.join(book, "细纲")]
+  // story-import 在复制既有正文、尚未执行 tracking init 的窗口可以写；一旦 state 存在，
+  // 即进入当前追踪协议，不再因为保留了 拆文库/ 分析资产而永久绕过守卫。
+  if (fs.existsSync(path.join(root, "拆文库", path.basename(book))) && !fs.existsSync(state)) return null
+  const exists = fs.existsSync(absolute)
+  const outlineDir = path.join(book, "大纲")
   let found = false
-  for (const dir of outlineDirs) {
+  if (!exists) {
     try {
-      found = fs.readdirSync(dir).some((file) => {
-        let candidate = file.match(/^细纲_第0*(\d+)章.*\.md$/)
-        if (!candidate) candidate = file.match(/^细纲_.*第0*(\d+)章.*\.md$/)
+      found = fs.readdirSync(outlineDir).some((file) => {
+        const candidate = file.match(/^细纲_第0*(\d+)章.*\.md$/)
         return candidate && candidate[1] === chapter
       })
     } catch {}
-    if (found) break
+    if (!found) {
+      return `⛔ 写正文被拦截：第 ${chapter} 章缺少细纲（${safeRelative(root, outlineDir)}/细纲_第${chapter}章.md）。先按 story-long-write 单章流程补建细纲再写正文。`
+    }
   }
-  if (!found) {
-    return `⛔ 写正文被拦截：第 ${chapter} 章缺少细纲（${safeRelative(root, path.join(book, "大纲"))}/细纲_第${chapter}章.md 或 ${safeRelative(root, path.join(book, "细纲"))}/细纲_*第${chapter}章*.md）。先按 story-long-write 单章流程补建细纲再写正文。`
+  const checkpointIssue = trackingCheckpointIssue(book, true, exists ? null : Number(chapter) - 1)
+  if (checkpointIssue) {
+    return `⛔ 写正文被拦截：${safeRelative(root, book)} 的${checkpointIssue}。`
   }
+  if (exists) return null
   // 欠账门（无状态）：写第 N 章（首建）前，上一章有未清毒句式且未标「去味:跳过」豁免时先清再写。
   // 判据现算自上一章文件本身，不落任何状态文件；找不到上一章/读取失败一律放行（宁可漏拦不可误伤）。
   // js↔py 文案由 check-hook-regex-sync.sh 锁同步，判定由 test-prose-net-parity.sh Part E 锁 parity。
@@ -249,13 +681,16 @@ function proseBlockReason(root, absolute) {
   if (prevNum >= 1) {
     let prevFile = null
     try {
-      for (const file of fs.readdirSync(path.dirname(absolute))) {
-        const pm = file.match(/^第0*(\d+)章.*\.md$/)
-        if (pm && Number(pm[1]) === prevNum) {
-          prevFile = path.join(path.dirname(absolute), file)
-          break
-        }
-      }
+      // readdir 顺序在 ext4/overlayfs 上是哈希序：不排序就可能挑中同章号的原稿备份
+      // （workflow-revision 的「备份原稿」产物），拿早已被改写掉的旧文本报欠账。
+      // 显式排除 _原稿_ 备份并排序，保证四端与各文件系统上取到同一个「上一章」。
+      const candidates = fs.readdirSync(path.dirname(absolute))
+        .filter((file) => {
+          const pm = file.match(/^第0*(\d+)章.*\.md$/)
+          return pm && Number(pm[1]) === prevNum && !file.includes("_原稿_")
+        })
+        .sort()
+      if (candidates.length) prevFile = path.join(path.dirname(absolute), candidates[0])
     } catch {}
     if (prevFile) {
       let prevText = null
@@ -382,6 +817,10 @@ function matchToxicSentence(line) {
   return null
 }
 
+function codePointSlice(value, start, end) {
+  return Array.from(value).slice(start, end).join("")
+}
+
 function toxicPhraseFindings(text) {
   const findings = []
   const content = []
@@ -396,7 +835,7 @@ function toxicPhraseFindings(text) {
   })
   for (const [lineNo, masked] of content) {
     const hit = matchToxicSentence(masked)
-    if (hit) findings.push(`第${lineNo}行 毒句式[${hit[0]}]：『${hit[2].slice(0, 20)}』——${hit[1]}`)
+    if (hit) findings.push(`第${lineNo}行 毒句式[${hit[0]}]：『${codePointSlice(hit[2], 0, 20)}』——${hit[1]}`)
   }
   // trailer-ending 只扫文末 600 字窗口（引号占位后按行累计，边界行整行计入）。
   let acc = 0
@@ -408,9 +847,9 @@ function toxicPhraseFindings(text) {
   for (let i = cut; i < content.length; i++) {
     const [lineNo, masked] = content[i]
     const match = masked.match(TOXIC_TRAILER_PATTERN)
-    if (match) findings.push(`第${lineNo}行 毒句式[trailer-ending]：『${match[0].slice(0, 20)}』——删章尾预告腔，用正在发生的动作或画面收章。`)
+    if (match) findings.push(`第${lineNo}行 毒句式[trailer-ending]：『${codePointSlice(match[0], 0, 20)}』——删章尾预告腔，用正在发生的动作或画面收章。`)
     const summary = masked.match(TOXIC_TRAILER_SUMMARY_PATTERN)
-    if (summary) findings.push(`第${lineNo}行 毒句式[trailer-summary]：『${summary[0].slice(0, 20)}』——删章尾状态总结句，收束状态是细纲的规划口径，正文落到具体动作、画面或台词上。`)
+    if (summary) findings.push(`第${lineNo}行 毒句式[trailer-summary]：『${codePointSlice(summary[0], 0, 20)}』——删章尾状态总结句，收束状态是细纲的规划口径，正文落到具体动作、画面或台词上。`)
   }
   if (findings.length) findings.push("毒句式是确定性 AI 指纹：本章须清零后再继续。完整扫描：node <skill>/scripts/check-ai-patterns.js --check <正文文件>")
   return findings
@@ -429,7 +868,7 @@ function proseNetFindings(text) {
       for (const [regex, label] of SOFT_PATTERNS) {
         const match = line.match(regex)
         if (match) {
-          findings.push(`第${lineNo}行 元信息泄漏（${label}）：「${match[0].slice(0, 20)}」`)
+          findings.push(`第${lineNo}行 元信息泄漏（${label}）：「${codePointSlice(match[0], 0, 20)}」`)
           hit = true
           break
         }
@@ -439,7 +878,7 @@ function proseNetFindings(text) {
     for (const [regex, label] of HARD_PATTERNS) {
       const match = line.match(regex)
       if (match) {
-        findings.push(`第${lineNo}行 ${label}：「${match[0].slice(0, 20)}」`)
+        findings.push(`第${lineNo}行 ${label}：「${codePointSlice(match[0], 0, 20)}」`)
         break
       }
     }
@@ -447,11 +886,12 @@ function proseNetFindings(text) {
   for (let i = 1; i < content.length; i++) {
     const previous = content[i - 1][1]
     const [lineNo, current] = content[i]
-    if (previous === current && current.length >= 8) findings.push(`第${lineNo}行 紧邻复读：整行与上一行完全相同「${current.slice(0, 20)}」`)
+    const characters = Array.from(current)
+    if (previous === current && characters.length >= 8) findings.push(`第${lineNo}行 紧邻复读：整行与上一行完全相同「${characters.slice(0, 20).join("")}」`)
   }
   if (content.length) {
     const [lineNo, last] = content[content.length - 1]
-    if (!TERMINAL.has(Array.from(last).pop())) findings.push(`第${lineNo}行 疑似截断：结尾「…${last.slice(-12)}」未以标点收束`)
+    if (!TERMINAL.has(Array.from(last).pop())) findings.push(`第${lineNo}行 疑似截断：结尾「…${codePointSlice(last, -12)}」未以标点收束`)
   }
   // 「去味:跳过」豁免与欠账门同判据（文件首 6 行）：标记在场时跳过毒句式推回，
   // 其余网（元信息/占位/复读/截断）照常——否则按拦截提示加标记的那次 Edit 会把
@@ -478,25 +918,20 @@ function wordcountFinding(absolute, text) {
   const match = path.basename(absolute).match(/^第0*(\d+)章/)
   if (!match) return null
   const chapter = match[1]
-  const book = path.dirname(path.dirname(absolute))
+  const outlineDir = path.join(path.dirname(path.dirname(absolute)), "大纲")
   let target = null
-  for (const dirName of ["大纲", "细纲"]) {
-    const outlineDir = path.join(book, dirName)
-    try {
-      for (const file of fs.readdirSync(outlineDir)) {
-        let fileMatch = file.match(/^细纲_第0*(\d+)章.*\.md$/)
-        if (!fileMatch) fileMatch = file.match(/^细纲_.*第0*(\d+)章.*\.md$/)
-        if (!fileMatch || fileMatch[1] !== chapter) continue
-        const content = fs.readFileSync(path.join(outlineDir, file), "utf8")
-        const targetMatch = content.match(/字数目标[^0-9]{0,6}(\d{3,6})/)
-        if (targetMatch) target = Number(targetMatch[1])
-        break
-      }
-    } catch {}
-    if (target) break
-  }
+  try {
+    for (const file of fs.readdirSync(outlineDir)) {
+      const fileMatch = file.match(/^细纲_第0*(\d+)章.*\.md$/)
+      if (!fileMatch || fileMatch[1] !== chapter) continue
+      const content = fs.readFileSync(path.join(outlineDir, file), "utf8")
+      const targetMatch = content.match(/字数目标[^0-9]{0,6}(\d{3,6})/)
+      if (targetMatch) target = Number(targetMatch[1])
+      break
+    }
+  } catch {}
   if (!target) return null
-  const actual = Array.from(text).length
+  const actual = Array.from(text.replace(/\r\n?/g, "\n")).length
   return actual < target * 0.9
     ? `字数：第${chapter}章 实际 ${actual} 字 < 目标 ${target} 的 90%（${Math.floor(target * 0.9)}）。对照细纲字数预算定位欠账的密点、一次性重写到配额，别挤牙膏回炉。`
     : null
@@ -550,7 +985,20 @@ function shellWords(segment) {
   let current = ""
   let started = false
   let quote = ""
+  let escaped = false
   for (const ch of String(segment)) {
+    if (escaped) {
+      current += ch
+      escaped = false
+      started = true
+      continue
+    }
+    if (ch === "\\" && quote !== "'") {
+      current += ch
+      escaped = true
+      started = true
+      continue
+    }
     if (quote) {
       if (ch === quote) quote = ""
       else current += ch
@@ -578,7 +1026,18 @@ function shellSegments(command) {
   const segments = []
   let current = ""
   let quote = ""
+  let escaped = false
   for (const ch of String(command)) {
+    if (escaped) {
+      current += ch
+      escaped = false
+      continue
+    }
+    if (ch === "\\" && quote !== "'") {
+      current += ch
+      escaped = true
+      continue
+    }
     if (quote) {
       current += ch
       if (ch === quote) quote = ""
@@ -603,7 +1062,18 @@ function shellSegments(command) {
 function beforeShellRedirection(segment) {
   let current = ""
   let quote = ""
+  let escaped = false
   for (const ch of String(segment)) {
+    if (escaped) {
+      current += ch
+      escaped = false
+      continue
+    }
+    if (ch === "\\" && quote !== "'") {
+      current += ch
+      escaped = true
+      continue
+    }
     if (quote) {
       current += ch
       if (ch === quote) quote = ""
@@ -717,6 +1187,7 @@ module.exports = {
   findFirst,
   discoverActiveBook,
   discoverAllBooks,
+  trackingCheckpointIssue,
   continuityFindings,
   extractProseTargets,
   extractPatchTargets,

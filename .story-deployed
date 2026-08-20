@@ -1,6 +1,6 @@
-deployed_at: 2026-08-09T00:00:00Z
-agents_version: 14
-setup_skill_version: 1.2.3
+deployed_at: 2026-08-20T14:56:55Z
+agents_version: 25
+setup_skill_version: 1.2.7
 target_cli: claude-code
 resolver_strategy: project-local-skill-reference
 references_dir: .claude/skills/story-setup/references/agent-references

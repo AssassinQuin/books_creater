@@ -386,6 +386,12 @@ function scrapeChannel(ch, type) {
 }
 
 function main() {
+  if (!["0", "1", "all"].includes(CHANNEL)) {
+    throw new Error(`未知 --channel: ${CHANNEL}`);
+  }
+  if (!["1", "2", "all"].includes(TYPE)) {
+    throw new Error(`未知 --type: ${TYPE}`);
+  }
   const channels = CHANNEL === "all" ? ["1", "0"] : [CHANNEL];
   const types = TYPE === "all" ? ["2", "1"] : [TYPE];
   let written = 0;
@@ -396,8 +402,7 @@ function main() {
         const content = scrapeChannel(ch, ty);
         if (!content) continue;
 
-        const date = localDateStamp();
-        const filename = `番茄${channelLabel(ch)}${typeLabel(ty)}_全题材_${date}.md`;
+        const filename = `番茄${channelLabel(ch)}${typeLabel(ty)}_全题材_${localDateStamp()}.md`;
         fs.mkdirSync(OUTDIR, { recursive: true });
         const filepath = path.join(OUTDIR, filename);
         fs.writeFileSync(filepath, content, "utf-8");
