@@ -460,8 +460,9 @@ function bookStatus(book) {
   if (state) {
     try {
       const s = JSON.parse(fs.readFileSync(path.join(dir, "追踪", "_tracking-state.json"), "utf8"));
-      const list = s.foreshadow && Array.isArray(s.foreshadow.items) ? s.foreshadow.items : [];
-      const open = list.filter((f) => f.status === "open" || f.status === "planted");
+      const map = s.foreshadow && typeof s.foreshadow === "object" ? s.foreshadow : {};
+      const list = Object.values(map);
+      const open = list.filter((f) => f.status === "已埋");
       foreshadow = { total: list.length, open: open.length };
     } catch {}
   }
@@ -473,7 +474,7 @@ function bookStatus(book) {
     outlines: outlines.length,
     next_outline: nextOutline ? { chapter: nextOutline.num, file: nextOutline.name } : null,
     next_outline_missing_note: !nextOutline && outlines.length
-      ? "所有细纲章节均已写完正文；写新章前需先补细纲（story-architect / 补纲流程）"
+      ? "所有细纲章节均已写完正文；写新章前需先补细纲（novel-planner / plot-planner 补纲流程）"
       : (!outlines.length ? "尚无细纲；先走大纲流程" : null),
     tracking: { initialized: !!state, foreshadow },
     context_card: fs.existsSync(path.join(dir, "追踪", "上下文.md")),

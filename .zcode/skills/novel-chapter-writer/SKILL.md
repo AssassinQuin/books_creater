@@ -39,7 +39,7 @@ description: 逐章写作引擎（达尔文版骨架 + story 工作流纪律）�
 7. **检查**（可证伪核对，不达标→修复）：**每章三件套**——信息增量（新线索/新设定）+ 冲突升级（更大麻烦）+ 情绪落点（爽/甜/燃），缺一即欠账；**每 500 字一个甜头**（小悬念/小反转/小震惊），连续 1500 字无情绪刺激=断档要补；① 爽点出手前是否有可指认的危机/期待段落（指不到具体情节点=空洞→补铺垫），爽点四步齐了吗（期待感→压迫→反转→回报）；② 装逼/打脸/揭露章：反派压制≥3次且逐次升级、围观者够多、在场配角差异化反应（不是集体震惊模板）；③ 任务卡点是否卡出信息/关系/代价/选择/伏笔变化（没有就不强补，删掉无损就压缩）；④ **章尾接新期待**——爽点兑现的章尾必须立即埋出/接上下一个期待（满足性弃书是追读第一杀手：爽完的瞬间就是动力消失的瞬间）。低压章不强求爽点，但章尾要有往下看的理由。
 8. **元信息扫描**：标题行外不得出现 `第X章/上一章/前文/后文/伏笔/细纲/读者` 等工程词 → 改写为场景内锚点（"比第一章那三秒"→"比那三秒"）。例外：角色在故事内真实阅读/讨论文本。
 9. **写后同轮清零**：正文落盘不是汇报时机——**同一轮内**跑完 `ai_check(N)` blocking 清零 + 禁词分级处理（一级命中即换；最毒句式五连查：①「不是A而是B」全家族 ②声线反差"声音不大…却…" ③"，带着…"万能状语 ④预告/总结收尾 ⑤短词引号强调），不得先汇报"已写完"再等指示。hook 推回的毒句式当轮清零。**唯一豁免**：用户显式说"本章不去味"→ 标题行下加 `<!-- 去味:跳过 -->`。
-10. **tracking_commit**（立即，不可跳）：组装本章事务（摘要≤360字节/角色快照/伏笔埋收/时间线/近三章速记），`expected_state_revision` 取 `tracking_check` 的当前值；成功取得新 revision 才算完章。失败按类型：写入失败→重跑同一事务；校验失败→改事务再提。**修订正文改变连续性事实时 → mode=revision 事务重交该章完整记录**。
+10. **tracking_commit**（立即，不可跳）：组装本章事务（schema 见文末「事务 JSON 实测 schema」附录），`expected_state_revision` 取 `tracking_check` 的当前值；成功取得新 revision 才算完章。失败按类型：写入失败→重跑同一事务；校验失败→改事务再提。**修订正文改变连续性事实时 → mode=revision 事务重交该章完整记录**。
 11. **git commit** `ch{N}: {标题}`。
 
 ### 修订/回炉流程（大修场景）
@@ -69,3 +69,48 @@ description: 逐章写作引擎（达尔文版骨架 + story 工作流纪律）�
 - 状态只经 `tracking_commit` 事务；派生视图（上下文.md/伏笔.md/角色状态/时间线）不手改
 - 退役显式声明：不再成立的约束/退场角色写 `retired_context_items` / `retired_characters`（漏写会被工具拒绝）
 - 长期约束 ≤6 条；续写状态卡固定 7 栏 ≤12KB；逐章记录 ≤3072 字节——超限由工具校验拒绝，不自行裁剪绕过
+
+
+---
+
+## 事务 JSON 实测 schema（2026-08-28 端到端验证）
+
+**commit 事务**（经 `mcp__story-flow__tracking_commit`）：
+
+```json
+{
+  "schema_version": 1,
+  "mode": "append",              // append（新章，chapter=last+1）| revision（回炉，chapter≤last）
+  "chapter": 1,
+  "chapter_title": "标题",
+  "expected_state_revision": 0,  // 取 tracking_check 返回的当前值（乐观锁）
+  "delta": {
+    "result": "本章结果一句话（只写影响后续的部分）",
+    "character_changes": [{"name": "陈默", "change": "变化描述"}],
+    "foreshadow_changes": [{"id": "F001", "summary": "…", "planted_chapter": 1,
+      "planned_resolution_chapter": 5, "status": "已埋", "importance": "高"}],
+    "timeline_events": [{"id": "E001", "story_time": "…", "objective_fact": "作者真相",
+      "reader_knowledge": "读者已知", "reveal_status": "已揭示", "reveal_chapter": 1, "characters": ["…"]}],
+    "constraints": [],
+    "next_chapter_commitments": ["下章必须履行的承诺"],
+    "retired_context_items": [],
+    "retired_characters": []
+  },
+  "context": {
+    "position": {"volume": "第一卷", "volume_start_chapter": 1, "story_time": "…", "scene": "…"},
+    "long_term_constraints": ["≤6条，不再成立的写 retired_context_items"],
+    "active_character_names": ["≤6人"],
+    "continuity_risks": ["≤5条"]
+  },
+  "character_snapshots": {
+    "陈默": {"identity": "…", "location": "…", "goal": "…", "state": "…",
+      "abilities_resources": ["…"], "relationships": [], "knowledge": ["…"], "open_threads": ["…"]}
+  }
+}
+```
+
+**硬枚举**：伏笔 status `已埋/已回收/已过期/放弃`；importance `高/中/低`；reveal_status 见 `追踪/时间线/` 视图口径。ID 格式固定：伏笔 `F001`、事件 `E001`。
+
+**init 文档**（`tracking_init`，新书第 0 章）：顶层 `schema_version:1, book_title, last_chapter, context(含 recent_chapters/next_chapter_commitments 初始可空), character_snapshots, foreshadow, timeline_events`。
+
+**纪律**：摘要写 `delta.result`（≤360字节，只记影响后续的）；`recent_chapters`/活跃伏笔由工具派生，不手填；`context` 每次完整重交（退役条目必须显式声明，漏写被拒）；核心角色变化必须同时交 `character_changes` + 顶层完整快照。
